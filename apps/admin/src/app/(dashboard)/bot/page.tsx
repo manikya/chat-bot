@@ -83,7 +83,7 @@ export default function BotConfigPage() {
                 return res.data.reply.content;
               }}
             />
-            <p className="mt-2 text-xs text-muted-foreground">Simulator uses mock chat API until chat Lambda ships.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Simulator uses the live chat orchestrator (RAG + LLM + tools).</p>
           </CardContent>
         </Card>
       </div>

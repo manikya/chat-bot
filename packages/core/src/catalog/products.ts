@@ -1,4 +1,4 @@
-import { DeleteCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
@@ -69,4 +69,67 @@ export async function deleteProductsForSource(
     );
   }
   return toDelete.length;
+}
+
+export interface ProductRecord {
+  sku: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  category?: string;
+  inStock: boolean;
+  imageUrl?: string;
+  productUrl?: string;
+  variants?: string;
+}
+
+export async function getProductBySku(
+  tenantId: string,
+  sku: string,
+  config: CoreConfig
+): Promise<ProductRecord | null> {
+  const db = getDocClient(config);
+  const res = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.product(sku) },
+    })
+  );
+  if (!res.Item) return null;
+  return res.Item as ProductRecord;
+}
+
+export async function searchProductCache(
+  tenantId: string,
+  query: string,
+  config: CoreConfig,
+  options?: { category?: string; maxPrice?: number; minPrice?: number; limit?: number }
+): Promise<ProductRecord[]> {
+  const items = await listProductItems(tenantId, config);
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const limit = options?.limit ?? 5;
+
+  const scored = items
+    .map((item) => {
+      const record = item as ProductRecord;
+      const haystack = [record.name, record.description, record.category, record.sku, record.variants]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const matchCount = terms.filter((t) => haystack.includes(t)).length;
+      return { record, matchCount };
+    })
+    .filter(({ record, matchCount }) => {
+      if (matchCount === 0 && terms.length > 0) return false;
+      if (options?.category && record.category?.toLowerCase() !== options.category.toLowerCase()) {
+        return false;
+      }
+      if (options?.maxPrice != null && record.price > options.maxPrice) return false;
+      if (options?.minPrice != null && record.price < options.minPrice) return false;
+      return true;
+    })
+    .sort((a, b) => b.matchCount - a.matchCount);
+
+  return scored.slice(0, limit).map((s) => s.record);
 }

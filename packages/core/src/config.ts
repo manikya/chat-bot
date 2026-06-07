@@ -10,6 +10,7 @@ export interface CoreConfig {
   dataDir: string;
   openaiApiKey?: string;
   embeddingModel: string;
+  llmModel: string;
   ingestMaxPages: number;
 }
 
@@ -26,6 +27,7 @@ export function loadConfig(): CoreConfig {
     dataDir: process.env.DATA_DIR ?? ".data",
     openaiApiKey: process.env.OPENAI_API_KEY,
     embeddingModel: process.env.EMBEDDING_MODEL ?? "text-embedding-3-small",
+    llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
   };
 }

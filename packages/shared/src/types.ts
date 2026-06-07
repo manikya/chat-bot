@@ -95,6 +95,27 @@ export interface OnboardingTestChatResult {
   canAdvanceToWidget: boolean;
 }
 
+export type ChatIntent = "faq" | "product" | "checkout" | "greeting" | "unknown";
+
+export interface ChatReply {
+  type: "text";
+  content: string;
+}
+
+export interface ChatToolResult {
+  tool: string;
+  success: boolean;
+  [key: string]: unknown;
+}
+
+export interface ChatResult {
+  conversationId: string;
+  reply: ChatReply;
+  toolResults?: ChatToolResult[];
+  intent?: ChatIntent;
+  usage?: { inputTokens: number; outputTokens: number };
+}
+
 export type KnowledgeSourceType = "website" | "catalog" | "faq" | "conversation" | "social";
 export type KnowledgeSourceStatus = "active" | "syncing" | "error" | "deleted";
 export type IngestJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";

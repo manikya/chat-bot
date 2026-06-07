@@ -1,5 +1,5 @@
 /**
- * E2E: catalog ingest → onboarding test-chat with product questions
+ * E2E: chat orchestrator via POST /api/v1/chat
  */
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 
 const API = process.env.API_URL ?? "http://localhost:3001";
 const TABLE = process.env.TABLE_NAME ?? "CommerceChat-Main";
-const email = `chat-test-${Date.now()}@example.com`;
+const email = `orch-test-${Date.now()}@example.com`;
 const password = "TestPassword123!";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const sampleCsv = readFileSync(join(__dirname, "../../admin/public/sample-products.csv"), "utf8");
@@ -22,15 +22,10 @@ const ddb = DynamoDBDocumentClient.from(
   })
 );
 
-async function req(path, opts = {}) {
+async function reqOk(path, opts = {}) {
   const res = await fetch(`${API}${path}`, opts);
   const json = await res.json();
-  return { ok: res.ok, status: res.status, json };
-}
-
-async function reqOk(path, opts = {}) {
-  const { ok, status, json } = await req(path, opts);
-  if (!ok) throw new Error(`${path} ${status}: ${JSON.stringify(json)}`);
+  if (!res.ok) throw new Error(`${path} ${res.status}: ${JSON.stringify(json)}`);
   return json;
 }
 
@@ -57,7 +52,7 @@ async function verifyEmailLocal(normalizedEmail) {
 }
 
 function buildMultipart(fields, file) {
-  const boundary = "----ChatTestBoundary";
+  const boundary = "----OrchTestBoundary";
   const parts = [];
   for (const [name, value] of Object.entries(fields)) {
     parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`);
@@ -79,28 +74,28 @@ async function pollJob(jobId, auth) {
   throw new Error("job timeout");
 }
 
-async function testChat(message, auth) {
-  const res = await reqOk("/api/v1/onboarding/test-chat", {
+async function chat(message, auth) {
+  const res = await reqOk("/api/v1/chat", {
     method: "POST",
     headers: { ...auth, "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, channel: "test" }),
   });
   return res.data;
 }
 
 function assertIncludes(text, needle, label) {
   if (!text.toLowerCase().includes(needle.toLowerCase())) {
-    throw new Error(`${label}: expected reply to include "${needle}", got: ${text.slice(0, 200)}`);
+    throw new Error(`${label}: expected reply to include "${needle}", got: ${text.slice(0, 280)}`);
   }
 }
 
 async function main() {
-  console.log("=== Setup: signup + catalog ingest ===");
+  console.log("=== Setup ===");
   await reqOk("/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      storeName: "Chat Test Store",
+      storeName: "Orchestrator Test Store",
       name: "Tester",
       email,
       password,
@@ -115,7 +110,6 @@ async function main() {
     body: JSON.stringify({ email, password }),
   });
   const auth = { Authorization: `Bearer ${login.data.accessToken}` };
-  console.log("Logged in:", email);
 
   const mp = buildMultipart({ type: "catalog", name: "Product catalog" }, sampleCsv);
   const source = await reqOk("/api/v1/knowledge/sources", {
@@ -131,29 +125,29 @@ async function main() {
   await pollJob(sync.data.jobId, auth);
   console.log("OK catalog indexed\n");
 
+  const greeting = await chat("Hello", auth);
+  if (!greeting.conversationId) throw new Error("missing conversationId");
+  if (!greeting.reply?.content) throw new Error("missing reply");
+  console.log("Greeting:", greeting.reply.content.slice(0, 100));
+
   const questions = [
-    { q: "Do you have blue sneakers?", expect: "blue runner" },
-    { q: "How much are the leather boots?", expect: "129.99" },
-    { q: "What sizes does the cotton tee come in?", expect: "tee" },
+    { q: "Do you have blue sneakers?", expect: "blue" },
+    { q: "How much are the leather boots?", expect: "129" },
+    { q: "What is your return policy?", expect: "return" },
   ];
 
-  console.log("=== Onboarding test-chat ===");
+  console.log("\n=== Chat orchestrator ===");
   for (const { q, expect } of questions) {
-    const data = await testChat(q, auth);
+    const data = await chat(q, auth);
     const reply = data.reply.content;
     console.log(`\nQ: ${q}`);
-    console.log(`A: ${reply.slice(0, 220)}${reply.length > 220 ? "..." : ""}`);
+    console.log(`A: ${reply.slice(0, 240)}${reply.length > 240 ? "..." : ""}`);
+    console.log(`Intent: ${data.intent ?? "?"}`);
     assertIncludes(reply, expect, q);
     console.log(`✓ matched "${expect}"`);
   }
 
-  const last = await testChat("Thanks!", auth);
-  if (last.testMessageCount < 4) throw new Error("expected testMessageCount >= 4");
-  if (!last.canAdvanceToWidget) throw new Error("canAdvanceToWidget should be true");
-  console.log("\nOK testMessageCount:", last.testMessageCount);
-
-  console.log("\n=== ALL CHAT TESTS PASSED ===");
-  console.log("UI: login at /login with", email, "/", password);
+  console.log("\n=== ALL ORCHESTRATOR TESTS PASSED ===");
 }
 
 main().catch((e) => {

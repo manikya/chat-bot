@@ -8,5 +8,8 @@ export * from "./knowledge/service";
 export { createVectorStore } from "./ingest/vectors";
 export { createEmbeddingProvider } from "./ingest/embedding";
 export { retrieveKnowledge } from "./ingest/retrieve";
+export { processChat, type ChatRequestBody } from "./chat/service";
+export { runChatOrchestrator } from "./chat/orchestrator";
+export { createLLMProvider } from "./llm/provider";
 export { parseCatalogCsv, type CatalogProduct } from "./ingest/parsers/catalog-csv";
 export { getDocClient } from "./db/client";

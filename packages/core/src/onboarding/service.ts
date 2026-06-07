@@ -12,7 +12,7 @@ import {
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
-import { retrieveKnowledge } from "../ingest/retrieve";
+import { runChatOrchestrator } from "../chat/orchestrator";
 import { countWebsiteSources } from "../knowledge/service";
 import {
   ONBOARDING_STEP_ORDER,
@@ -20,12 +20,6 @@ import {
   STEP_ESTIMATE_MINUTES,
   WIZARD_STEPS,
 } from "./constants";
-
-const TEST_CHAT_REPLIES = [
-  "We offer free shipping on orders over $50 within the US.",
-  "Our best sellers this week are the Blue Runner and Classic Leather Boot.",
-  "Yes! I found 3 blue sneakers in size 9 starting at $89.99.",
-];
 
 interface OnboardingStateRecord {
   testMessageCount: number;
@@ -283,22 +277,18 @@ export async function onboardingTestChat(
   const testMessageCount = record.testMessageCount + 1;
   await saveOnboardingRecord(auth, { ...record, testMessageCount }, config);
 
-  let content = TEST_CHAT_REPLIES[(testMessageCount - 1) % TEST_CHAT_REPLIES.length];
-  try {
-    const hits = await retrieveKnowledge(auth, message.trim(), config, { topK: 3 });
-    if (hits.length > 0 && hits[0]!.score > 0.1) {
-      const snippet = hits
-        .slice(0, 2)
-        .map((h) => h.chunk.text.slice(0, 400))
-        .join("\n\n");
-      content = `Based on your site:\n\n${snippet}`;
-    }
-  } catch {
-    // fall back to canned reply when no vectors yet
-  }
+  const chat = await runChatOrchestrator(
+    auth,
+    {
+      channel: "test",
+      externalUserId: `onboarding-${auth.userId}`,
+      message: message.trim(),
+    },
+    config
+  );
 
   return ok<OnboardingTestChatResult>({
-    reply: { type: "text", content },
+    reply: chat.reply,
     testMessageCount,
     canAdvanceToWidget: testMessageCount >= 1,
   });

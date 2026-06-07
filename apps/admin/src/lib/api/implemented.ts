@@ -24,6 +24,7 @@ export const IMPLEMENTED_ROUTES = [
   "POST /api/v1/knowledge/sources/:id/sync",
   "GET /api/v1/knowledge/jobs",
   "GET /api/v1/knowledge/jobs/:id",
+  "POST /api/v1/chat",
 ] as const;
 
 export const REAL_API_DOMAINS = [
@@ -33,4 +34,5 @@ export const REAL_API_DOMAINS = [
   "plan limits",
   "onboarding",
   "knowledge",
+  "chat",
 ] as const;

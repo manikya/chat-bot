@@ -19,6 +19,7 @@ import { handler as onboardingTestChatHandler } from "../handlers/onboarding-tes
 import { handler as knowledgeSourcesHandler } from "../handlers/knowledge-sources";
 import { handler as knowledgeSyncHandler } from "../handlers/knowledge-sync";
 import { handler as knowledgeJobsHandler } from "../handlers/knowledge-jobs";
+import { handler as chatApiHandler } from "../handlers/chat-api";
 import { matchPathParams } from "../lib/apigw";
 import { toApigwEvent } from "./event";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
@@ -51,6 +52,7 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
+  { method: "POST", path: "/api/v1/chat", handler: chatApiHandler },
 ];
 
 const PATTERN_ROUTES: Array<{

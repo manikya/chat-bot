@@ -19,4 +19,8 @@ export const Keys = {
   source: (sourceId: string) => `SOURCE#${sourceId}`,
   job: (jobId: string) => `JOB#${jobId}`,
   product: (sku: string) => `PRODUCT#${sku}`,
+  conversation: (channel: string, externalUserId: string) => `CONV#${channel}#${externalUserId}`,
+  message: (conversationId: string, timestamp: string) => `MSG#${conversationId}#${timestamp}`,
+  cart: (conversationId: string) => `CART#${conversationId}`,
+  usage: (period: string) => `USAGE#${period}`,
 };
