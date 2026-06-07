@@ -1,7 +1,19 @@
-import { listKnowledgeJobs, loadConfig } from "@commercechat/core";
+import { getKnowledgeJob, listKnowledgeJobs, loadConfig } from "@commercechat/core";
+import { ApiError, ErrorCodes } from "@commercechat/shared";
 import { createHandler } from "../lib/handler";
+import { pathParam } from "../lib/apigw";
 
 export const handler = createHandler(
-  async (_event, auth) => listKnowledgeJobs(auth!, loadConfig()),
+  async (event, auth) => {
+    const jobId = pathParam(event, "jobId");
+    const config = loadConfig();
+    if (jobId) {
+      return getKnowledgeJob(auth!, jobId, config);
+    }
+    if (event.requestContext.http.method !== "GET") {
+      throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Method not allowed", 405);
+    }
+    return listKnowledgeJobs(auth!, config);
+  },
   { requireAuth: true }
 );

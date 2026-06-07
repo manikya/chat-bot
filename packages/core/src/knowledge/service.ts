@@ -17,6 +17,17 @@ import {
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
+import {
+  createQueuedJob,
+  getJobItem,
+  hasActiveJobForSource,
+  jobToResponse,
+} from "../ingest/jobs";
+import { deleteProductsForSource } from "../catalog/products";
+import { parseCatalogCsv } from "../ingest/parsers/catalog-csv";
+import { scheduleCatalogIngestJob, scheduleWebsiteIngestJob } from "../ingest/orchestrator";
+import { saveCatalogFile } from "../ingest/storage/catalog-file";
+import { createVectorStore } from "../ingest/vectors";
 import { getTenantLimits } from "../tenant/service";
 
 function toSource(item: Record<string, unknown>): KnowledgeSource {
@@ -33,16 +44,7 @@ function toSource(item: Record<string, unknown>): KnowledgeSource {
 }
 
 function toJob(item: Record<string, unknown>): IngestJob {
-  return {
-    jobId: item.jobId as string,
-    sourceId: item.sourceId as string,
-    type: item.type as string,
-    status: item.status as string,
-    stats: item.stats as IngestJob["stats"],
-    completedAt: item.completedAt as string | undefined,
-    error: item.error as string | undefined,
-    createdAt: item.createdAt as string | undefined,
-  };
+  return jobToResponse(item);
 }
 
 async function listSourceItems(auth: AuthContext, config: CoreConfig) {
@@ -110,6 +112,47 @@ export async function createKnowledgeSource(
   return ok(toSource(item));
 }
 
+export async function createCatalogKnowledgeSource(
+  auth: AuthContext,
+  input: { name: string; filename: string; csvContent: string },
+  config: CoreConfig
+) {
+  const products = parseCatalogCsv(input.csvContent);
+
+  const limits = await getTenantLimits(auth, config);
+  const existing = await listSourceItems(auth, config);
+  if (existing.length >= limits.data!.maxSources) {
+    throw new ApiError(ErrorCodes.PLAN_LIMIT_EXCEEDED, "Knowledge source limit reached", 403);
+  }
+
+  const sourceId = generateId("src_");
+  const now = new Date().toISOString();
+  await saveCatalogFile(config, auth.tenantId, sourceId, input.csvContent);
+
+  const item = {
+    PK: Keys.tenantPk(auth.tenantId),
+    SK: Keys.source(sourceId),
+    sourceId,
+    tenantId: auth.tenantId,
+    type: "catalog",
+    name: input.name.trim() || "Product catalog",
+    config: {
+      originalFilename: input.filename,
+      productCount: products.length,
+      format: "csv",
+    },
+    status: "active",
+    chunkCount: 0,
+    vectorCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const db = getDocClient(config);
+  await db.send(new PutCommand({ TableName: config.tableName, Item: item }));
+  return ok(toSource(item));
+}
+
 export async function getKnowledgeSource(
   auth: AuthContext,
   sourceId: string,
@@ -134,53 +177,63 @@ export async function syncKnowledgeSource(
   config: CoreConfig
 ) {
   const source = await getKnowledgeSource(auth, sourceId, config);
-  const jobId = generateId("job_");
-  const now = new Date().toISOString();
+
+  if (await hasActiveJobForSource(auth.tenantId, sourceId, config)) {
+    throw new ApiError(
+      ErrorCodes.VALIDATION_ERROR,
+      "A sync is already in progress for this source",
+      409
+    );
+  }
+
   const jobType = `${source.type as string}_sync`;
+  const { jobId } = await createQueuedJob(auth.tenantId, sourceId, jobType, config);
 
   const db = getDocClient(config);
-  const stats = { pagesProcessed: 1, chunksCreated: 12, durationSec: 2 };
-  const jobItem = {
-    PK: Keys.tenantPk(auth.tenantId),
-    SK: Keys.job(jobId),
-    jobId,
-    sourceId,
-    tenantId: auth.tenantId,
-    type: jobType,
-    status: "completed",
-    stats,
-    createdAt: now,
-    startedAt: now,
-    completedAt: now,
-    GSI1PK: Keys.tenantPk(auth.tenantId),
-    GSI1SK: `JOB#${now}`,
-  };
-
-  await db.send(new PutCommand({ TableName: config.tableName, Item: jobItem }));
   await db.send(
     new UpdateCommand({
       TableName: config.tableName,
       Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.source(sourceId) },
-      UpdateExpression:
-        "SET #status = :s, #lastSyncAt = :l, #lastJobId = :j, #chunkCount = :c, #vectorCount = :v, #updatedAt = :u",
+      UpdateExpression: "SET #status = :s, #lastJobId = :j, #updatedAt = :u",
       ExpressionAttributeNames: {
         "#status": "status",
-        "#lastSyncAt": "lastSyncAt",
         "#lastJobId": "lastJobId",
-        "#chunkCount": "chunkCount",
-        "#vectorCount": "vectorCount",
         "#updatedAt": "updatedAt",
       },
       ExpressionAttributeValues: {
-        ":s": "active",
-        ":l": now,
+        ":s": "syncing",
         ":j": jobId,
-        ":c": stats.chunksCreated,
-        ":v": stats.chunksCreated,
-        ":u": now,
+        ":u": new Date().toISOString(),
       },
     })
   );
+
+  if (source.type === "website") {
+    scheduleWebsiteIngestJob(auth.tenantId, jobId, config);
+  } else if (source.type === "catalog") {
+    scheduleCatalogIngestJob(auth.tenantId, jobId, config);
+  } else {
+    const { updateJob } = await import("../ingest/jobs");
+    await updateJob(
+      auth.tenantId,
+      jobId,
+      {
+        status: "failed",
+        error: `Ingest not implemented for source type: ${source.type as string}`,
+        completedAt: new Date().toISOString(),
+      },
+      config
+    );
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.source(sourceId) },
+        UpdateExpression: "SET #status = :s, #updatedAt = :u",
+        ExpressionAttributeNames: { "#status": "status", "#updatedAt": "updatedAt" },
+        ExpressionAttributeValues: { ":s": "error", ":u": new Date().toISOString() },
+      })
+    );
+  }
 
   return ok({
     jobId,
@@ -188,6 +241,11 @@ export async function syncKnowledgeSource(
     status: "queued",
     type: jobType,
   });
+}
+
+export async function getKnowledgeJob(auth: AuthContext, jobId: string, config: CoreConfig) {
+  const item = await getJobItem(auth.tenantId, jobId, config);
+  return ok(toJob(item));
 }
 
 export async function getLatestJobForSource(
@@ -235,5 +293,10 @@ export async function deleteKnowledgeSource(
       ExpressionAttributeValues: { ":d": "deleted", ":u": new Date().toISOString() },
     })
   );
+
+  const vectorStore = createVectorStore(config);
+  await vectorStore.deleteBySource(auth.tenantId, sourceId);
+  await deleteProductsForSource(auth.tenantId, sourceId, config);
+
   return ok({ sourceId, deleted: true });
 }

@@ -1,8 +1,22 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-08  
+**Last updated:** 2026-06-07  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)
+
+---
+
+## 0. Recent progress
+
+| Date | Milestone |
+|------|-----------|
+| 2026-06-06 | Initial monorepo: admin UI, auth + tenant Lambdas, mock fallback |
+| 2026-06-07 | Auth session flows: refresh, logout, password reset, auto-refresh, session-expired dialog |
+| 2026-06-07 | Onboarding APIs: wizard state, step advance, test-chat (DynamoDB) |
+| 2026-06-07 | Knowledge APIs: source CRUD, sync jobs list (stub sync — no crawl/embed pipeline) |
+| 2026-06-07 | Admin UX: timezone dropdown on profile/onboarding settings |
+
+**Git (local `main`):** `997127e` → `7bc1f04` (auth session) → `f1d77d3` (onboarding + knowledge + timezone). Not pushed.
 
 ---
 
@@ -146,11 +160,12 @@ Routes defined in [02-api-specification.md](02-api-specification.md) that are **
 
 Aligned with [03-task-plan.md](03-task-plan.md):
 
-1. **Sprint 2 knowledge** — source CRUD, sync, jobs (replace knowledge mocks)
+1. **Sprint 2 knowledge (remaining)** — ingest pipeline (crawler, embed, S3 Vectors), `GET /jobs/{jobId}`, FAQ ingest, job polling UI
 2. **Sprint 3 chat** — `chat-api`, usage metering → real `GET /tenants/me/usage`
-3. **Sprint 4 Meta** — webhooks + channel connect + conversations APIs
+3. **Sprint 4 Meta** — webhooks + channel connect (onboarding step 2) + conversations APIs
 4. **Sprint 5 widget** — API key routing, `widget-config`, `widget-chat`, regenerate-key
-5. **Phase 2** — billing, team, MFA, `POST /auth/invite`, `/auth/accept-invite`
+5. **Infra** — CDK deploy, CI, Resend email (replace console-log verify links)
+6. **Phase 2** — billing, team, MFA, `POST /auth/invite`, `/auth/accept-invite`
 
 ---
 
@@ -160,16 +175,16 @@ Aligned with [03-task-plan.md](03-task-plan.md):
 |--------------|----------|---------------|
 | Signup, login, logout, refresh, verify, forgot/reset password | Auth | — |
 | Settings → Profile | `GET/PATCH /tenants/me` | — |
-| Onboarding (all steps) | Onboarding + tenant APIs | Channels connect (mock) |
-| Bot config | `GET/PATCH /tenants/me/config` | Test chat simulator |
+| Onboarding profile, knowledge, test, widget steps | Onboarding + tenant + knowledge APIs | — |
+| Onboarding channels step | — | Meta connect (mock) |
+| Bot config | `GET/PATCH /tenants/me/config` | Full chat simulator (`POST /chat`) |
 | Widget appearance | `PATCH /tenants/me/config` | Embed code, widget config GET |
 | Usage → plan limits | `GET /tenants/me/limits` | Usage metrics, message counts |
 | Dashboard | — | Stats, channel health |
 | Conversations | — | List, thread, messages |
-| Knowledge | Sources, jobs, sync | Full ingest pipeline (async) |
+| Knowledge dashboard | Sources, jobs, sync (stub) | Real crawl/embed pipeline |
 | Channels | — | Connect, health |
 | Team / API keys | — | Team list, invite, key regen |
-| Onboarding steps 2–6 | — | Channels, knowledge, test, widget |
 
 ---
 

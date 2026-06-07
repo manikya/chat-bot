@@ -33,7 +33,7 @@ npm run build:lambdas
 
 Deploy each `.cjs` file to its named Lambda. See [infra/README.md](../../infra/README.md).
 
-## Implemented (16 routes)
+## Implemented (26 routes, 19 handlers)
 
 | Handler | Routes |
 |---------|--------|
@@ -50,7 +50,14 @@ Deploy each `.cjs` file to its named Lambda. See [infra/README.md](../../infra/R
 | `tenant-me` | `GET/PATCH /api/v1/tenants/me` |
 | `tenant-config` | `GET/PATCH /api/v1/tenants/me/config` |
 | `tenant-limits` | `GET /api/v1/tenants/me/limits` |
+| `onboarding` | `GET /api/v1/onboarding`, `PATCH /api/v1/onboarding/step` |
+| `onboarding-test-chat` | `POST /api/v1/onboarding/test-chat` |
+| `knowledge-sources` | `GET/POST /api/v1/knowledge/sources`, `DELETE .../sources/{id}` |
+| `knowledge-sync` | `POST /api/v1/knowledge/sources/{id}/sync` |
+| `knowledge-jobs` | `GET /api/v1/knowledge/jobs`, `GET /api/v1/knowledge/jobs/{jobId}` |
 | `jwt-authorizer` | API Gateway authorizer (not a route) |
+
+**Note:** Knowledge sync persists jobs in DynamoDB but completes synchronously with stub stats until the Step Functions ingest pipeline ships.
 
 ## Remaining APIs
 
@@ -58,25 +65,24 @@ Full breakdown with priorities and UI mapping: **[docs/implementation/06-api-imp
 
 ### MVP (mock exists — replace with real)
 
-- **Onboarding** — `GET/PATCH /api/v1/onboarding`, `POST /api/v1/onboarding/test-chat`
-- **Knowledge** — sources CRUD, sync, jobs
-- **Chat** — `POST /api/v1/chat`
 - **Channels** — list, Meta connect/disconnect, health
 - **Conversations** — list, detail, messages
+- **Chat** — `POST /api/v1/chat`
 - **Widget** — `GET /api/v1/widget/config`, `POST /api/v1/widget/chat`
 - **Tenant** — `GET /api/v1/tenants/me/usage`, `POST /api/v1/tenants/me/widget/regenerate-key`
 - **Dashboard** — `GET /api/v1/dashboard/stats`
+- **Team invite** — `POST /auth/invite`
 
 ### MVP (not started)
 
 - `POST /api/v1/tenants/me/logo`
-- Knowledge: `GET /knowledge/jobs/{jobId}`, `POST /knowledge/faq`
+- Knowledge: `GET /knowledge/jobs/{jobId}`, `POST /knowledge/faq`, real ingest pipeline
 - Commerce: products, orders, connector
 - Webhooks: `GET/POST /webhooks/meta`
 
 ### Phase 2
 
 - Billing (`/api/v1/billing/*`, `/webhooks/stripe`)
-- Team (`GET/DELETE /api/v1/team`, `/auth/invite`, `/auth/accept-invite`)
+- Team (`GET/DELETE /api/v1/team`, `/auth/accept-invite`)
 - MFA (`POST /auth/mfa/verify`)
 - Widget SSE (`POST /api/v1/widget/chat/stream`)

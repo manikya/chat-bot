@@ -10,6 +10,9 @@ build/
 dist/
 *.tsbuildinfo
 
+# Local ingest / vector data
+.data/
+
 # Environment
 .env
 .env.*

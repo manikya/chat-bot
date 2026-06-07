@@ -2,8 +2,8 @@
 
 **Product:** Multi-tenant AI chatbot for e-commerce stores  
 **Version:** 1.0  
-**Last updated:** 2026-06-06  
-**Status:** Design specification (pre-implementation)
+**Last updated:** 2026-06-07  
+**Status:** Design specification + **local implementation in progress** (25 real API routes; see [implementation/06-api-implementation-status.md](implementation/06-api-implementation-status.md))
 
 ---
 
@@ -275,3 +275,4 @@ See phase documents for full detail. Summary:
 | 1.0 | 2026-06-06 | Initial architecture and document index |
 | 1.1 | 2026-06-06 | Added notifications strategy (doc 12): Resend + EmailProvider abstraction |
 | 1.2 | 2026-06-06 | Replaced Cognito with custom DynamoDB auth + MFA-ready design (doc 13) |
+| 1.3 | 2026-06-07 | Local MVP progress: auth session flows, onboarding APIs, knowledge CRUD (stub sync), timezone picker |

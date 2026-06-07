@@ -7,6 +7,10 @@ export interface CoreConfig {
   appUrl: string;
   awsRegion: string;
   dynamoEndpoint?: string;
+  dataDir: string;
+  openaiApiKey?: string;
+  embeddingModel: string;
+  ingestMaxPages: number;
 }
 
 export function loadConfig(): CoreConfig {
@@ -19,5 +23,9 @@ export function loadConfig(): CoreConfig {
     appUrl: process.env.APP_URL ?? "http://localhost:3000",
     awsRegion: process.env.AWS_REGION ?? "us-east-1",
     dynamoEndpoint: process.env.DYNAMODB_ENDPOINT,
+    dataDir: process.env.DATA_DIR ?? ".data",
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    embeddingModel: process.env.EMBEDDING_MODEL ?? "text-embedding-3-small",
+    ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
   };
 }

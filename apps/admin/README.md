@@ -52,10 +52,13 @@ packages/core/              → Real Lambda business logic + DynamoDB
 | UI area | Backend |
 |---------|---------|
 | Signup, login, logout, refresh, verify, forgot/reset password | **Real Lambda** + DynamoDB |
-| Settings profile, onboarding profile | **Real** `PATCH /tenants/me` |
+| Session auto-refresh + expired-session dialog | **Real** (client + `/auth/refresh`) |
+| Settings profile, onboarding profile | **Real** `GET/PATCH /tenants/me` (timezone dropdown) |
+| Onboarding wizard (steps, test-chat) | **Real** `/api/v1/onboarding/*` |
+| Knowledge sources, sync, jobs | **Real** `/api/v1/knowledge/*` (stub sync — no crawl yet) |
 | Bot config, widget colors | **Real** `GET/PATCH /tenants/me/config` |
 | Usage plan limits | **Real** `GET /tenants/me/limits` |
-| Dashboard, conversations, knowledge, etc. | Mock fallback on API server |
+| Onboarding channels, dashboard, conversations, widget GET, usage metrics | Mock fallback on API server |
 
 Full API status: [docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md)
 

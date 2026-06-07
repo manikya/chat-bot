@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { pollIngestJob } from "@/lib/poll-job";
 import type { IngestJob, KnowledgeSource } from "@commercechat/mock-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,11 +26,22 @@ export default function KnowledgePage() {
   useEffect(() => { load(); }, []);
 
   const addWebsite = async () => {
-    const res = await api.knowledge.createSource({ type: "website", name: "Main website", config: { url } });
-    await api.knowledge.syncSource(res.data.sourceId);
-    toast.success("Crawl started");
-    setShowAdd(false);
-    load();
+    try {
+      const res = await api.knowledge.createSource({
+        type: "website",
+        name: "Main website",
+        config: { url, maxDepth: 2, maxPages: 30 },
+      });
+      const sync = await api.knowledge.syncSource(res.data.sourceId);
+      toast.success("Crawl started");
+      setShowAdd(false);
+      await pollIngestJob(sync.data.jobId, () => load());
+      toast.success("Crawl completed");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Crawl failed");
+      load();
+    }
   };
 
   return (
@@ -74,7 +86,22 @@ export default function KnowledgePage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={async () => { await api.knowledge.syncSource(s.sourceId); toast.success("Sync queued"); load(); }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const sync = await api.knowledge.syncSource(s.sourceId);
+                      toast.success("Sync queued");
+                      await pollIngestJob(sync.data.jobId, () => load());
+                      toast.success("Sync completed");
+                      load();
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Sync failed");
+                      load();
+                    }
+                  }}
+                >
                   <RefreshCw className="h-3 w-3" /> Re-sync
                 </Button>
                 <Button variant="outline" size="sm" onClick={async () => { await api.knowledge.deleteSource(s.sourceId); toast.success("Deleted"); load(); }}>
@@ -91,8 +118,13 @@ export default function KnowledgePage() {
         <CardContent className="space-y-2">
           {jobs.map((j) => (
             <div key={j.jobId} className="flex justify-between text-sm border-b py-2 last:border-0">
-              <span>{j.type} — {j.sourceId}</span>
-              <Badge variant={j.status === "completed" ? "success" : j.status === "running" ? "warning" : "secondary"}>{j.status}</Badge>
+              <span>
+                {j.type} — {j.sourceId}
+                {j.stats?.chunksCreated != null && ` · ${j.stats.chunksCreated} chunks`}
+              </span>
+              <Badge variant={j.status === "completed" ? "success" : j.status === "running" || j.status === "queued" ? "warning" : "secondary"}>
+                {j.status}
+              </Badge>
             </div>
           ))}
         </CardContent>

@@ -144,12 +144,17 @@ export interface IngestJob {
   type: string;
   status: string;
   stats?: {
-    pagesProcessed: number;
-    chunksCreated: number;
-    durationSec: number;
+    pagesProcessed?: number;
+    chunksCreated?: number;
+    tokensEmbedded?: number;
+    durationSec?: number;
+    errors?: string[];
   };
+  progressPct?: number;
+  startedAt?: string;
   completedAt?: string;
   error?: string;
+  createdAt?: string;
 }
 
 export interface TeamMember {

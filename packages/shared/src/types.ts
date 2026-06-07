@@ -118,8 +118,12 @@ export interface IngestJob {
   stats?: {
     pagesProcessed?: number;
     chunksCreated?: number;
+    tokensEmbedded?: number;
     durationSec?: number;
+    errors?: string[];
   };
+  progressPct?: number;
+  startedAt?: string;
   completedAt?: string;
   error?: string;
   createdAt?: string;

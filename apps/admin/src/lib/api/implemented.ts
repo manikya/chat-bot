@@ -23,6 +23,7 @@ export const IMPLEMENTED_ROUTES = [
   "DELETE /api/v1/knowledge/sources/:id",
   "POST /api/v1/knowledge/sources/:id/sync",
   "GET /api/v1/knowledge/jobs",
+  "GET /api/v1/knowledge/jobs/:id",
 ] as const;
 
 export const REAL_API_DOMAINS = [

@@ -95,8 +95,10 @@ export async function request<T>(
 ): Promise<ApiResponse<T>> {
   const { _authRetry = false, ...fetchOptions } = options;
   const token = getToken();
+  const isFormData =
+    typeof FormData !== "undefined" && fetchOptions.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(fetchOptions.headers as Record<string, string>),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -213,9 +215,17 @@ export function createHttpApi(): MockApi {
       listSources: () => request("/api/v1/knowledge/sources"),
       createSource: (body) =>
         request("/api/v1/knowledge/sources", { method: "POST", body: JSON.stringify(body) }),
+      createCatalogSource: (file: File, name = "Product catalog") => {
+        const form = new FormData();
+        form.append("type", "catalog");
+        form.append("name", name);
+        form.append("file", file);
+        return request("/api/v1/knowledge/sources", { method: "POST", body: form });
+      },
       syncSource: (sourceId) =>
         request(`/api/v1/knowledge/sources/${sourceId}/sync`, { method: "POST", body: JSON.stringify({}) }),
       listJobs: () => request("/api/v1/knowledge/jobs"),
+      getJob: (jobId: string) => request(`/api/v1/knowledge/jobs/${jobId}`),
       deleteSource: (sourceId) => request(`/api/v1/knowledge/sources/${sourceId}`, { method: "DELETE" }),
     },
     team: {

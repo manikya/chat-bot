@@ -18,4 +18,5 @@ export const Keys = {
   onboardingState: () => "ONBOARDING#STATE",
   source: (sourceId: string) => `SOURCE#${sourceId}`,
   job: (jobId: string) => `JOB#${jobId}`,
+  product: (sku: string) => `PRODUCT#${sku}`,
 };

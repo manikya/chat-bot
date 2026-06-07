@@ -12,6 +12,7 @@ import {
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
+import { retrieveKnowledge } from "../ingest/retrieve";
 import { countWebsiteSources } from "../knowledge/service";
 import {
   ONBOARDING_STEP_ORDER,
@@ -282,9 +283,22 @@ export async function onboardingTestChat(
   const testMessageCount = record.testMessageCount + 1;
   await saveOnboardingRecord(auth, { ...record, testMessageCount }, config);
 
-  const reply = TEST_CHAT_REPLIES[(testMessageCount - 1) % TEST_CHAT_REPLIES.length];
+  let content = TEST_CHAT_REPLIES[(testMessageCount - 1) % TEST_CHAT_REPLIES.length];
+  try {
+    const hits = await retrieveKnowledge(auth, message.trim(), config, { topK: 3 });
+    if (hits.length > 0 && hits[0]!.score > 0.1) {
+      const snippet = hits
+        .slice(0, 2)
+        .map((h) => h.chunk.text.slice(0, 400))
+        .join("\n\n");
+      content = `Based on your site:\n\n${snippet}`;
+    }
+  } catch {
+    // fall back to canned reply when no vectors yet
+  }
+
   return ok<OnboardingTestChatResult>({
-    reply: { type: "text", content: reply },
+    reply: { type: "text", content },
     testMessageCount,
     canAdvanceToWidget: testMessageCount >= 1,
   });

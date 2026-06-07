@@ -71,6 +71,12 @@ const PATTERN_ROUTES: Array<{
     paramNames: ["sourceId"],
     handler: knowledgeSyncHandler,
   },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/knowledge\/jobs\/([^/]+)$/,
+    paramNames: ["jobId"],
+    handler: knowledgeJobsHandler,
+  },
 ];
 
 const emptyContext = {} as Context;
@@ -80,9 +86,21 @@ async function invokeLambda(
   req: Request,
   pathParameters?: Record<string, string>
 ): Promise<Response> {
-  const body =
-    req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();
-  const event = toApigwEvent(req, body || undefined, pathParameters);
+  const contentType = req.headers.get("content-type") ?? "";
+  let body: string | undefined;
+  let isBase64Encoded = false;
+
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    if (contentType.includes("multipart/form-data")) {
+      const buf = Buffer.from(await req.arrayBuffer());
+      body = buf.toString("base64");
+      isBase64Encoded = true;
+    } else {
+      body = await req.text();
+    }
+  }
+
+  const event = toApigwEvent(req, body, pathParameters, isBase64Encoded);
   const result = await handler(event, emptyContext);
   const res = result as { statusCode: number; headers?: Record<string, string>; body?: string };
   return new Response(res.body ?? "", {

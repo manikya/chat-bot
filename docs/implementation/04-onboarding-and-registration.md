@@ -1,7 +1,8 @@
 # Shop Onboarding & User Registration
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
-**Related:** [02-api-specification.md](02-api-specification.md) · [01-database-design.md](01-database-design.md) · [13-custom-auth.md](../functions/13-custom-auth.md) · [08-admin-dashboard.md](../functions/08-admin-dashboard.md)
+**Related:** [02-api-specification.md](02-api-specification.md) · [01-database-design.md](01-database-design.md) · [13-custom-auth.md](../functions/13-custom-auth.md) · [08-admin-dashboard.md](../functions/08-admin-dashboard.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
+**Implementation status (2026-06-07):** Onboarding APIs are **live** (`GET /onboarding`, `PATCH /onboarding/step`, `POST /onboarding/test-chat`). Wizard state persisted in DynamoDB (`PROFILE.onboardingStep` + `ONBOARDING#STATE`). **Channels step** still uses mock Meta connect.
 
 ---
 
@@ -253,6 +254,15 @@ stateDiagram-v2
 
 ### 3.4 Step-by-step detail
 
+| Step | API status (local) | Notes |
+|------|-------------------|-------|
+| 1 Profile | **Real** | `PATCH /tenants/me` + `PATCH /onboarding/step`; timezone via `TimezoneSelect` |
+| 2 Channels | **Mock** | Meta connect not built; skip advances with `skipped: true` |
+| 3 Knowledge | **Partial** | Source CRUD + stub sync; no crawl/embed; `GET /jobs/{jobId}` not built |
+| 4 Catalog | **Partial** | Same knowledge APIs; file upload ingest not built |
+| 5 Test chat | **Real** | `POST /onboarding/test-chat` (echo until chat orchestrator) |
+| 6 Widget | **Real step advance** | Embed snippet from UI; `GET /widget/config` still mock |
+
 #### Step 1 — Store profile
 
 **UI fields:**
@@ -260,7 +270,7 @@ stateDiagram-v2
 | Field | Required | Stored in |
 |-------|----------|-----------|
 | Store name | Yes | `PROFILE.storeName` |
-| Timezone | Yes | `PROFILE.timezone` |
+| Timezone | Yes | `PROFILE.timezone` — native grouped `<select>` (`TimezoneSelect`, ~32 IANA zones) |
 | Logo | No | S3 `assets/<tenantId>/logo.png` → `PROFILE.logoUrl` |
 | Default language | No | `CONFIG.profile.defaultLanguage` |
 
@@ -332,7 +342,7 @@ POST /api/v1/knowledge/sources/{sourceId}/sync
 
 **UI:** Chat simulator (same component as admin test console).
 
-**API:** `POST /api/v1/chat` with `channel: "test"` — uses tenant config + RAG, no external channel.
+**API:** `POST /api/v1/onboarding/test-chat` *(implemented)* — will use tenant config + RAG when chat orchestrator ships; currently records test message count for step gating.
 
 **Success criteria:** At least one user message + assistant reply displayed.
 

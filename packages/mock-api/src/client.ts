@@ -377,6 +377,20 @@ export function createMockApi() {
         return ok(source);
       },
 
+      async createCatalogSource(file: File, name = "Product catalog") {
+        await delay(500);
+        const source: KnowledgeSource = {
+          sourceId: "src_" + Math.random().toString(36).slice(2, 8),
+          type: "catalog",
+          name,
+          status: "active",
+          chunkCount: 0,
+          vectorCount: 0,
+        };
+        void file;
+        return ok(source);
+      },
+
       async syncSource(sourceId: string) {
         await delay(600);
         const job: IngestJob = {
@@ -391,6 +405,13 @@ export function createMockApi() {
       async listJobs() {
         await delay(300);
         return ok({ items: DEMO_JOBS, nextCursor: null, hasMore: false });
+      },
+
+      async getJob(jobId: string) {
+        await delay(200);
+        const job = DEMO_JOBS.find((j) => j.jobId === jobId) ?? DEMO_JOBS[0]!;
+        void jobId;
+        return ok(job);
       },
 
       async deleteSource(sourceId: string) {

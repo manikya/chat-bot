@@ -1,0 +1,4 @@
+sku,name,description,price,category,image_url,sizes,colors,stock,url
+SHOE-BLU-9,Blue Runner Sneaker,Lightweight running shoe with breathable mesh upper,89.99,Sneakers,https://example.com/shoe-blue.jpg,8;9;10,Blue,TRUE,https://example.com/products/blue-runner
+BOOT-BLK-8,Classic Leather Boot,Water-resistant leather boot for everyday wear,129.99,Boots,,7;8;9;10,Black,TRUE,https://example.com/products/leather-boot
+TEE-WHT-M,Organic Cotton Tee,Soft organic cotton t-shirt,24.99,Apparel,,S;M;L;XL,White,TRUE,https://example.com/products/cotton-tee

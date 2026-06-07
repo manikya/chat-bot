@@ -3,7 +3,23 @@
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
 **Version:** 1.0  
 **Timeline:** MVP ~10 weeks (2.5 FTE)  
-**Related:** [phases/01-phase-mvp.md](../phases/01-phase-mvp.md)
+**Related:** [phases/01-phase-mvp.md](../phases/01-phase-mvp.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
+**Last progress update:** 2026-06-07
+
+---
+
+## 0. Progress snapshot (local dev)
+
+| Sprint | Status | Done locally |
+|--------|--------|--------------|
+| **Sprint 1 — Foundation** | ~90% | Auth (signup → logout, refresh, password reset), tenant profile/config/limits, JWT authorizer, health, admin login + auth context, onboarding step 1 UI, **onboarding APIs**, session auto-refresh |
+| **Sprint 2 — Knowledge** | ~40% | Knowledge source CRUD + jobs in DynamoDB, admin knowledge page wired; **not done:** crawler, embeddings, S3 Vectors, `GET /jobs/{jobId}`, FAQ ingest, job polling UI |
+| **Sprint 3 — Chat** | 0% | Bot config UI only (real tenant config API) |
+| **Sprint 4 — Meta** | 0% | Channels UI uses mock |
+| **Sprint 5 — Widget** | 0% | Widget appearance via real config PATCH; embed GET mock |
+| **Infra (Week 0)** | ~30% | LocalStack DynamoDB, local Lambda server; **not done:** CDK, CI, staging deploy |
+
+**25 real API routes** · **14 mock routes** remaining for MVP UI · See [06-api-implementation-status.md](06-api-implementation-status.md).
 
 ---
 
@@ -49,13 +65,17 @@
 | 1.9 | Resend `EmailProvider` + verification/reset templates | BE | M | 1.8 |
 | 1.10 | `GET/PATCH /api/v1/tenants/me` + config + limits | BE | M | 1.6 |
 | 1.11 | Admin: login page + auth context (Jetwing pattern) | FE | M | 1.6 |
-| 1.12 | Admin: onboarding step 1 (store profile) | FE | M | 1.10, 1.11 |
-| 1.13 | `GET /health` + structured logging (JSON) | BE | S | 1.4 |
+| 1.12 | Admin: onboarding step 1 (store profile) | FE | M | 1.10, 1.11 | **Done** |
+| 1.13 | `GET /health` + structured logging (JSON) | BE | S | 1.4 | **Done** (local) |
+| 1.14 | Onboarding APIs (`GET/PATCH /onboarding`, test-chat) | BE | M | 1.10 | **Done** (local) |
+| 1.15 | Session auto-refresh + expired-session dialog | FE | M | 1.7 | **Done** |
 
 **Sprint 1 exit criteria:**
-- [ ] Merchant can sign up, verify email, log in
-- [ ] JWT protects tenant APIs
-- [ ] Admin shows onboarding profile step
+- [x] Merchant can sign up, verify email, log in *(local; verify link in API console)*
+- [x] JWT protects tenant APIs
+- [x] Admin shows onboarding profile step
+- [x] Onboarding wizard APIs (`GET/PATCH /onboarding`, test-chat)
+- [ ] CDK-deployed API Gateway + DynamoDB (prod/staging)
 
 ---
 
@@ -70,8 +90,8 @@
 | 2.3 | Website crawler Lambda (depth limit, robots.txt) | BE | L | 2.2 |
 | 2.4 | Chunker + metadata tagger (`website`, `catalog`, `faq`) | BE | M | 2.3 |
 | 2.5 | Ingest pipeline: SQS → Step Functions → embed → S3 Vectors | BE | L | 2.4 |
-| 2.6 | Knowledge source CRUD APIs | BE | M | 1.10 |
-| 2.7 | `POST /knowledge/sources/{id}/sync` + job status APIs | BE | M | 2.5, 2.6 |
+| 2.6 | Knowledge source CRUD APIs | BE | M | 1.10 | **Done** (local Lambda) |
+| 2.7 | `POST /knowledge/sources/{id}/sync` + job status APIs | BE | M | 2.5, 2.6 | **Partial** (stub sync; pipeline pending) |
 | 2.8 | Catalog CSV/JSON parser + product cache in DynamoDB | BE | M | 2.5 |
 | 2.9 | Inline FAQ ingest API | BE | S | 2.4 |
 | 2.10 | RAG retriever (hybrid: vector + source filter) | BE | M | 2.2 |
@@ -81,7 +101,7 @@
 **Sprint 2 exit criteria:**
 - [ ] Website crawl → chunks → vectors searchable
 - [ ] Catalog upload → product search via RAG
-- [ ] Admin can trigger sync and see job status
+- [~] Admin can trigger sync and see job status *(CRUD + stub sync done; real crawl/polling pending)*
 
 ---
 

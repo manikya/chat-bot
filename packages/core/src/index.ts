@@ -5,4 +5,8 @@ export * from "./auth/jwt";
 export * from "./tenant/service";
 export * from "./onboarding/service";
 export * from "./knowledge/service";
+export { createVectorStore } from "./ingest/vectors";
+export { createEmbeddingProvider } from "./ingest/embedding";
+export { retrieveKnowledge } from "./ingest/retrieve";
+export { parseCatalogCsv, type CatalogProduct } from "./ingest/parsers/catalog-csv";
 export { getDocClient } from "./db/client";

@@ -25,8 +25,10 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 | `onboarding-test-chat` | `onboarding-test-chat.cjs` | `POST /api/v1/onboarding/test-chat` |
 | `knowledge-sources` | `knowledge-sources.cjs` | `GET/POST/DELETE /api/v1/knowledge/sources` |
 | `knowledge-sync` | `knowledge-sync.cjs` | `POST /api/v1/knowledge/sources/{id}/sync` |
-| `knowledge-jobs` | `knowledge-jobs.cjs` | `GET /api/v1/knowledge/jobs` |
+| `knowledge-jobs` | `knowledge-jobs.cjs` | `GET /api/v1/knowledge/jobs`, `GET /api/v1/knowledge/jobs/{jobId}` |
 | `jwt-authorizer` | `jwt-authorizer.cjs` | API Gateway authorizer |
+
+**Status (2026-06-07):** 19 handler bundles built locally. CDK stacks and API Gateway wiring are not yet in this repo — deploy map above is the target layout.
 
 **Remaining Lambdas:** see [docs/implementation/06-api-implementation-status.md](../docs/implementation/06-api-implementation-status.md).
 

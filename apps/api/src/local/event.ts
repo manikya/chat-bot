@@ -3,7 +3,8 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 export function toApigwEvent(
   req: Request,
   bodyText?: string,
-  pathParameters?: Record<string, string>
+  pathParameters?: Record<string, string>,
+  isBase64Encoded = false
 ): APIGatewayProxyEventV2 {
   const url = new URL(req.url);
   const headers: Record<string, string> = {};
@@ -36,7 +37,7 @@ export function toApigwEvent(
       timeEpoch: Date.now(),
     },
     body: bodyText,
-    isBase64Encoded: false,
+    isBase64Encoded,
     pathParameters,
   };
 }

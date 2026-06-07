@@ -2,7 +2,8 @@
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
 **Duration:** 8–10 weeks  
-**Goal:** First shippable product — one merchant can connect WhatsApp, ingest website + products, and convert chats to checkout links.
+**Goal:** First shippable product — one merchant can connect WhatsApp, ingest website + products, and convert chats to checkout links.  
+**Progress (2026-06-07):** Local dev has auth, tenant, onboarding, and knowledge CRUD (25 real routes). See [implementation/06-api-implementation-status.md](../implementation/06-api-implementation-status.md).
 
 ---
 
@@ -86,10 +87,11 @@
 ### Week 3–4: Channels + Ingest
 
 ```
-✓ Meta webhook receives WhatsApp messages
-✓ Tenant resolved from phone_number_id
-✓ Website crawl → embed → S3 Vectors
-✓ Product CSV ingest works
+✓ Knowledge source CRUD + job records in DynamoDB (stub sync)
+○ Meta webhook receives WhatsApp messages
+○ Tenant resolved from phone_number_id
+○ Website crawl → embed → S3 Vectors
+○ Product CSV ingest works
 ```
 
 ### Week 5–6: AI core

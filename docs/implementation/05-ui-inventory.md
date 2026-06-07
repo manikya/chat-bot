@@ -1,8 +1,9 @@
 # UI Inventory & Actions
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
-**Related:** [08-admin-dashboard.md](../functions/08-admin-dashboard.md) · [04-onboarding-and-registration.md](04-onboarding-and-registration.md) · [07-web-chat-widget.md](../functions/07-web-chat-widget.md)  
-**Reference UI:** [Jetwing component mapping](../../reference%20UI/README.md)
+**Related:** [08-admin-dashboard.md](../functions/08-admin-dashboard.md) · [04-onboarding-and-registration.md](04-onboarding-and-registration.md) · [07-web-chat-widget.md](../functions/07-web-chat-widget.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
+**Reference UI:** [Jetwing component mapping](../../reference%20UI/README.md)  
+**Implementation status (2026-06-07):** Auth, tenant, onboarding wizard APIs, and knowledge CRUD use **real Lambdas**. Channels, dashboard stats, conversations, usage metrics, and widget embed still use **mock fallback**. Timezone fields use a native `<select>` (`TimezoneSelect`, ~32 curated IANA zones).
 
 ---
 
@@ -87,7 +88,7 @@ Applies to all post-login admin pages except onboarding wizard (minimal chrome).
 | Full name input | Enter owner name |
 | Email input | Enter email |
 | Password input | Enter password; toggle show/hide |
-| Timezone select | Select timezone (auto-detect default) |
+| Timezone select (`TimezoneSelect`) | Pick from grouped native dropdown (~32 IANA zones); browser default pre-selected |
 | Terms checkbox | Accept terms of service |
 | **Create account** button | Submit → `POST /auth/signup` → redirect to Verify pending |
 | **Log in** link | Navigate to Login |
@@ -203,10 +204,10 @@ Shared chrome across all steps:
 | UI element | User actions |
 |------------|--------------|
 | Store name input | Edit store name |
-| Timezone select | Change timezone |
-| Logo upload dropzone | Upload PNG/JPG (max 2 MB); preview; remove → `POST /tenants/me/logo` |
+| Timezone select (`TimezoneSelect`) | Change timezone (native grouped dropdown) |
+| Logo upload dropzone | Upload PNG/JPG (max 2 MB); preview; remove → `POST /tenants/me/logo` *(mock)* |
 | Default language select | Select language (optional) |
-| **Continue** | `PATCH /tenants/me` + advance to Channels |
+| **Continue** | `PATCH /tenants/me` + `PATCH /onboarding/step` → Channels |
 
 ---
 
@@ -230,8 +231,8 @@ Shared chrome across all steps:
 | UI element | User actions |
 |------------|--------------|
 | Website URL input | Enter store URL |
-| **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` |
-| Progress bar | Poll job status; view pages/chunks processed |
+| **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` *(real API; stub sync — no crawl yet)* |
+| Progress bar | Poll job status *(mock progress until ingest pipeline)* |
 | Error panel | View crawl errors; **Retry** |
 | FAQ quick-add (optional) | Add Q&A pairs inline → `POST /knowledge/faq` |
 | **Skip for now** | Advance without source |
@@ -258,7 +259,7 @@ Shared chrome across all steps:
 | Chat window | View bot greeting |
 | Suggested question chips | Click to send preset question |
 | Message input | Type test message |
-| **Send** button | `POST /onboarding/test-chat` |
+| **Send** button | `POST /onboarding/test-chat` *(real API; echo reply until chat orchestrator)* |
 | Bot reply area | Read AI response |
 | Debug panel (collapsible) | View RAG chunks + tool calls (owner only) |
 | **Continue** | Enabled after ≥1 successful exchange |
@@ -542,7 +543,7 @@ Shared chrome across all steps:
 | UI element | User actions |
 |------------|--------------|
 | Store name | Edit → `PATCH /tenants/me` |
-| Timezone | Edit |
+| Timezone | Edit via `TimezoneSelect` → `PATCH /tenants/me` |
 | Logo | Upload / remove |
 | Default language | Edit |
 | Commerce connector type | Select manual / Shopify (P3) |
