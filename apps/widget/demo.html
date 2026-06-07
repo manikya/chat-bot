@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CommerceChat Widget Demo</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 640px;
+        margin: 40px auto;
+        padding: 0 20px;
+        line-height: 1.5;
+      }
+      code {
+        background: #f1f5f9;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .warn {
+        background: #fef3c7;
+        border: 1px solid #fcd34d;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Demo storefront</h1>
+    <div class="warn">
+      <strong>Do not open this file directly</strong> (file:// blocks API calls).
+      Use <a href="http://localhost:3001/widget/demo.html">http://localhost:3001/widget/demo.html</a>
+      while <code>npm run dev</code> is running.
+    </div>
+    <p style="margin-top: 16px">
+      Paste your API key from <strong>Settings → API keys</strong> (Regenerate key), then reload.
+      Or add <code>?key=pk_live_...</code> to this page URL.
+    </p>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var key = params.get("key");
+        var base = window.location.origin;
+        var script = document.createElement("script");
+        script.src = base + "/widget/v1.js";
+        script.async = true;
+        script.setAttribute("data-api-key", key || "pk_live_REPLACE_ME");
+        script.setAttribute("data-api-url", base);
+        document.body.appendChild(script);
+      })();
+    </script>
+  </body>
+</html>

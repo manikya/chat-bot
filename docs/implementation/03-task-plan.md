@@ -12,14 +12,14 @@
 
 | Sprint | Status | Done locally |
 |--------|--------|--------------|
-| **Sprint 1 — Foundation** | ~90% | Auth (signup → logout, refresh, password reset), tenant profile/config/limits, JWT authorizer, health, admin login + auth context, onboarding step 1 UI, **onboarding APIs**, session auto-refresh |
-| **Sprint 2 — Knowledge** | ~40% | Knowledge source CRUD + jobs in DynamoDB, admin knowledge page wired; **not done:** crawler, embeddings, S3 Vectors, `GET /jobs/{jobId}`, FAQ ingest, job polling UI |
-| **Sprint 3 — Chat** | 0% | Bot config UI only (real tenant config API) |
-| **Sprint 4 — Meta** | 0% | Channels UI uses mock |
-| **Sprint 5 — Widget** | 0% | Widget appearance via real config PATCH; embed GET mock |
-| **Infra (Week 0)** | ~30% | LocalStack DynamoDB, local Lambda server; **not done:** CDK, CI, staging deploy |
+| **Sprint 1 — Foundation** | ~95% | Auth, tenant profile/config/limits/usage, JWT, onboarding APIs, session auto-refresh; **not done:** CDK deploy, logo upload |
+| **Sprint 2 — Knowledge** | ~85% | Website crawl, catalog CSV, embeddings, `FileVectorStore`, job polling, RAG retriever; **not done:** S3 Vectors prod, FAQ ingest, Step Functions |
+| **Sprint 3 — Chat** | ~90% | Orchestrator, LLM, tools, cart persistence, usage metering, `POST /chat`, test simulator |
+| **Sprint 4 — Meta** | 0% | Channels UI uses mock; conversations API live |
+| **Sprint 5 — Widget** | ~70% | API key auth, widget config/chat, `v1.js` embed bundle, dashboard stats; **not done:** SSE stream, rate limits, CDN deploy |
+| **Infra (Week 0)** | ~30% | LocalStack DynamoDB, local Lambda server; **not done:** CDK, CI, Resend email |
 
-**25 real API routes** · **14 mock routes** remaining for MVP UI · See [06-api-implementation-status.md](06-api-implementation-status.md).
+**35 real API routes** · **6 mock routes** remaining for MVP UI · See [06-api-implementation-status.md](06-api-implementation-status.md).
 
 ---
 
@@ -99,9 +99,9 @@
 | 2.12 | Admin: ingest job progress UI | FE | M | 2.7 |
 
 **Sprint 2 exit criteria:**
-- [ ] Website crawl → chunks → vectors searchable
-- [ ] Catalog upload → product search via RAG
-- [~] Admin can trigger sync and see job status *(CRUD + stub sync done; real crawl/polling pending)*
+- [x] Website crawl → chunks → vectors searchable *(local FileVectorStore)*
+- [x] Catalog upload → product search via RAG
+- [x] Admin can trigger sync and see job status
 
 ---
 
@@ -125,9 +125,9 @@
 | 3.12 | Admin: test chat console | FE | M | 3.10 |
 
 **Sprint 3 exit criteria:**
-- [ ] Test console returns grounded answers with product search
-- [ ] Cart + checkout link flow works in test channel
-- [ ] Usage counters increment
+- [x] Test console returns grounded answers with product search
+- [~] Cart + checkout link flow works in test channel *(cart in DynamoDB; hosted checkout pending)*
+- [x] Usage counters increment
 
 ---
 

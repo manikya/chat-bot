@@ -11,12 +11,13 @@
 | Date | Milestone |
 |------|-----------|
 | 2026-06-06 | Initial monorepo: admin UI, auth + tenant Lambdas, mock fallback |
-| 2026-06-07 | Auth session flows: refresh, logout, password reset, auto-refresh, session-expired dialog |
-| 2026-06-07 | Onboarding APIs: wizard state, step advance, test-chat (DynamoDB) |
-| 2026-06-07 | Knowledge APIs: source CRUD, sync jobs list (stub sync — no crawl/embed pipeline) |
-| 2026-06-07 | Admin UX: timezone dropdown on profile/onboarding settings |
+| 2026-06-07 | Auth session flows, onboarding APIs, knowledge source CRUD |
+| 2026-06-07 | Knowledge ingest: website crawl, catalog CSV, RAG (`FileVectorStore`) |
+| 2026-06-07 | Chat orchestrator: OpenAI, tools, `POST /api/v1/chat` |
+| 2026-06-07 | Usage, conversations, widget APIs + API key auth |
+| 2026-06-07 | Dashboard stats (live DynamoDB counts), widget `v1.js` bundle |
 
-**Git (local `main`):** `997127e` → `7bc1f04` (auth session) → `f1d77d3` (onboarding + knowledge + timezone). Not pushed.
+**Git (local `main`):** through `d149a95` (usage/conversations/widget) + dashboard + widget bundle (uncommitted). Not pushed.
 
 ---
 
@@ -24,19 +25,21 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | 25 routes |
-| **Mock only** (UI works; fixture data) | 8 routes |
-| **Not started** (no handler, no mock) | 15+ routes |
-| **Phase 2** (billing, MFA, team) | 8 routes |
+| **Implemented** (real Lambda + DynamoDB) | **35 routes** |
+| **Mock only** (UI works; fixture data) | **6 routes** |
+| **Not started** (no handler, no mock) | 12+ routes |
+| **Phase 2** (billing, MFA, team list) | 8 routes |
 
-The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/local/server.ts`) routes matching paths to Lambda handlers; everything else falls through to `@commercechat/mock-api`.
+The admin UI calls all endpoints over HTTP. The local dev server routes matching paths to Lambda handlers; everything else falls through to `@commercechat/mock-api`.
+
+**Widget bundle:** `GET /widget/v1.js` served from `apps/widget/public/v1.js` (not counted as API route).
 
 ---
 
 ## 2. Implemented (real)
 
-| Method | Route | Lambda handler | UI connected |
-|--------|-------|----------------|:------------:|
+| Method | Route | Handler | UI connected |
+|--------|-------|---------|:------------:|
 | `GET` | `/health` | `health` | — |
 | `POST` | `/auth/signup` | `auth-signup` | Yes |
 | `POST` | `/auth/login` | `auth-login` | Yes |
@@ -52,6 +55,8 @@ The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/
 | `GET` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `PATCH` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `GET` | `/api/v1/tenants/me/limits` | `tenant-limits` | Yes |
+| `GET` | `/api/v1/tenants/me/usage` | `tenant-usage` | Yes |
+| `POST` | `/api/v1/tenants/me/widget/regenerate-key` | `tenant-widget-key` | Yes |
 | `GET` | `/api/v1/onboarding` | `onboarding` | Yes |
 | `PATCH` | `/api/v1/onboarding/step` | `onboarding` | Yes |
 | `POST` | `/api/v1/onboarding/test-chat` | `onboarding-test-chat` | Yes |
@@ -60,10 +65,19 @@ The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/
 | `DELETE` | `/api/v1/knowledge/sources/{sourceId}` | `knowledge-sources` | Yes |
 | `POST` | `/api/v1/knowledge/sources/{sourceId}/sync` | `knowledge-sync` | Yes |
 | `GET` | `/api/v1/knowledge/jobs` | `knowledge-jobs` | Yes |
+| `GET` | `/api/v1/knowledge/jobs/{jobId}` | `knowledge-jobs` | Yes |
+| `POST` | `/api/v1/chat` | `chat-api` | Yes |
+| `GET` | `/api/v1/conversations` | `conversations` | Yes |
+| `GET` | `/api/v1/conversations/{id}` | `conversations` | Yes |
+| `GET` | `/api/v1/conversations/{id}/messages` | `conversations` | Yes |
+| `GET` | `/api/v1/widget/config` | `widget` | Yes |
+| `POST` | `/api/v1/widget/chat` | `widget` | Yes (embed) |
+| `GET` | `/api/v1/dashboard/stats` | `dashboard-stats` | Yes |
 
-**Also built (not a route):** `jwt-authorizer` — API Gateway authorizer; used locally via Bearer token in handlers.
-
-**Note:** Knowledge sync completes synchronously with stub stats until the Step Functions ingest pipeline ships (Sprint 2).
+**Also built (not a route):**
+- `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
+- Chat orchestrator — `packages/core/src/chat/`
+- Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js`
 
 **Code locations:**
 - Handlers: `apps/api/src/handlers/`
@@ -74,98 +88,41 @@ The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/
 
 ## 3. Mock only (next to replace)
 
-These routes have **mock HTTP handlers** (`packages/mock-api/src/server/app.ts`) and are **used by the admin UI**, but no real Lambda exists yet.
-
-### Tenant (Sprint 5)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `GET` | `/api/v1/tenants/me/usage` | `tenant-usage` | P1 |
-| `POST` | `/api/v1/tenants/me/widget/regenerate-key` | `tenant-widget-key` | P1 |
-
-### Dashboard (admin-only; not in OpenAPI summary)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `GET` | `/api/v1/dashboard/stats` | `dashboard-stats` | P2 |
-
-### Channels (Sprint 4)
-
 | Method | Route | Suggested Lambda | Priority |
 |--------|-------|------------------|----------|
 | `GET` | `/api/v1/channels` | `channels` | P1 |
 | `POST` | `/api/v1/channels/meta/connect` | `channels-meta-connect` | P1 |
 | `DELETE` | `/api/v1/channels/meta/{channel}` | `channels-meta-disconnect` | P1 |
 | `GET` | `/api/v1/channels/meta/health` | `channels-meta-health` | P2 |
-
-### Conversations (Sprint 4)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `GET` | `/api/v1/conversations` | `conversations` | P1 |
-| `GET` | `/api/v1/conversations/{conversationId}` | `conversations` | P1 |
-| `GET` | `/api/v1/conversations/{conversationId}/messages` | `conversations` | P1 |
-
-### Chat & widget (Sprint 3 / 5)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `POST` | `/api/v1/chat` | `chat-api` | P1 |
-| `GET` | `/api/v1/widget/config` | `widget-config` | P1 |
-| `POST` | `/api/v1/widget/chat` | `widget-chat` | P1 |
-
-### Team invites (mock; full team is Phase 2)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
+| `GET` | `/api/v1/team` | `team` | P2 |
 | `POST` | `/auth/invite` | `auth-invite` | P2 |
 
 ---
 
 ## 4. Not started (no mock, no Lambda)
 
-Routes defined in [02-api-specification.md](02-api-specification.md) that are **not** implemented and **not** served by the mock server.
-
 ### MVP — remaining
 
 | Method | Route | Sprint | Notes |
 |--------|-------|--------|-------|
 | `POST` | `/api/v1/tenants/me/logo` | 1 | S3 presigned upload |
-| `GET` | `/api/v1/knowledge/jobs/{jobId}` | 2 | Job detail |
 | `POST` | `/api/v1/knowledge/faq` | 2 | Inline FAQ ingest |
 | `GET` | `/api/v1/commerce/products` | 3 | Product catalog admin |
-| `POST` | `/api/v1/commerce/products/import` | 3 | CSV/JSON import |
-| `GET` | `/api/v1/commerce/orders` | 3 | Order list |
-| `PATCH` | `/api/v1/commerce/connector` | 3 | Connector config |
-| `GET` | `/webhooks/meta` | 4 | Meta verify challenge |
-| `POST` | `/webhooks/meta` | 4 | Inbound Meta events |
+| `GET/POST` | `/webhooks/meta` | 4 | WhatsApp inbound |
 | `POST` | `/auth/accept-invite` | 8 | Team onboarding |
 
 ### Phase 2
 
-| Method | Route | Area |
-|--------|-------|------|
-| `POST` | `/auth/mfa/verify` | MFA |
-| `GET` | `/api/v1/team` | Team list |
-| `DELETE` | `/api/v1/team/{userId}` | Remove member |
-| `GET` | `/api/v1/billing/subscription` | Stripe |
-| `POST` | `/api/v1/billing/checkout` | Stripe |
-| `POST` | `/api/v1/billing/portal` | Stripe |
-| `POST` | `/webhooks/stripe` | Stripe lifecycle |
-| `POST` | `/api/v1/widget/chat/stream` | SSE streaming |
+Billing, MFA, team CRUD, `POST /api/v1/widget/chat/stream` (SSE).
 
 ---
 
 ## 5. Recommended build order
 
-Aligned with [03-task-plan.md](03-task-plan.md):
-
-1. **Sprint 2 knowledge (remaining)** — ingest pipeline (crawler, embed, S3 Vectors), `GET /jobs/{jobId}`, FAQ ingest, job polling UI
-2. **Sprint 3 chat** — `chat-api`, usage metering → real `GET /tenants/me/usage`
-3. **Sprint 4 Meta** — webhooks + channel connect (onboarding step 2) + conversations APIs
-4. **Sprint 5 widget** — API key routing, `widget-config`, `widget-chat`, regenerate-key
-5. **Infra** — CDK deploy, CI, Resend email (replace console-log verify links)
-6. **Phase 2** — billing, team, MFA, `POST /auth/invite`, `/auth/accept-invite`
+1. **Sprint 4 Meta** — webhooks, WhatsApp connect, real channel health on dashboard
+2. **Infra** — CDK deploy, Resend email, CI
+3. **Widget polish** — product cards in embed, rate limiting
+4. **Phase 2** — billing, team, MFA
 
 ---
 
@@ -173,38 +130,29 @@ Aligned with [03-task-plan.md](03-task-plan.md):
 
 | Admin screen | Live API | Mock fallback |
 |--------------|----------|---------------|
-| Signup, login, logout, refresh, verify, forgot/reset password | Auth | — |
-| Settings → Profile | `GET/PATCH /tenants/me` | — |
-| Onboarding profile, knowledge, test, widget steps | Onboarding + tenant + knowledge APIs | — |
-| Onboarding channels step | — | Meta connect (mock) |
-| Bot config | `GET/PATCH /tenants/me/config` | Full chat simulator (`POST /chat`) |
-| Widget appearance | `PATCH /tenants/me/config` | Embed code, widget config GET |
-| Usage → plan limits | `GET /tenants/me/limits` | Usage metrics, message counts |
-| Dashboard | — | Stats, channel health |
-| Conversations | — | List, thread, messages |
-| Knowledge dashboard | Sources, jobs, sync (stub) | Real crawl/embed pipeline |
+| Auth, profile, onboarding, knowledge | Yes | — |
+| Bot config + test simulator | Config + chat orchestrator | — |
+| Usage, dashboard | Usage + dashboard stats | — |
+| Conversations | List, thread, messages | — |
+| Widget / API keys | Config, regen-key, embed snippet | — |
 | Channels | — | Connect, health |
-| Team / API keys | — | Team list, invite, key regen |
+| Team | — | List, invite |
 
 ---
 
 ## 7. Local dev checklist
 
 ```bash
-docker compose up -d          # LocalStack DynamoDB (required for real APIs)
+docker compose up -d
 cp apps/api/.env.example apps/api/.env
 npm run dev                   # API :3001 + Admin :3000
 ```
 
-**Real auth flow:** signup → verify email (token logged in API console) → login.
+**Widget demo:** Regenerate API key in Settings → API keys, paste embed into `apps/widget/demo.html`, open via any static server or storefront.
 
-**Verify implementation:** `GET http://localhost:3001/health` should return `"runtime":"aws-lambda"`, not `"mock-1.0.0"`.
-
----
-
-## 8. Related docs
-
-- Full request/response shapes: [02-api-specification.md](02-api-specification.md)
-- Sprint backlog: [03-task-plan.md](03-task-plan.md)
-- Lambda deploy map: [../../infra/README.md](../../infra/README.md)
-- Admin UI: [../../apps/admin/README.md](../../apps/admin/README.md)
+**Test scripts:**
+```bash
+cd apps/api && node scripts/test-dashboard-widget.mjs
+cd apps/api && node scripts/test-chat.mjs
+cd apps/api && node scripts/test-usage-widget-conversations.mjs
+```

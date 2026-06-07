@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiError, ErrorCodes, ok, type AuthContext } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
+import { buildWidgetEmbedCode } from "../widget/embed";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 
@@ -61,5 +62,6 @@ export async function regenerateWidgetApiKey(auth: AuthContext, config: CoreConf
     apiKey: widget.raw,
     prefix: widget.prefix,
     createdAt: now,
+    embedCode: buildWidgetEmbedCode(widget.raw, config),
   });
 }

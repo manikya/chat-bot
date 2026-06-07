@@ -12,6 +12,7 @@ export interface CoreConfig {
   embeddingModel: string;
   llmModel: string;
   ingestMaxPages: number;
+  apiPublicUrl: string;
 }
 
 export function loadConfig(): CoreConfig {
@@ -29,5 +30,6 @@ export function loadConfig(): CoreConfig {
     embeddingModel: process.env.EMBEDDING_MODEL ?? "text-embedding-3-small",
     llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
+    apiPublicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",
   };
 }

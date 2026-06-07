@@ -1,5 +1,9 @@
+import { readFileSync, existsSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { createMockServerApp } from "@commercechat/mock-api/server";
 import { handler as healthHandler } from "../handlers/health";
 import { handler as signupHandler } from "../handlers/auth-signup";
@@ -24,7 +28,8 @@ import { handler as tenantUsageHandler } from "../handlers/tenant-usage";
 import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key";
 import { handler as conversationsHandler } from "../handlers/conversations";
 import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler } from "../handlers/widget";
-import { matchPathParams } from "../lib/apigw";
+import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
+import { corsHeaders, matchPathParams } from "../lib/apigw";
 import { toApigwEvent } from "./event";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
 
@@ -62,7 +67,11 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
+  { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },
 ];
+
+const WIDGET_JS_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../widget/public/v1.js");
+const WIDGET_DEMO_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../widget/demo.html");
 
 const PATTERN_ROUTES: Array<{
   method: string;
@@ -144,11 +153,51 @@ function findRoute(method: string, path: string) {
   return null;
 }
 
+function hasRealRoute(path: string) {
+  if (REAL_ROUTES.some((r) => r.path === path)) return true;
+  for (const route of PATTERN_ROUTES) {
+    if (matchPathParams(path, route.pattern, route.paramNames)) return true;
+  }
+  return false;
+}
+
 export function createLocalApp() {
   const app = new Hono();
   const mockApp = createMockServerApp();
 
+  app.use(
+    "*",
+    cors({
+      origin: "*",
+      allowHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Requested-With"],
+      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    })
+  );
+
+  app.get("/widget/demo.html", (c) => {
+    if (!existsSync(WIDGET_DEMO_PATH)) {
+      return c.text("Demo page not found", 404);
+    }
+    const html = readFileSync(WIDGET_DEMO_PATH, "utf8");
+    return c.html(html);
+  });
+
+  app.get("/widget/v1.js", (c) => {
+    if (!existsSync(WIDGET_JS_PATH)) {
+      return c.text("Widget bundle not found", 404);
+    }
+    const js = readFileSync(WIDGET_JS_PATH, "utf8");
+    return c.body(js, 200, {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=3600",
+    });
+  });
+
   app.all("*", async (c) => {
+    if (c.req.method === "OPTIONS" && hasRealRoute(c.req.path)) {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
     const match = findRoute(c.req.method, c.req.path);
     if (match) {
       return invokeLambda(match.handler, c.req.raw, match.pathParameters);
@@ -163,7 +212,10 @@ const port = Number(process.env.PORT ?? 3001);
 const app = createLocalApp();
 
 console.log(`CommerceChat Lambda API (local) → http://localhost:${port}`);
-console.log(`  Real handlers: auth, tenant, onboarding, knowledge, chat, conversations, widget, health`);
+console.log(`  Real handlers: auth, tenant, onboarding, knowledge, chat, conversations, widget, dashboard, health`);
+const publicUrl = process.env.API_PUBLIC_URL ?? "http://localhost:3001";
+console.log(`  Widget bundle:   ${publicUrl}/widget/v1.js`);
+console.log(`  Widget demo:       ${publicUrl}/widget/demo.html`);
 console.log(`  Mock fallback:   all other routes`);
 
 serve({ fetch: app.fetch, port });

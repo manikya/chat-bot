@@ -3,7 +3,7 @@
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
 **Related:** [08-admin-dashboard.md](../functions/08-admin-dashboard.md) · [04-onboarding-and-registration.md](04-onboarding-and-registration.md) · [07-web-chat-widget.md](../functions/07-web-chat-widget.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
 **Reference UI:** [Jetwing component mapping](../../reference%20UI/README.md)  
-**Implementation status (2026-06-07):** Auth, tenant, onboarding wizard APIs, and knowledge CRUD use **real Lambdas**. Channels, dashboard stats, conversations, usage metrics, and widget embed still use **mock fallback**. Timezone fields use a native `<select>` (`TimezoneSelect`, ~32 curated IANA zones).
+**Implementation status (2026-06-07):** Auth, tenant, onboarding, knowledge ingest, chat orchestrator, usage, conversations, dashboard stats, and widget embed (`/widget/v1.js`) use **real Lambdas + DynamoDB**. **Mock fallback:** channels, team. Timezone fields use a native `<select>` (`TimezoneSelect`, ~32 curated IANA zones).
 
 ---
 

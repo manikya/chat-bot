@@ -10,7 +10,7 @@ AI-powered e-commerce chatbot SaaS for **WhatsApp**, **Facebook Messenger**, **I
 
 🎨 **[Reference UI](../reference%20UI/README.md)** — cloned [jetwing-ai-itinerary](https://github.com/Capricon-Solutions/jetwing-ai-itinerary) for shadcn/Next.js patterns and components.
 
-🖥️ **[Admin UI](../apps/admin/README.md)** — Next.js dashboard; **25 real API routes** (auth, tenant, onboarding, knowledge), mock fallback for the rest.
+🖥️ **[Admin UI](../apps/admin/README.md)** — Next.js dashboard; **35 real API routes** (auth, tenant, knowledge ingest, chat, usage, conversations, widget, dashboard), mock fallback for channels/team.
 
 📡 **[API implementation status](implementation/06-api-implementation-status.md)** — built vs mock vs remaining (last updated 2026-06-07).
 

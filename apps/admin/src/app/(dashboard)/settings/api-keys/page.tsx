@@ -9,11 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export default function ApiKeysPage() {
   const [key, setKey] = useState<string | null>(null);
+  const [embed, setEmbed] = useState<string | null>(null);
   const [prefix] = useState("pk_live_abc");
 
   const regenerate = async () => {
     const res = await api.tenant.regenerateWidgetKey();
     setKey(res.data.apiKey);
+    setEmbed((res.data as { embedCode?: string }).embedCode ?? null);
     toast.success("New API key generated — copy it now");
   };
 
@@ -41,7 +43,23 @@ export default function ApiKeysPage() {
               <RefreshCw className="h-4 w-4" /> Regenerate key
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">24-hour grace period applies to the previous key after rotation.</p>
+          {embed && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Embed snippet</p>
+              <pre className="rounded-lg bg-muted p-3 text-xs overflow-x-auto whitespace-pre-wrap">{embed}</pre>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(embed);
+                  toast.success("Embed code copied");
+                }}
+              >
+                <Copy className="h-4 w-4" /> Copy embed code
+              </Button>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">Paste the embed snippet on your storefront before the closing &lt;/body&gt; tag.</p>
         </CardContent>
       </Card>
     </div>

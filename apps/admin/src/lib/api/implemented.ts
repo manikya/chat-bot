@@ -32,6 +32,7 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/conversations/:id/messages",
   "GET /api/v1/widget/config",
   "POST /api/v1/widget/chat",
+  "GET /api/v1/dashboard/stats",
 ] as const;
 
 export const REAL_API_DOMAINS = [
@@ -45,4 +46,5 @@ export const REAL_API_DOMAINS = [
   "usage",
   "conversations",
   "widget",
+  "dashboard",
 ] as const;

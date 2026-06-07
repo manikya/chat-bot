@@ -4,13 +4,7 @@ import type { CoreConfig } from "../config";
 import { runChatOrchestrator } from "../chat/orchestrator";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
-
-const WIDGET_EMBED_TEMPLATE = (apiKeyPrefix: string) =>
-  `<script
-  src="https://cdn.commercechat.com/widget/v1.js"
-  data-api-key="${apiKeyPrefix}…"
-  async
-></script>`;
+import { buildWidgetEmbedPlaceholder } from "./embed";
 
 export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
   const db = getDocClient(config);
@@ -43,7 +37,7 @@ export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
     position: tenantConfig.widgetConfig?.position ?? "bottom-right",
     suggestedQuestions: tenantConfig.widgetConfig?.suggestedQuestions ?? [],
     enabled: profileRes.Item.status === "active" || profileRes.Item.status === "trial",
-    embedCode: WIDGET_EMBED_TEMPLATE(prefix),
+    embedCode: buildWidgetEmbedPlaceholder(prefix, config),
   });
 }
 

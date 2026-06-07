@@ -16,5 +16,7 @@ export { verifyWidgetApiKey, regenerateWidgetApiKey } from "./auth/api-key";
 export * from "./conversations/service";
 export * from "./widget/service";
 export type { WidgetChatBody } from "./widget/service";
+export { getDashboardStats } from "./dashboard/service";
+export { buildWidgetEmbedCode } from "./widget/embed";
 export { parseCatalogCsv, type CatalogProduct } from "./ingest/parsers/catalog-csv";
 export { getDocClient } from "./db/client";
