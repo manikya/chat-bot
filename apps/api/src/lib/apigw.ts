@@ -42,6 +42,14 @@ export function getBearerToken(event: APIGatewayProxyEventV2): string | null {
   return auth.slice(7);
 }
 
+export function getApiKey(event: APIGatewayProxyEventV2): string | null {
+  return event.headers?.["x-api-key"] ?? event.headers?.["X-API-Key"] ?? null;
+}
+
+export function queryParam(event: APIGatewayProxyEventV2, name: string): string | undefined {
+  return event.queryStringParameters?.[name];
+}
+
 export function toApigwResponse(result: ApiResponse<unknown>, statusCode = 200): APIGatewayProxyResultV2 {
   if (!result.success && result.error) {
     const code = result.error.code;
@@ -70,7 +78,7 @@ export function corsHeaders(): Record<string, string> {
   return {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Requested-With",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,X-API-Key,X-Requested-With",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
   };
 }

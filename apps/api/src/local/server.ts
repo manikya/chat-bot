@@ -20,6 +20,10 @@ import { handler as knowledgeSourcesHandler } from "../handlers/knowledge-source
 import { handler as knowledgeSyncHandler } from "../handlers/knowledge-sync";
 import { handler as knowledgeJobsHandler } from "../handlers/knowledge-jobs";
 import { handler as chatApiHandler } from "../handlers/chat-api";
+import { handler as tenantUsageHandler } from "../handlers/tenant-usage";
+import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key";
+import { handler as conversationsHandler } from "../handlers/conversations";
+import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler } from "../handlers/widget";
 import { matchPathParams } from "../lib/apigw";
 import { toApigwEvent } from "./event";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
@@ -46,13 +50,18 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "PATCH", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "GET", path: "/api/v1/tenants/me/limits", handler: tenantLimitsHandler },
+  { method: "GET", path: "/api/v1/tenants/me/usage", handler: tenantUsageHandler },
+  { method: "POST", path: "/api/v1/tenants/me/widget/regenerate-key", handler: tenantWidgetKeyHandler },
+  { method: "GET", path: "/api/v1/conversations", handler: conversationsHandler },
+  { method: "GET", path: "/api/v1/widget/config", handler: widgetConfigHandler },
+  { method: "POST", path: "/api/v1/widget/chat", handler: widgetChatHandler },
+  { method: "POST", path: "/api/v1/chat", handler: chatApiHandler },
   { method: "GET", path: "/api/v1/onboarding", handler: onboardingHandler },
   { method: "PATCH", path: "/api/v1/onboarding/step", handler: onboardingHandler },
   { method: "POST", path: "/api/v1/onboarding/test-chat", handler: onboardingTestChatHandler },
   { method: "GET", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
-  { method: "POST", path: "/api/v1/chat", handler: chatApiHandler },
 ];
 
 const PATTERN_ROUTES: Array<{
@@ -78,6 +87,18 @@ const PATTERN_ROUTES: Array<{
     pattern: /^\/api\/v1\/knowledge\/jobs\/([^/]+)$/,
     paramNames: ["jobId"],
     handler: knowledgeJobsHandler,
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/conversations\/([^/]+)\/messages$/,
+    paramNames: ["conversationId"],
+    handler: conversationsHandler,
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/conversations\/([^/]+)$/,
+    paramNames: ["conversationId"],
+    handler: conversationsHandler,
   },
 ];
 
@@ -142,7 +163,7 @@ const port = Number(process.env.PORT ?? 3001);
 const app = createLocalApp();
 
 console.log(`CommerceChat Lambda API (local) → http://localhost:${port}`);
-console.log(`  Real handlers: auth, tenant, onboarding, knowledge, health`);
+console.log(`  Real handlers: auth, tenant, onboarding, knowledge, chat, conversations, widget, health`);
 console.log(`  Mock fallback:   all other routes`);
 
 serve({ fetch: app.fetch, port });

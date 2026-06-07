@@ -2,13 +2,20 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "a
 import { errors as joseErrors } from "jose";
 import { verifyAccessToken, toAuthContext, loadConfig } from "@commercechat/core";
 import { ApiError, ErrorCodes } from "@commercechat/shared";
+import { verifyWidgetApiKey } from "@commercechat/core";
 import {
   type ApiHandler,
+  getApiKey,
   getBearerToken,
   handleError,
   toApigwResponse,
   corsHeaders,
 } from "./apigw";
+
+export type ApiKeyHandler = (
+  event: APIGatewayProxyEventV2,
+  tenantId: string
+) => ReturnType<ApiHandler>;
 
 export function createHandler(
   fn: ApiHandler,
@@ -59,6 +66,75 @@ export function createHandler(
       if (options?.noBody && result.success) {
         return { statusCode: status, headers: corsHeaders() };
       }
+      return toApigwResponse(result, result.success ? status : 400);
+    } catch (error) {
+      return handleError(error);
+    }
+  };
+}
+
+export function createApiKeyHandler(
+  fn: ApiKeyHandler,
+  options?: { successStatus?: number }
+) {
+  return async (
+    event: APIGatewayProxyEventV2,
+    _context: Context
+  ): Promise<APIGatewayProxyResultV2> => {
+    if (event.requestContext.http.method === "OPTIONS") {
+      return { statusCode: 204, headers: corsHeaders() };
+    }
+
+    try {
+      const apiKey = getApiKey(event);
+      if (!apiKey) throw new ApiError(ErrorCodes.UNAUTHORIZED, "Missing X-API-Key header", 401);
+      const tenantId = await verifyWidgetApiKey(apiKey, loadConfig());
+      const result = await fn(event, tenantId);
+      const status = options?.successStatus ?? 200;
+      return toApigwResponse(result, result.success ? status : 400);
+    } catch (error) {
+      return handleError(error);
+    }
+  };
+}
+
+export function createTenantHandler(
+  fn: ApiKeyHandler,
+  options?: { successStatus?: number }
+) {
+  return async (
+    event: APIGatewayProxyEventV2,
+    _context: Context
+  ): Promise<APIGatewayProxyResultV2> => {
+    if (event.requestContext.http.method === "OPTIONS") {
+      return { statusCode: 204, headers: corsHeaders() };
+    }
+
+    try {
+      const config = loadConfig();
+      let tenantId: string | null = null;
+      const token = getBearerToken(event);
+      const apiKey = getApiKey(event);
+
+      if (token) {
+        try {
+          const claims = await verifyAccessToken(token, config);
+          tenantId = toAuthContext(claims).tenantId;
+        } catch (error) {
+          if (error instanceof joseErrors.JWTExpired) {
+            throw new ApiError(ErrorCodes.TOKEN_EXPIRED, "Access token expired", 401);
+          }
+        }
+      }
+      if (!tenantId && apiKey) {
+        tenantId = await verifyWidgetApiKey(apiKey, config);
+      }
+      if (!tenantId) {
+        throw new ApiError(ErrorCodes.UNAUTHORIZED, "Missing Bearer token or X-API-Key", 401);
+      }
+
+      const result = await fn(event, tenantId);
+      const status = options?.successStatus ?? 200;
       return toApigwResponse(result, result.success ? status : 400);
     } catch (error) {
       return handleError(error);

@@ -11,12 +11,17 @@ export function toApigwEvent(
   req.headers.forEach((v, k) => {
     headers[k] = v;
   });
+  const queryStringParameters: Record<string, string> = {};
+  url.searchParams.forEach((v, k) => {
+    queryStringParameters[k] = v;
+  });
 
   return {
     version: "2.0",
     routeKey: "$default",
     rawPath: url.pathname,
     rawQueryString: url.search.slice(1),
+    queryStringParameters: Object.keys(queryStringParameters).length ? queryStringParameters : undefined,
     headers,
     requestContext: {
       accountId: "local",

@@ -1,4 +1,5 @@
 import { UpdateCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { ok, type AuthContext } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
@@ -8,8 +9,16 @@ function currentPeriod(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-export async function getMonthlyUsage(tenantId: string, config: CoreConfig) {
-  const period = currentPeriod();
+function isValidPeriod(period: string) {
+  return /^\d{4}-\d{2}$/.test(period);
+}
+
+function estimateLlmCostUsd(inputTokens: number, outputTokens: number) {
+  // gpt-4o-mini list pricing: $0.15/1M in, $0.60/1M out
+  return (inputTokens * 0.15 + outputTokens * 0.6) / 1_000_000;
+}
+
+export async function getUsageForPeriod(tenantId: string, period: string, config: CoreConfig) {
   const db = getDocClient(config);
   const res = await db.send(
     new GetCommand({
@@ -18,14 +27,45 @@ export async function getMonthlyUsage(tenantId: string, config: CoreConfig) {
     })
   );
   if (!res.Item) {
-    return { period, messages: 0, inputTokens: 0, outputTokens: 0 };
+    return { period, messages: 0, inputTokens: 0, outputTokens: 0, ingestJobs: 0 };
   }
   return {
     period,
     messages: Number(res.Item.messages ?? 0),
     inputTokens: Number(res.Item.inputTokens ?? 0),
     outputTokens: Number(res.Item.outputTokens ?? 0),
+    ingestJobs: Number(res.Item.ingestJobs ?? 0),
   };
+}
+
+export async function getMonthlyUsage(tenantId: string, config: CoreConfig) {
+  return getUsageForPeriod(tenantId, currentPeriod(), config);
+}
+
+export async function getTenantUsage(auth: AuthContext, periodInput: string | undefined, config: CoreConfig) {
+  const period = periodInput && isValidPeriod(periodInput) ? periodInput : currentPeriod();
+  const db = getDocClient(config);
+  const [usage, limitsRes] = await Promise.all([
+    getUsageForPeriod(auth.tenantId, period, config),
+    db.send(
+      new GetCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.limits() },
+      })
+    ),
+  ]);
+  const maxMessages = Number(limitsRes.Item?.maxMessages ?? 2000);
+  const messagesRemaining = Math.max(0, maxMessages - usage.messages);
+
+  return ok({
+    period: usage.period,
+    messages: usage.messages,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    ingestJobs: usage.ingestJobs,
+    estimatedLlmCostUsd: Number(estimateLlmCostUsd(usage.inputTokens, usage.outputTokens).toFixed(4)),
+    limits: { maxMessages, messagesRemaining },
+  });
 }
 
 export async function incrementUsage(

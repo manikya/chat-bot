@@ -179,4 +179,152 @@ export function historyToChatMessages(messages: StoredMessage[]) {
   }));
 }
 
+export function customerDisplayName(conv: ConversationState): string {
+  if (conv.channel === "web" || conv.channel === "test") {
+    const suffix = conv.externalUserId.replace(/^onboarding-/, "").slice(-6);
+    return `Visitor ${suffix}`;
+  }
+  return conv.externalUserId;
+}
+
+export async function listTenantConversations(
+  tenantId: string,
+  config: CoreConfig,
+  options?: { channel?: string; status?: string; limit?: number; cursor?: string }
+) {
+  const db = getDocClient(config);
+  const limit = Math.min(options?.limit ?? 20, 50);
+  let startKey: Record<string, unknown> | undefined;
+  if (options?.cursor) {
+    try {
+      startKey = JSON.parse(Buffer.from(options.cursor, "base64url").toString("utf8"));
+    } catch {
+      startKey = undefined;
+    }
+  }
+
+  const res = await db.send(
+    new QueryCommand({
+      TableName: config.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": Keys.tenantPk(tenantId),
+        ":sk": "CONV#",
+      },
+      ExclusiveStartKey: startKey,
+      Limit: limit * 3,
+    })
+  );
+
+  let items = (res.Items ?? []).map((item) => {
+    const { PK: _pk, SK: _sk, ...conv } = item;
+    return conv as ConversationState;
+  });
+
+  if (options?.channel) {
+    items = items.filter((c) => c.channel === options.channel);
+  }
+  if (options?.status) {
+    items = items.filter((c) => c.status === options.status);
+  }
+
+  items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const page = items.slice(0, limit);
+  const hasMore = items.length > limit || !!res.LastEvaluatedKey;
+  const nextCursor =
+    hasMore && res.LastEvaluatedKey
+      ? Buffer.from(JSON.stringify(res.LastEvaluatedKey)).toString("base64url")
+      : null;
+
+  return {
+    items: page.map((c) => ({
+      conversationId: c.conversationId,
+      channel: c.channel,
+      externalUserId: c.externalUserId,
+      customerName: customerDisplayName(c),
+      status: c.status,
+      messageCount: c.messageCount,
+      lastInboundAt: c.lastInboundAt ?? c.createdAt,
+      updatedAt: c.updatedAt,
+    })),
+    nextCursor,
+    hasMore,
+  };
+}
+
+export async function findConversationById(
+  tenantId: string,
+  conversationId: string,
+  config: CoreConfig
+): Promise<ConversationState | null> {
+  const db = getDocClient(config);
+  let startKey: Record<string, unknown> | undefined;
+
+  do {
+    const res = await db.send(
+      new QueryCommand({
+        TableName: config.tableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": Keys.tenantPk(tenantId),
+          ":sk": "CONV#",
+        },
+        ExclusiveStartKey: startKey,
+      })
+    );
+    for (const item of res.Items ?? []) {
+      if (item.conversationId === conversationId) {
+        const { PK: _pk, SK: _sk, ...conv } = item;
+        return conv as ConversationState;
+      }
+    }
+    startKey = res.LastEvaluatedKey;
+  } while (startKey);
+
+  return null;
+}
+
+export async function listConversationMessages(
+  tenantId: string,
+  conversationId: string,
+  config: CoreConfig,
+  options?: { limit?: number; order?: "asc" | "desc" }
+) {
+  const db = getDocClient(config);
+  const limit = Math.min(options?.limit ?? 50, 100);
+  const orderAsc = options?.order !== "desc";
+
+  const res = await db.send(
+    new QueryCommand({
+      TableName: config.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": Keys.tenantPk(tenantId),
+        ":sk": `MSG#${conversationId}#`,
+      },
+      ScanIndexForward: orderAsc,
+      Limit: limit,
+    })
+  );
+
+  const items = (res.Items ?? []).map((item) => {
+    const { PK: _pk, SK: _sk, tenantId: _t, channel: _c, conversationId: _conv, ...msg } = item;
+    return {
+      messageId: msg.messageId as string,
+      direction: msg.direction as "inbound" | "outbound",
+      role: msg.role as "user" | "assistant",
+      type: msg.type as string,
+      content: msg.content as string,
+      createdAt: msg.createdAt as string,
+      metadata: msg.metadata as Record<string, unknown> | undefined,
+    };
+  });
+
+  return {
+    items,
+    nextCursor: null,
+    hasMore: !!res.LastEvaluatedKey,
+  };
+}
+
 export type { ChatIntent };

@@ -24,7 +24,7 @@ export default function UsagePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Usage</h1>
-        <p className="text-muted-foreground">Plan limits from real API · usage metrics mock until metering Lambda ships</p>
+        <p className="text-muted-foreground">Plan limits and usage from live DynamoDB metering</p>
       </div>
 
       <Card>
@@ -43,7 +43,7 @@ export default function UsagePage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Messages — {usage.period}</CardTitle>
-            <Badge variant="secondary">Mock data</Badge>
+            <Badge variant="success">Live API</Badge>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex justify-between text-sm">
