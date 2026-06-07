@@ -1,12 +1,29 @@
 import type { ApiResponse, MockApi } from "@commercechat/mock-api";
 import type { TenantConfig } from "@commercechat/mock-api";
+import { notifySessionExpired } from "@/lib/auth/session-expired";
 
-const TOKEN_KEY = "cc_access_token";
+export const TOKEN_KEY = "cc_access_token";
+export const REFRESH_TOKEN_KEY = "cc_refresh_token";
 
 export interface ApiErrorShape {
   code?: string;
   message?: string;
 }
+
+type RequestOptions = RequestInit & { _authRetry?: boolean };
+
+/** Paths where 401 is expected credentials failure — never attempt token refresh */
+const NO_REFRESH_PATHS = new Set([
+  "/auth/login",
+  "/auth/signup",
+  "/auth/refresh",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/verify-email",
+  "/auth/resend-verification",
+]);
+
+let refreshInFlight: Promise<boolean> | null = null;
 
 function getBaseUrl() {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -17,29 +34,98 @@ function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+function shouldAttemptRefresh(
+  path: string,
+  status: number,
+  error: ApiErrorShape | undefined,
+  isRetry: boolean
+): boolean {
+  if (isRetry || NO_REFRESH_PATHS.has(path)) return false;
+  if (typeof window === "undefined") return false;
+  if (!localStorage.getItem(REFRESH_TOKEN_KEY)) return false;
+  return status === 401 || error?.code === "TOKEN_EXPIRED" || error?.code === "UNAUTHORIZED";
+}
+
+function clearSessionAndNotifyExpired() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  const isPublic =
+    window.location.pathname.startsWith("/login") ||
+    window.location.pathname.startsWith("/signup") ||
+    window.location.pathname.startsWith("/forgot-password") ||
+    window.location.pathname.startsWith("/reset-password") ||
+    window.location.pathname.startsWith("/verify-email");
+  if (!isPublic) {
+    notifySessionExpired();
+  }
+}
+
+/** Raw fetch for refresh — must not go through request() to avoid recursion */
+async function performTokenRefresh(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!refreshToken) return false;
+
+    try {
+      const res = await fetch(`${getBaseUrl()}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.success || !body.data?.accessToken) return false;
+      localStorage.setItem(TOKEN_KEY, body.data.accessToken);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
 export async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestOptions = {}
 ): Promise<ApiResponse<T>> {
+  const { _authRetry = false, ...fetchOptions } = options;
   const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
+    ...(fetchOptions.headers as Record<string, string>),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;
   try {
-    res = await fetch(`${getBaseUrl()}${path}`, { ...options, headers });
+    res = await fetch(`${getBaseUrl()}${path}`, { ...fetchOptions, headers });
   } catch {
     throw { code: "NETWORK_ERROR", message: `Cannot reach API at ${getBaseUrl()}` };
+  }
+
+  if (res.status === 204) {
+    return { success: true, data: undefined, timestamp: new Date().toISOString() } as ApiResponse<T>;
   }
 
   const body = await res.json().catch(() => ({}));
 
   if (!res.ok || body.success === false) {
-    const error = body.error ?? { code: "REQUEST_FAILED", message: res.statusText };
-    throw error as ApiErrorShape;
+    const error = (body.error ?? { code: "REQUEST_FAILED", message: res.statusText }) as ApiErrorShape;
+
+    if (shouldAttemptRefresh(path, res.status, error, _authRetry)) {
+      const refreshed = await performTokenRefresh();
+      if (refreshed) {
+        return request<T>(path, { ...fetchOptions, _authRetry: true });
+      }
+      clearSessionAndNotifyExpired();
+    }
+
+    throw error;
   }
   return body as ApiResponse<T>;
 }
@@ -51,18 +137,42 @@ export function createHttpApi(): MockApi {
       login: async (email, password) =>
         request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
       me: () => request("/auth/me"),
+      refresh: async () => {
+        const ok = await performTokenRefresh();
+        if (!ok) throw { code: "UNAUTHORIZED", message: "Unable to refresh session" };
+        return {
+          success: true,
+          data: {
+            accessToken: localStorage.getItem(TOKEN_KEY)!,
+            expiresIn: 3600,
+            tokenType: "Bearer",
+          },
+          timestamp: new Date().toISOString(),
+        };
+      },
       verifyEmail: async (token: string) =>
         request("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
-      resendVerification: () =>
-        request("/auth/resend-verification", { method: "POST", body: JSON.stringify({}) }),
-      forgotPassword: () =>
-        request("/auth/forgot-password", { method: "POST", body: JSON.stringify({}) }),
+      resendVerification: (email: string) =>
+        request("/auth/resend-verification", { method: "POST", body: JSON.stringify({ email }) }),
+      forgotPassword: (email: string) =>
+        request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+      resetPassword: (token: string, password: string) =>
+        request("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
       logout: async () => {
+        const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
         try {
-          return await request("/auth/logout", { method: "POST", body: JSON.stringify({}) });
+          if (refreshToken) {
+            await request("/auth/logout", {
+              method: "POST",
+              body: JSON.stringify({ refreshToken }),
+            });
+          }
         } catch {
-          return { success: true, data: { loggedOut: true }, timestamp: new Date().toISOString() };
+          /* session may already be invalid */
         }
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+        return { success: true, data: { loggedOut: true }, timestamp: new Date().toISOString() };
       },
     },
     tenant: {

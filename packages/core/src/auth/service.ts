@@ -1,5 +1,12 @@
 import { createHash, randomBytes } from "crypto";
-import { TransactWriteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  TransactWriteCommand,
+  GetCommand,
+  PutCommand,
+  UpdateCommand,
+  QueryCommand,
+  DeleteCommand,
+} from "@aws-sdk/lib-dynamodb";
 import {
   ApiError,
   ErrorCodes,
@@ -245,11 +252,25 @@ export async function login(input: LoginInput, deps: AuthDeps) {
         sessionId,
         userId,
         refreshTokenHash: refreshHash,
+        refreshLookupHash: tokenHash(refreshToken),
         mfaVerified: true,
         createdAt: new Date().toISOString(),
         expiresAt: sessionTtl,
         ttl: sessionTtl,
         revoked: false,
+      },
+    })
+  );
+
+  await db.send(
+    new PutCommand({
+      TableName: deps.config.tableName,
+      Item: {
+        PK: Keys.refreshLookupPk(tokenHash(refreshToken)),
+        SK: Keys.refreshLookupSk(),
+        tenantId,
+        sessionId,
+        ttl: sessionTtl,
       },
     })
   );
@@ -329,6 +350,273 @@ export async function verifyEmail(token: string, deps: AuthDeps) {
   );
 
   return ok({ emailVerified: true });
+}
+
+async function resolveRefreshSession(refreshToken: string, deps: AuthDeps) {
+  if (!refreshToken) {
+    throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
+  }
+
+  const db = getDocClient(deps.config);
+  const lookupHash = tokenHash(refreshToken);
+  const lookup = await db.send(
+    new GetCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.refreshLookupPk(lookupHash), SK: Keys.refreshLookupSk() },
+    })
+  );
+  if (!lookup.Item) {
+    throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
+  }
+
+  const { tenantId, sessionId } = lookup.Item as { tenantId: string; sessionId: string };
+  const sessionRes = await db.send(
+    new GetCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.session(sessionId) },
+    })
+  );
+  const session = sessionRes.Item;
+  if (!session || session.revoked) {
+    throw new ApiError(ErrorCodes.UNAUTHORIZED, "Session revoked", 401);
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if ((session.expiresAt as number) < nowSec) {
+    throw new ApiError(ErrorCodes.TOKEN_EXPIRED, "Refresh token expired", 401);
+  }
+
+  const valid = await verifyPassword(session.refreshTokenHash as string, refreshToken);
+  if (!valid) {
+    throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
+  }
+
+  return { tenantId, sessionId, session, lookupHash };
+}
+
+export async function refreshAccessToken(refreshToken: string, deps: AuthDeps) {
+  const { tenantId, session } = await resolveRefreshSession(refreshToken, deps);
+  const db = getDocClient(deps.config);
+
+  const userRes = await db.send(
+    new GetCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.user(session.userId as string) },
+    })
+  );
+  const userRecord = userRes.Item;
+  if (!userRecord || userRecord.status !== "active") {
+    throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
+  }
+
+  const accessToken = await signAccessToken(
+    {
+      sub: userRecord.userId as string,
+      tid: tenantId,
+      role: userRecord.role as User["role"],
+      email: userRecord.email as string,
+      mfa: true,
+    },
+    deps.config
+  );
+
+  return ok({
+    accessToken,
+    expiresIn: deps.config.accessTokenTtlSec,
+    tokenType: "Bearer",
+  });
+}
+
+export async function logout(refreshToken: string, deps: AuthDeps) {
+  const { tenantId, sessionId, lookupHash } = await resolveRefreshSession(refreshToken, deps);
+  const db = getDocClient(deps.config);
+
+  await db.send(
+    new UpdateCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.session(sessionId) },
+      UpdateExpression: "SET revoked = :r",
+      ExpressionAttributeValues: { ":r": true },
+    })
+  );
+  await db.send(
+    new DeleteCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.refreshLookupPk(lookupHash), SK: Keys.refreshLookupSk() },
+    })
+  );
+
+  return ok({ loggedOut: true });
+}
+
+export async function forgotPassword(email: string, deps: AuthDeps) {
+  const normalized = normalizeEmail(email);
+  const db = getDocClient(deps.config);
+
+  const lookup = await db.send(
+    new GetCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.emailLookupPk(normalized), SK: Keys.emailLookupSk() },
+    })
+  );
+
+  if (lookup.Item) {
+    const { tenantId, userId } = lookup.Item as { tenantId: string; userId: string };
+    const resetToken = randomBytes(32).toString("hex");
+    const resetHash = tokenHash(resetToken);
+    const ttl = Math.floor(Date.now() / 1000) + 3600;
+
+    await db.send(
+      new PutCommand({
+        TableName: deps.config.tableName,
+        Item: {
+          PK: Keys.tokenPk(resetHash),
+          SK: Keys.tokenSk(),
+          purpose: "password_reset",
+          tenantId,
+          userId,
+          email: normalized,
+          used: false,
+          ttl,
+          expiresAt: ttl,
+        },
+      })
+    );
+
+    await deps.email.sendPasswordReset(normalized, resetToken, deps.config.appUrl);
+  }
+
+  return ok(
+    undefined,
+    "If that email exists, a reset link has been sent."
+  );
+}
+
+export async function resetPassword(token: string, password: string, deps: AuthDeps) {
+  const passwordError = validatePassword(password);
+  if (passwordError) throw new ApiError(ErrorCodes.VALIDATION_ERROR, passwordError, 400);
+
+  const hash = tokenHash(token);
+  const db = getDocClient(deps.config);
+  const tokenRes = await db.send(
+    new GetCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.tokenPk(hash), SK: Keys.tokenSk() },
+    })
+  );
+  const record = tokenRes.Item;
+  if (!record || record.used || record.purpose !== "password_reset") {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Invalid or expired token", 400);
+  }
+
+  const passwordHash = await hashPassword(password);
+  const { tenantId, userId } = record as { tenantId: string; userId: string };
+
+  await db.send(
+    new UpdateCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.user(userId) },
+      UpdateExpression:
+        "SET passwordHash = :p, failedLoginAttempts = :z REMOVE lockedUntil",
+      ExpressionAttributeValues: { ":p": passwordHash, ":z": 0 },
+    })
+  );
+  await db.send(
+    new UpdateCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.tokenPk(hash), SK: Keys.tokenSk() },
+      UpdateExpression: "SET used = :u",
+      ExpressionAttributeValues: { ":u": true },
+    })
+  );
+
+  const sessions = await db.send(
+    new QueryCommand({
+      TableName: deps.config.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": Keys.tenantPk(tenantId),
+        ":sk": "SESSION#",
+      },
+    })
+  );
+
+  for (const session of sessions.Items ?? []) {
+    if (session.userId !== userId || session.revoked) continue;
+    await db.send(
+      new UpdateCommand({
+        TableName: deps.config.tableName,
+        Key: { PK: session.PK, SK: session.SK },
+        UpdateExpression: "SET revoked = :r",
+        ExpressionAttributeValues: { ":r": true },
+      })
+    );
+    if (session.refreshLookupHash) {
+      await db.send(
+        new DeleteCommand({
+          TableName: deps.config.tableName,
+          Key: {
+            PK: Keys.refreshLookupPk(session.refreshLookupHash as string),
+            SK: Keys.refreshLookupSk(),
+          },
+        })
+      );
+    }
+  }
+
+  return ok(undefined, "Password updated successfully.");
+}
+
+export async function resendVerification(email: string, deps: AuthDeps) {
+  const normalized = normalizeEmail(email);
+  const db = getDocClient(deps.config);
+
+  const lookup = await db.send(
+    new GetCommand({
+      TableName: deps.config.tableName,
+      Key: { PK: Keys.emailLookupPk(normalized), SK: Keys.emailLookupSk() },
+    })
+  );
+
+  if (lookup.Item) {
+    const { tenantId, userId } = lookup.Item as { tenantId: string; userId: string };
+    const userRes = await db.send(
+      new GetCommand({
+        TableName: deps.config.tableName,
+        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.user(userId) },
+      })
+    );
+    const user = userRes.Item;
+    if (user && !user.emailVerified) {
+      const verifyToken = randomBytes(32).toString("hex");
+      const verifyHash = tokenHash(verifyToken);
+      const ttl = Math.floor(Date.now() / 1000) + 86400;
+
+      await db.send(
+        new PutCommand({
+          TableName: deps.config.tableName,
+          Item: {
+            PK: Keys.tokenPk(verifyHash),
+            SK: Keys.tokenSk(),
+            purpose: "email_verify",
+            tenantId,
+            userId,
+            email: normalized,
+            used: false,
+            ttl,
+            expiresAt: ttl,
+          },
+        })
+      );
+
+      await deps.email.sendVerifyEmail(normalized, verifyToken, deps.config.appUrl);
+    }
+  }
+
+  return ok(
+    undefined,
+    "If that email is unverified, a new link has been sent."
+  );
 }
 
 export async function getMe(auth: { tenantId: string; userId: string }, deps: AuthDeps) {

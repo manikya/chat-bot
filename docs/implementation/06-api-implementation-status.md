@@ -1,7 +1,7 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-07  
+**Last updated:** 2026-06-08  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)
 
 ---
@@ -10,8 +10,8 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | 10 routes |
-| **Mock only** (UI works; fixture data) | 22 routes |
+| **Implemented** (real Lambda + DynamoDB) | 16 routes |
+| **Mock only** (UI works; fixture data) | 17 routes |
 | **Not started** (no handler, no mock) | 15+ routes |
 | **Phase 2** (billing, MFA, team) | 8 routes |
 
@@ -28,6 +28,11 @@ The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/
 | `POST` | `/auth/login` | `auth-login` | Yes |
 | `GET` | `/auth/me` | `auth-me` | Yes |
 | `POST` | `/auth/verify-email` | `auth-verify-email` | Yes |
+| `POST` | `/auth/refresh` | `auth-refresh` | Yes |
+| `POST` | `/auth/logout` | `auth-logout` | Yes |
+| `POST` | `/auth/forgot-password` | `auth-forgot-password` | Yes |
+| `POST` | `/auth/reset-password` | `auth-reset-password` | Yes |
+| `POST` | `/auth/resend-verification` | `auth-resend-verification` | Yes |
 | `GET` | `/api/v1/tenants/me` | `tenant-me` | Yes |
 | `PATCH` | `/api/v1/tenants/me` | `tenant-me` | Yes |
 | `GET` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
@@ -46,16 +51,6 @@ The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/
 ## 3. Mock only (next to replace)
 
 These routes have **mock HTTP handlers** (`packages/mock-api/src/server/app.ts`) and are **used by the admin UI**, but no real Lambda exists yet.
-
-### Auth (Sprint 1 remainder)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `POST` | `/auth/refresh` | `auth-refresh` | P0 |
-| `POST` | `/auth/logout` | `auth-logout` | P0 |
-| `POST` | `/auth/forgot-password` | `auth-password` | P1 |
-| `POST` | `/auth/reset-password` | `auth-password` | P1 |
-| `POST` | `/auth/resend-verification` | `auth-verify-email` (extend) | P1 |
 
 ### Onboarding (Sprint 1 / 5)
 
@@ -159,12 +154,11 @@ Routes defined in [02-api-specification.md](02-api-specification.md) that are **
 
 Aligned with [03-task-plan.md](03-task-plan.md):
 
-1. **Finish Sprint 1 auth** — `auth-refresh`, `auth-logout`, `auth-password` (forgot/reset/resend)
-2. **Sprint 2 knowledge** — source CRUD, sync, jobs (replace knowledge mocks)
-3. **Sprint 3 chat** — `chat-api`, usage metering → real `GET /tenants/me/usage`
-4. **Sprint 4 Meta** — webhooks + channel connect + conversations APIs
-5. **Sprint 5 widget** — API key routing, `widget-config`, `widget-chat`, regenerate-key
-6. **Phase 2** — billing, team, MFA
+1. **Sprint 2 knowledge** — source CRUD, sync, jobs (replace knowledge mocks)
+2. **Sprint 3 chat** — `chat-api`, usage metering → real `GET /tenants/me/usage`
+3. **Sprint 4 Meta** — webhooks + channel connect + conversations APIs
+4. **Sprint 5 widget** — API key routing, `widget-config`, `widget-chat`, regenerate-key
+5. **Phase 2** — billing, team, MFA, `POST /auth/invite`, `/auth/accept-invite`
 
 ---
 
@@ -172,7 +166,7 @@ Aligned with [03-task-plan.md](03-task-plan.md):
 
 | Admin screen | Live API | Mock fallback |
 |--------------|----------|---------------|
-| Signup, login, verify email | Auth | — |
+| Signup, login, logout, refresh, verify, forgot/reset password | Auth | — |
 | Settings → Profile | `GET/PATCH /tenants/me` | — |
 | Onboarding → Profile | `PATCH /tenants/me` | Onboarding step advance |
 | Bot config | `GET/PATCH /tenants/me/config` | Test chat simulator |

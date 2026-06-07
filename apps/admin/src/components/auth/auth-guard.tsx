@@ -6,12 +6,12 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, sessionExpired } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace("/login");
-  }, [isLoading, isAuthenticated, router]);
+    if (!isLoading && !isAuthenticated && !sessionExpired) router.replace("/login");
+  }, [isLoading, isAuthenticated, sessionExpired, router]);
 
   if (isLoading) {
     return (

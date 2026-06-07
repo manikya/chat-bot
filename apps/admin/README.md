@@ -51,7 +51,7 @@ packages/core/              → Real Lambda business logic + DynamoDB
 
 | UI area | Backend |
 |---------|---------|
-| Signup, login, verify, `/auth/me` | **Real Lambda** + DynamoDB |
+| Signup, login, logout, refresh, verify, forgot/reset password | **Real Lambda** + DynamoDB |
 | Settings profile, onboarding profile | **Real** `PATCH /tenants/me` |
 | Bot config, widget colors | **Real** `GET/PATCH /tenants/me/config` |
 | Usage plan limits | **Real** `GET /tenants/me/limits` |

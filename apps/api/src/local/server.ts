@@ -6,6 +6,11 @@ import { handler as signupHandler } from "../handlers/auth-signup";
 import { handler as loginHandler } from "../handlers/auth-login";
 import { handler as meHandler } from "../handlers/auth-me";
 import { handler as verifyHandler } from "../handlers/auth-verify-email";
+import { handler as refreshHandler } from "../handlers/auth-refresh";
+import { handler as logoutHandler } from "../handlers/auth-logout";
+import { handler as forgotPasswordHandler } from "../handlers/auth-forgot-password";
+import { handler as resetPasswordHandler } from "../handlers/auth-reset-password";
+import { handler as resendVerificationHandler } from "../handlers/auth-resend-verification";
 import { handler as tenantMeHandler } from "../handlers/tenant-me";
 import { handler as tenantConfigHandler } from "../handlers/tenant-config";
 import { handler as tenantLimitsHandler } from "../handlers/tenant-limits";
@@ -24,6 +29,11 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/auth/login", handler: loginHandler },
   { method: "GET", path: "/auth/me", handler: meHandler },
   { method: "POST", path: "/auth/verify-email", handler: verifyHandler },
+  { method: "POST", path: "/auth/refresh", handler: refreshHandler },
+  { method: "POST", path: "/auth/logout", handler: logoutHandler },
+  { method: "POST", path: "/auth/forgot-password", handler: forgotPasswordHandler },
+  { method: "POST", path: "/auth/reset-password", handler: resetPasswordHandler },
+  { method: "POST", path: "/auth/resend-verification", handler: resendVerificationHandler },
   { method: "GET", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "PATCH", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "GET", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },

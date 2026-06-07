@@ -9,7 +9,10 @@ import {
   useState,
 } from "react";
 import type { LoginResult, Tenant, User } from "@commercechat/mock-api";
+import { SessionExpiredDialog } from "@/components/auth/session-expired-dialog";
 import { api } from "@/lib/api";
+import { TOKEN_KEY, REFRESH_TOKEN_KEY } from "@/lib/api/http-client";
+import { onSessionExpired } from "@/lib/auth/session-expired";
 
 interface AuthState {
   user: User | null;
@@ -19,37 +22,56 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
+  sessionExpired: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   setSession: (data: LoginResult) => void;
+  dismissSessionExpired: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-const TOKEN_KEY = "cc_access_token";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  const dismissSessionExpired = useCallback(() => setSessionExpired(false), []);
 
   const setSession = useCallback((data: LoginResult) => {
     localStorage.setItem(TOKEN_KEY, data.accessToken);
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     setUser(data.user);
     setTenant(data.tenant);
+    setSessionExpired(false);
+  }, []);
+
+  useEffect(() => {
+    return onSessionExpired(() => {
+      setUser(null);
+      setTenant(null);
+      setSessionExpired(true);
+    });
   }, []);
 
   const refreshMe = useCallback(async () => {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) {
+    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!token && !refreshToken) {
       setUser(null);
       setTenant(null);
       return;
     }
-    const res = await api.auth.me();
-    setUser(res.data.user);
-    setTenant(res.data.tenant);
+    try {
+      const res = await api.auth.me();
+      setUser(res.data.user);
+      setTenant(res.data.tenant);
+    } catch {
+      setUser(null);
+      setTenant(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -68,9 +90,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await api.auth.logout();
     } catch {
-      /* logout Lambda not implemented — clear local session anyway */
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
     }
-    localStorage.removeItem(TOKEN_KEY);
     setUser(null);
     setTenant(null);
   }, []);
@@ -81,15 +103,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenant,
       isLoading,
       isAuthenticated: !!user,
+      sessionExpired,
       login,
       logout,
       refreshMe,
       setSession,
+      dismissSessionExpired,
     }),
-    [user, tenant, isLoading, login, logout, refreshMe, setSession]
+    [user, tenant, isLoading, sessionExpired, login, logout, refreshMe, setSession, dismissSessionExpired]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <SessionExpiredDialog />
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

@@ -152,6 +152,15 @@ export function createMockApi() {
         return ok({ user: session.user, tenant: session.tenant });
       },
 
+      async refresh() {
+        await delay(200);
+        return ok({
+          accessToken: "mock_access_" + Date.now(),
+          expiresIn: 3600,
+          tokenType: "Bearer",
+        });
+      },
+
       async verifyEmail(_token?: string) {
         await delay(400);
         const session = loadSession() ?? defaultSession();
@@ -160,14 +169,19 @@ export function createMockApi() {
         return ok({ emailVerified: true });
       },
 
-      async resendVerification() {
+      async resendVerification(_email?: string) {
         await delay(300);
-        return ok({ sent: true });
+        return ok({ sent: true }, "If that email is unverified, a new link has been sent.");
       },
 
-      async forgotPassword() {
+      async forgotPassword(_email?: string) {
         await delay(300);
         return ok({ sent: true }, "If that email exists, a reset link has been sent.");
+      },
+
+      async resetPassword(_token?: string, _password?: string) {
+        await delay(300);
+        return ok({ reset: true }, "Password updated successfully.");
       },
 
       async logout() {

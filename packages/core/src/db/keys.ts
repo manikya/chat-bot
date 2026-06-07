@@ -11,6 +11,8 @@ export const Keys = {
   emailLookupSk: () => "USER",
   tokenPk: (hash: string) => `TOKEN#${hash}`,
   tokenSk: () => "META",
+  refreshLookupPk: (hash: string) => `REFRESH#${hash}`,
+  refreshLookupSk: () => "SESSION",
   apiKeyPk: (hash: string) => `APIKEY#${hash}`,
   apiKeySk: () => "TENANT",
 };

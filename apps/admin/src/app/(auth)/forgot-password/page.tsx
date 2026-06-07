@@ -15,7 +15,7 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.auth.forgotPassword();
+    await api.auth.forgotPassword(email);
     setSent(true);
     toast.success("Reset link sent if account exists");
   };

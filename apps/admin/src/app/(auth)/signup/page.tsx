@@ -28,7 +28,7 @@ export default function SignupPage() {
     try {
       await api.auth.signup(form);
       toast.success("Account created! Check your email.");
-      router.push("/verify-email-pending");
+      router.push(`/verify-email-pending?email=${encodeURIComponent(form.email)}`);
     } catch {
       toast.error("Signup failed");
     } finally {

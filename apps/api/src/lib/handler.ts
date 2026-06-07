@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
+import { errors as joseErrors } from "jose";
 import { verifyAccessToken, toAuthContext, loadConfig } from "@commercechat/core";
 import { ApiError, ErrorCodes } from "@commercechat/shared";
 import {
@@ -9,7 +10,10 @@ import {
   corsHeaders,
 } from "./apigw";
 
-export function createHandler(fn: ApiHandler, options?: { requireAuth?: boolean }) {
+export function createHandler(
+  fn: ApiHandler,
+  options?: { requireAuth?: boolean; successStatus?: number; noBody?: boolean }
+) {
   return async (
     event: APIGatewayProxyEventV2,
     _context: Context
@@ -23,11 +27,27 @@ export function createHandler(fn: ApiHandler, options?: { requireAuth?: boolean 
       if (options?.requireAuth) {
         const token = getBearerToken(event);
         if (!token) throw new ApiError(ErrorCodes.UNAUTHORIZED, "Missing authorization", 401);
-        const claims = await verifyAccessToken(token, loadConfig());
+        let claims;
+        try {
+          claims = await verifyAccessToken(token, loadConfig());
+        } catch (error) {
+          if (error instanceof joseErrors.JWTExpired) {
+            throw new ApiError(ErrorCodes.TOKEN_EXPIRED, "Access token expired", 401);
+          }
+          throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid token", 401);
+        }
         auth = toAuthContext(claims);
       }
       const result = await fn(event, auth);
-      const status = event.requestContext.http.method === "POST" && event.rawPath.includes("/auth/signup") ? 201 : 200;
+      const status =
+        options?.successStatus ??
+        (event.requestContext.http.method === "POST" && event.rawPath.includes("/auth/signup")
+          ? 201
+          : 200);
+
+      if (options?.noBody && result.success) {
+        return { statusCode: status, headers: corsHeaders() };
+      }
       return toApigwResponse(result, result.success ? status : 400);
     } catch (error) {
       return handleError(error);

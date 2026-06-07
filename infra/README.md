@@ -13,6 +13,11 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 | `auth-login` | `auth-login.cjs` | `POST /auth/login` |
 | `auth-me` | `auth-me.cjs` | `GET /auth/me` |
 | `auth-verify-email` | `auth-verify-email.cjs` | `POST /auth/verify-email` |
+| `auth-refresh` | `auth-refresh.cjs` | `POST /auth/refresh` |
+| `auth-logout` | `auth-logout.cjs` | `POST /auth/logout` |
+| `auth-forgot-password` | `auth-forgot-password.cjs` | `POST /auth/forgot-password` |
+| `auth-reset-password` | `auth-reset-password.cjs` | `POST /auth/reset-password` |
+| `auth-resend-verification` | `auth-resend-verification.cjs` | `POST /auth/resend-verification` |
 | `tenant-me` | `tenant-me.cjs` | `GET/PATCH /api/v1/tenants/me` |
 | `tenant-config` | `tenant-config.cjs` | `GET/PATCH /api/v1/tenants/me/config` |
 | `tenant-limits` | `tenant-limits.cjs` | `GET /api/v1/tenants/me/limits` |

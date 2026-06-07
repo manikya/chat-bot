@@ -28,7 +28,7 @@ export function toApigwResponse(result: ApiResponse<unknown>, statusCode = 200):
   if (!result.success && result.error) {
     const code = result.error.code;
     const status =
-      code === "UNAUTHORIZED" || code === "INVALID_CREDENTIALS" ? 401
+      code === "UNAUTHORIZED" || code === "INVALID_CREDENTIALS" || code === "TOKEN_EXPIRED" ? 401
       : code === "FORBIDDEN" || code === "EMAIL_NOT_VERIFIED" || code === "ACCOUNT_LOCKED" ? 403
       : code === "NOT_FOUND" ? 404
       : code === "EMAIL_EXISTS" ? 409

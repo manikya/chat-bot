@@ -33,13 +33,18 @@ npm run build:lambdas
 
 Deploy each `.cjs` file to its named Lambda. See [infra/README.md](../../infra/README.md).
 
-## Implemented (10 routes)
+## Implemented (16 routes)
 
 | Handler | Routes |
 |---------|--------|
 | `health` | `GET /health` |
 | `auth-signup` | `POST /auth/signup` |
 | `auth-login` | `POST /auth/login` |
+| `auth-refresh` | `POST /auth/refresh` |
+| `auth-logout` | `POST /auth/logout` |
+| `auth-forgot-password` | `POST /auth/forgot-password` |
+| `auth-reset-password` | `POST /auth/reset-password` |
+| `auth-resend-verification` | `POST /auth/resend-verification` |
 | `auth-me` | `GET /auth/me` |
 | `auth-verify-email` | `POST /auth/verify-email` |
 | `tenant-me` | `GET/PATCH /api/v1/tenants/me` |
@@ -50,12 +55,6 @@ Deploy each `.cjs` file to its named Lambda. See [infra/README.md](../../infra/R
 ## Remaining APIs
 
 Full breakdown with priorities and UI mapping: **[docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md)**
-
-### Next up (Sprint 1 finish)
-
-- `auth-refresh` — `POST /auth/refresh`
-- `auth-logout` — `POST /auth/logout`
-- `auth-password` — `POST /auth/forgot-password`, `/auth/reset-password`, `/auth/resend-verification`
 
 ### MVP (mock exists — replace with real)
 
