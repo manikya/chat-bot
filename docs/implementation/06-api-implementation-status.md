@@ -16,8 +16,9 @@
 | 2026-06-07 | Chat orchestrator: OpenAI, tools, `POST /api/v1/chat` |
 | 2026-06-07 | Usage, conversations, widget APIs + API key auth |
 | 2026-06-07 | Dashboard stats (live DynamoDB counts), widget `v1.js` bundle |
+| 2026-06-07 | Widget message formatting (bold, lists, line breaks) + product action chips |
 
-**Git (local `main`):** through `d149a95` (usage/conversations/widget) + dashboard + widget bundle (uncommitted). Not pushed.
+**Git (local `main`):** through `cf779fc` (dashboard stats + widget bundle). Not pushed.
 
 ---
 
@@ -32,7 +33,8 @@
 
 The admin UI calls all endpoints over HTTP. The local dev server routes matching paths to Lambda handlers; everything else falls through to `@commercechat/mock-api`.
 
-**Widget bundle:** `GET /widget/v1.js` served from `apps/widget/public/v1.js` (not counted as API route).
+**Widget bundle:** `GET /widget/v1.js` served from `apps/widget/public/v1.js` (not counted as API route).  
+**Widget demo:** `http://localhost:3001/widget/demo.html?key=pk_live_...` (must be HTTP, not `file://`).
 
 ---
 
@@ -77,7 +79,8 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 **Also built (not a route):**
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
 - Chat orchestrator — `packages/core/src/chat/`
-- Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js`
+- Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, sync chat, `formatBotText` for `**bold**` / numbered lists / `\n`, `suggestedActions` product chips)
+- Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)
 
 **Code locations:**
 - Handlers: `apps/api/src/handlers/`
@@ -121,7 +124,7 @@ Billing, MFA, team CRUD, `POST /api/v1/widget/chat/stream` (SSE).
 
 1. **Sprint 4 Meta** — webhooks, WhatsApp connect, real channel health on dashboard
 2. **Infra** — CDK deploy, Resend email, CI
-3. **Widget polish** — product cards in embed, rate limiting
+3. **Widget polish** — rich product cards (image + add-to-cart), reliable `suggestedActions` without tool call, rate limiting, CDN deploy
 4. **Phase 2** — billing, team, MFA
 
 ---
@@ -148,7 +151,8 @@ cp apps/api/.env.example apps/api/.env
 npm run dev                   # API :3001 + Admin :3000
 ```
 
-**Widget demo:** Regenerate API key in Settings → API keys, paste embed into `apps/widget/demo.html`, open via any static server or storefront.
+**Widget demo:** Regenerate API key in Settings → API keys, then open  
+`http://localhost:3001/widget/demo.html?key=pk_live_...` while `npm run dev` is running.
 
 **Test scripts:**
 ```bash

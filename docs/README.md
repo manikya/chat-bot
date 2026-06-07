@@ -12,7 +12,9 @@ AI-powered e-commerce chatbot SaaS for **WhatsApp**, **Facebook Messenger**, **I
 
 🖥️ **[Admin UI](../apps/admin/README.md)** — Next.js dashboard; **35 real API routes** (auth, tenant, knowledge ingest, chat, usage, conversations, widget, dashboard), mock fallback for channels/team.
 
-📡 **[API implementation status](implementation/06-api-implementation-status.md)** — built vs mock vs remaining (last updated 2026-06-07).
+📡 **[API implementation status](implementation/06-api-implementation-status.md)** — built vs mock vs remaining (last updated 2026-06-07, commit `cf779fc`).
+
+🧩 **Widget demo (local):** `http://localhost:3001/widget/demo.html?key=pk_live_...` — requires `npm run dev` and a key from Settings → API keys.
 
 ---
 

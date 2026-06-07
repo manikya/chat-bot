@@ -13,10 +13,10 @@
 | Sprint | Status | Done locally |
 |--------|--------|--------------|
 | **Sprint 1 — Foundation** | ~95% | Auth, tenant profile/config/limits/usage, JWT, onboarding APIs, session auto-refresh; **not done:** CDK deploy, logo upload |
-| **Sprint 2 — Knowledge** | ~85% | Website crawl, catalog CSV, embeddings, `FileVectorStore`, job polling, RAG retriever; **not done:** S3 Vectors prod, FAQ ingest, Step Functions |
+| **Sprint 2 — Knowledge** | ~90% | Website crawl, catalog CSV, embeddings, `FileVectorStore`, job polling, RAG retriever; **not done:** S3 Vectors prod, FAQ ingest, Step Functions |
 | **Sprint 3 — Chat** | ~90% | Orchestrator, LLM, tools, cart persistence, usage metering, `POST /chat`, test simulator |
 | **Sprint 4 — Meta** | 0% | Channels UI uses mock; conversations API live |
-| **Sprint 5 — Widget** | ~70% | API key auth, widget config/chat, `v1.js` embed bundle, dashboard stats; **not done:** SSE stream, rate limits, CDN deploy |
+| **Sprint 5 — Widget** | ~85% | API key auth, widget config/chat, `v1.js` embed (shadow DOM, formatting, action chips), dashboard stats, embed snippet in admin; **not done:** SSE stream, rich product cards, rate limits, CDN deploy |
 | **Infra (Week 0)** | ~30% | LocalStack DynamoDB, local Lambda server; **not done:** CDK, CI, Resend email |
 
 **35 real API routes** · **6 mock routes** remaining for MVP UI · See [06-api-implementation-status.md](06-api-implementation-status.md).
@@ -91,7 +91,7 @@
 | 2.4 | Chunker + metadata tagger (`website`, `catalog`, `faq`) | BE | M | 2.3 |
 | 2.5 | Ingest pipeline: SQS → Step Functions → embed → S3 Vectors | BE | L | 2.4 |
 | 2.6 | Knowledge source CRUD APIs | BE | M | 1.10 | **Done** (local Lambda) |
-| 2.7 | `POST /knowledge/sources/{id}/sync` + job status APIs | BE | M | 2.5, 2.6 | **Partial** (stub sync; pipeline pending) |
+| 2.7 | `POST /knowledge/sources/{id}/sync` + job status APIs | BE | M | 2.5, 2.6 | **Done** (local crawl + catalog; Step Functions pending) |
 | 2.8 | Catalog CSV/JSON parser + product cache in DynamoDB | BE | M | 2.5 |
 | 2.9 | Inline FAQ ingest API | BE | S | 2.4 |
 | 2.10 | RAG retriever (hybrid: vector + source filter) | BE | M | 2.2 |
@@ -166,10 +166,10 @@
 | 5.1 | Widget API key generation + `APIKEY#` routing | BE | M | 1.10 |
 | 5.2 | `GET /api/v1/widget/config` | BE | S | 5.1 |
 | 5.3 | `POST /api/v1/widget/chat` (sync) | BE | M | 3.8, 5.1 |
-| 5.4 | Web widget JS bundle (embed snippet) | FE | L | 5.2, 5.3 |
-| 5.5 | Widget: suggested questions + product cards | FE | M | 5.4 |
-| 5.6 | Admin: widget settings + embed code copy | FE | M | 5.1 |
-| 5.7 | Admin: usage dashboard (messages, tokens, limits) | FE | M | 3.9 |
+| 5.4 | Web widget JS bundle (embed snippet) | FE | L | 5.2, 5.3 | **Done** (vanilla `v1.js`, shadow DOM; React/CDN later) |
+| 5.5 | Widget: suggested questions + product cards | FE | M | 5.4 | **Partial** (suggested questions + action chips; rich product cards pending) |
+| 5.6 | Admin: widget settings + embed code copy | FE | M | 5.1 | **Done** (API keys page shows embed snippet on regen) |
+| 5.7 | Admin: usage dashboard (messages, tokens, limits) | FE | M | 3.9 | **Done** (live `GET /dashboard/stats` + usage page) |
 | 5.8 | Rate limiting (API Gateway + Redis optional) | BE | M | 5.3 |
 | 5.9 | Error handling + user-friendly fallbacks | BE | M | 3.8 |
 | 5.10 | E2E tests: signup → ingest → WhatsApp reply | ALL | L | 4.*, 5.* |

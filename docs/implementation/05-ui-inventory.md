@@ -3,7 +3,7 @@
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
 **Related:** [08-admin-dashboard.md](../functions/08-admin-dashboard.md) · [04-onboarding-and-registration.md](04-onboarding-and-registration.md) · [07-web-chat-widget.md](../functions/07-web-chat-widget.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
 **Reference UI:** [Jetwing component mapping](../../reference%20UI/README.md)  
-**Implementation status (2026-06-07):** Auth, tenant, onboarding, knowledge ingest, chat orchestrator, usage, conversations, dashboard stats, and widget embed (`/widget/v1.js`) use **real Lambdas + DynamoDB**. **Mock fallback:** channels, team. Timezone fields use a native `<select>` (`TimezoneSelect`, ~32 curated IANA zones).
+**Implementation status (2026-06-07):** Auth, tenant, onboarding, knowledge ingest, chat orchestrator, usage, conversations, dashboard stats, and widget embed (`/widget/v1.js`) use **real Lambdas + DynamoDB**. **Mock fallback:** channels, team. Widget bot replies render `**bold**`, numbered list breaks, and `\n` line breaks; product `suggestedActions` show as tappable chips under replies. Timezone fields use a native `<select>` (`TimezoneSelect`, ~32 curated IANA zones).
 
 ---
 
@@ -231,8 +231,8 @@ Shared chrome across all steps:
 | UI element | User actions |
 |------------|--------------|
 | Website URL input | Enter store URL |
-| **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` *(real API; stub sync — no crawl yet)* |
-| Progress bar | Poll job status *(mock progress until ingest pipeline)* |
+| **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` *(real crawl + embed locally)* |
+| Progress bar | Poll `GET /knowledge/jobs/{jobId}` until complete |
 | Error panel | View crawl errors; **Retry** |
 | FAQ quick-add (optional) | Add Q&A pairs inline → `POST /knowledge/faq` |
 | **Skip for now** | Advance without source |
@@ -297,7 +297,7 @@ Shared chrome across all steps:
 | **Test your bot** shortcut | Open test simulator modal |
 | Setup completion CTA | Resume onboarding if incomplete |
 
-**APIs:** `GET /tenants/me/usage`, `GET /channels`, `GET /knowledge/jobs`, `GET /conversations?limit=5`
+**APIs:** `GET /dashboard/stats` (live), `GET /tenants/me/usage`, `GET /channels` *(mock)*, `GET /knowledge/jobs`, `GET /conversations?limit=5`
 
 ---
 
@@ -592,7 +592,8 @@ Shared chrome across all steps:
 | UI element | User actions |
 |------------|--------------|
 | Widget API key | View prefix; **Copy** |
-| **Regenerate key** | Confirm → show new key once |
+| **Regenerate key** | Confirm → show new key once + embed snippet (`API_PUBLIC_URL` + `/widget/v1.js`) |
+| Embed snippet block | **Copy embed code** (shown after regenerate) |
 | Key created date | Read metadata |
 | Grace period notice | Read 24h dual-key note after rotation |
 
@@ -677,9 +678,10 @@ Embedded on merchant site. Not part of admin app.
 | Header — store name | Read store identity |
 | **Close** button | Minimize to bubble |
 | Greeting message | Read bot greeting on open |
-| Suggested question chips | **Click** → send as message |
-| Message list | Scroll transcript |
-| Product card messages | **Add to cart** · **View details** |
+| Suggested question chips | **Click** → send as message (from widget config) |
+| Message list | Scroll transcript; bot text renders **bold**, list line breaks, `\n` |
+| Product action chips | **Click** under bot reply when API returns `suggestedActions` (e.g. after `search_products`) |
+| Product card messages (P2) | **Add to cart** · **View details** (rich cards not in `v1.js` yet) |
 | Checkout link message | **Open checkout** (external tab) |
 | Text input | Type message |
 | **Send** button / Enter | Send message → `POST /widget/chat` |

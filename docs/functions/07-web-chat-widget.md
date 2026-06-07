@@ -9,6 +9,19 @@
 
 Provide an embeddable JavaScript chat widget merchants add to their storefront, sharing the same AI orchestrator and tools as social channels.
 
+### Implementation status (local dev, 2026-06-07)
+
+| Spec | Shipped locally | Notes |
+|------|-----------------|-------|
+| Embed script | `apps/widget/public/v1.js` | Served at `GET /widget/v1.js`; `API_PUBLIC_URL` in embed snippet |
+| UI framework | Vanilla JS + shadow DOM | Spec calls for React/Preact bundle + loader — deferred |
+| Chat API | `POST /api/v1/widget/chat` (sync JSON) | Spec shows SSE on `/chat`; streaming is Phase 2 |
+| Auth | `X-API-Key: pk_live_...` | Same orchestrator as admin test chat |
+| Config | `GET /api/v1/widget/config` | Greeting, colors, `suggestedQuestions` |
+| Bot formatting | `formatBotText()` | `**bold**`, breaks before `2.`/`3.` on one line, `\n` → `<br>` |
+| Product UI | `suggestedActions` chips | Tappable buttons under reply when `search_products` runs; rich product cards pending |
+| Demo | `http://localhost:3001/widget/demo.html?key=...` | Must use HTTP (CORS blocks `file://`) |
+
 ---
 
 ## 2. Embed method
@@ -232,12 +245,13 @@ Sent to `POST /api/v1/analytics/events` (batched, fire-and-forget).
 
 ## 13. Testing checklist
 
-- [ ] Embed script loads on third-party HTML page
-- [ ] Shadow DOM isolates styles from host
+- [x] Embed script loads on third-party HTML page (local demo)
+- [x] Shadow DOM isolates styles from host
 - [ ] SSE streaming renders tokens incrementally
-- [ ] Product cards render and buttons work
-- [ ] Session persists on page reload
+- [~] Product action chips render when API returns `suggestedActions`
+- [ ] Rich product cards (image + add-to-cart) render in message list
+- [x] Session persists on page reload (`localStorage`)
 - [ ] Rate limit triggers gracefully
 - [ ] Domain allowlist blocks unauthorized origins
 - [ ] Mobile responsive full-screen mode
-- [ ] Same cart/tools behavior as WhatsApp path
+- [~] Same cart/tools behavior as admin test chat (tools work; WhatsApp path not live)

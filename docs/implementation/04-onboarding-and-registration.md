@@ -258,10 +258,10 @@ stateDiagram-v2
 |------|-------------------|-------|
 | 1 Profile | **Real** | `PATCH /tenants/me` + `PATCH /onboarding/step`; timezone via `TimezoneSelect` |
 | 2 Channels | **Mock** | Meta connect not built; skip advances with `skipped: true` |
-| 3 Knowledge | **Partial** | Source CRUD + stub sync; no crawl/embed; `GET /jobs/{jobId}` not built |
-| 4 Catalog | **Partial** | Same knowledge APIs; file upload ingest not built |
-| 5 Test chat | **Real** | `POST /onboarding/test-chat` (echo until chat orchestrator) |
-| 6 Widget | **Real step advance** | Embed snippet from UI; `GET /widget/config` still mock |
+| 3 Knowledge | **Real** | Source CRUD + website crawl + embed (`FileVectorStore`); `GET /jobs/{jobId}` live |
+| 4 Catalog | **Real** | Catalog CSV upload + sync via knowledge APIs |
+| 5 Test chat | **Real** | `POST /onboarding/test-chat` uses chat orchestrator + RAG |
+| 6 Widget | **Real** | `GET /widget/config`, embed snippet from `API_PUBLIC_URL` + `/widget/v1.js` |
 
 #### Step 1 — Store profile
 
@@ -342,7 +342,7 @@ POST /api/v1/knowledge/sources/{sourceId}/sync
 
 **UI:** Chat simulator (same component as admin test console).
 
-**API:** `POST /api/v1/onboarding/test-chat` *(implemented)* — will use tenant config + RAG when chat orchestrator ships; currently records test message count for step gating.
+**API:** `POST /api/v1/onboarding/test-chat` — uses tenant config, RAG, and commerce tools; records test message count for step gating.
 
 **Success criteria:** At least one user message + assistant reply displayed.
 
@@ -358,11 +358,13 @@ POST /api/v1/knowledge/sources/{sourceId}/sync
 
 ```html
 <script
-  src="https://cdn.commercechat.com/widget/v1.js"
+  src="http://localhost:3001/widget/v1.js"
   data-api-key="pk_live_abc..."
   async
 ></script>
 ```
+
+Production uses `API_PUBLIC_URL` (e.g. `https://api.commercechat.com/widget/v1.js`). Local demo: `http://localhost:3001/widget/demo.html?key=pk_live_...`.
 
 **API:** `GET /api/v1/widget/config` (validates key works).
 

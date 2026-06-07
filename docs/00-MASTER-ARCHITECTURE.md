@@ -276,3 +276,4 @@ See phase documents for full detail. Summary:
 | 1.1 | 2026-06-06 | Added notifications strategy (doc 12): Resend + EmailProvider abstraction |
 | 1.2 | 2026-06-06 | Replaced Cognito with custom DynamoDB auth + MFA-ready design (doc 13) |
 | 1.3 | 2026-06-07 | Local MVP progress: auth session flows, onboarding APIs, knowledge CRUD (stub sync), timezone picker |
+| 1.4 | 2026-06-07 | Chat orchestrator, usage/conversations/widget APIs, dashboard stats, `v1.js` embed with message formatting |

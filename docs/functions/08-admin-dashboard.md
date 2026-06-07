@@ -55,12 +55,14 @@ Step 6: Copy widget embed code
 
 | Widget | Data |
 |--------|------|
-| Messages today / this month | Usage API |
-| Conversations active | DynamoDB count |
-| Orders influenced | Analytics |
-| Channel status | Meta health API |
+| Messages today / this month | `GET /api/v1/dashboard/stats` + usage API |
+| Conversations active | DynamoDB count (dashboard stats) |
+| Orders influenced | Cart/checkout records (dashboard stats) |
+| Channel status | Meta health API *(mock for WA; web shows healthy when enabled)* |
 | Knowledge sync status | Ingest jobs |
 | Quota usage bar | Plan limits |
+
+**Local dev:** Dashboard page uses live `GET /api/v1/dashboard/stats` (not mock).
 
 ### 4.3 Conversations
 

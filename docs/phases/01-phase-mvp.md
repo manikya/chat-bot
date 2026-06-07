@@ -3,7 +3,7 @@
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
 **Duration:** 8–10 weeks  
 **Goal:** First shippable product — one merchant can connect WhatsApp, ingest website + products, and convert chats to checkout links.  
-**Progress (2026-06-07):** Local dev has auth, tenant, onboarding, and knowledge CRUD (25 real routes). See [implementation/06-api-implementation-status.md](../implementation/06-api-implementation-status.md).
+**Progress (2026-06-07):** Local dev has auth, tenant, onboarding, knowledge ingest, chat orchestrator, usage, conversations, dashboard stats, and widget embed (**35 real routes**). See [implementation/06-api-implementation-status.md](../implementation/06-api-implementation-status.md).
 
 ---
 
@@ -13,7 +13,7 @@
 |---|-----------|------------------|
 | 1 | Merchant can sign up and configure a store | Onboarding wizard completes |
 | 2 | WhatsApp channel works end-to-end | Inbound message → AI reply on WhatsApp |
-| 3 | Web widget works on merchant site | Embed script → streaming chat |
+| 3 | Web widget works on merchant site | Embed script → sync chat *(SSE streaming Phase 2)* |
 | 4 | Bot answers from website + product catalog | recall@5 ≥ 80% on eval set |
 | 5 | Bot can search products and share checkout link | Test purchase flow completes |
 | 6 | Admin can view conversations | Conversation list + thread view |
@@ -87,11 +87,10 @@
 ### Week 3–4: Channels + Ingest
 
 ```
-✓ Knowledge source CRUD + job records in DynamoDB (stub sync)
+✓ Knowledge source CRUD + website crawl + catalog CSV ingest (local `FileVectorStore`)
 ○ Meta webhook receives WhatsApp messages
 ○ Tenant resolved from phone_number_id
-○ Website crawl → embed → S3 Vectors
-○ Product CSV ingest works
+○ S3 Vectors in production (local file-backed vectors today)
 ```
 
 ### Week 5–6: AI core
@@ -107,10 +106,12 @@
 ### Week 7–8: UI + polish
 
 ```
-✓ Web widget embeddable
+✓ Web widget embeddable (`v1.js`, shadow DOM, formatted replies, action chips)
 ✓ Admin onboarding wizard
 ✓ Conversation viewer
 ✓ Test simulator with debug panel
+✓ Dashboard live stats (`GET /dashboard/stats`)
+○ Meta / WhatsApp E2E
 ```
 
 ### Week 9–10: Launch prep
