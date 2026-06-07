@@ -1,0 +1,26 @@
+{
+  "name": "@commercechat/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/local/server.ts",
+    "dev:mock": "PORT=3001 tsx watch src/index.mock.ts",
+    "build": "tsc --noEmit && node scripts/build-lambdas.mjs",
+    "build:lambdas": "node scripts/build-lambdas.mjs",
+    "start": "tsx --env-file=.env src/local/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@commercechat/core": "*",
+    "@commercechat/mock-api": "*",
+    "@commercechat/shared": "*",
+    "@hono/node-server": "^1.14.1",
+    "hono": "^4.7.4"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.147",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5"
+  }
+}
