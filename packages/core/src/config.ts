@@ -13,6 +13,11 @@ export interface CoreConfig {
   llmModel: string;
   ingestMaxPages: number;
   apiPublicUrl: string;
+  metaAppId?: string;
+  metaAppSecret?: string;
+  metaVerifyToken?: string;
+  metaGraphVersion: string;
+  metaOAuthRedirectUri?: string;
 }
 
 export function loadConfig(): CoreConfig {
@@ -31,5 +36,12 @@ export function loadConfig(): CoreConfig {
     llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
     apiPublicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",
+    metaAppId: process.env.META_APP_ID,
+    metaAppSecret: process.env.META_APP_SECRET,
+    metaVerifyToken: process.env.META_VERIFY_TOKEN,
+    metaGraphVersion: process.env.META_GRAPH_VERSION ?? "v21.0",
+    metaOAuthRedirectUri:
+      process.env.META_OAUTH_REDIRECT_URI ??
+      `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/channels/meta/callback`,
   };
 }

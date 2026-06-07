@@ -29,6 +29,13 @@ import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key
 import { handler as conversationsHandler } from "../handlers/conversations";
 import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler } from "../handlers/widget";
 import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
+import { handler as webhookMetaHandler } from "../handlers/webhook-meta";
+import {
+  listHandler as channelsListHandler,
+  connectHandler as channelsConnectHandler,
+  disconnectHandler as channelsDisconnectHandler,
+  healthHandler as channelsHealthHandler,
+} from "../handlers/channels";
 import { corsHeaders, matchPathParams } from "../lib/apigw";
 import { toApigwEvent } from "./event";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
@@ -41,6 +48,8 @@ const REAL_ROUTES: Array<{
   handler: LambdaHandler;
 }> = [
   { method: "GET", path: "/health", handler: healthHandler },
+  { method: "GET", path: "/webhooks/meta", handler: webhookMetaHandler },
+  { method: "POST", path: "/webhooks/meta", handler: webhookMetaHandler },
   { method: "POST", path: "/auth/signup", handler: signupHandler },
   { method: "POST", path: "/auth/login", handler: loginHandler },
   { method: "GET", path: "/auth/me", handler: meHandler },
@@ -68,6 +77,9 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },
+  { method: "GET", path: "/api/v1/channels", handler: channelsListHandler },
+  { method: "POST", path: "/api/v1/channels/meta/connect", handler: channelsConnectHandler },
+  { method: "GET", path: "/api/v1/channels/meta/health", handler: channelsHealthHandler },
 ];
 
 const WIDGET_JS_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../widget/public/v1.js");
@@ -109,6 +121,12 @@ const PATTERN_ROUTES: Array<{
     paramNames: ["conversationId"],
     handler: conversationsHandler,
   },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/channels\/meta\/([^/]+)$/,
+    paramNames: ["channel"],
+    handler: channelsDisconnectHandler,
+  },
 ];
 
 const emptyContext = {} as Context;
@@ -135,7 +153,7 @@ async function invokeLambda(
   const event = toApigwEvent(req, body, pathParameters, isBase64Encoded);
   const result = await handler(event, emptyContext);
   const res = result as { statusCode: number; headers?: Record<string, string>; body?: string };
-  return new Response(res.body ?? "", {
+  return new Response(res.statusCode === 204 ? null : (res.body ?? ""), {
     status: res.statusCode,
     headers: res.headers,
   });
@@ -212,7 +230,7 @@ const port = Number(process.env.PORT ?? 3001);
 const app = createLocalApp();
 
 console.log(`CommerceChat Lambda API (local) → http://localhost:${port}`);
-console.log(`  Real handlers: auth, tenant, onboarding, knowledge, chat, conversations, widget, dashboard, health`);
+console.log(`  Real handlers: auth, tenant, onboarding, knowledge, chat, conversations, widget, dashboard, webhooks, health`);
 const publicUrl = process.env.API_PUBLIC_URL ?? "http://localhost:3001";
 console.log(`  Widget bundle:   ${publicUrl}/widget/v1.js`);
 console.log(`  Widget demo:       ${publicUrl}/widget/demo.html`);

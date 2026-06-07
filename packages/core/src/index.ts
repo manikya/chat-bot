@@ -18,5 +18,19 @@ export * from "./widget/service";
 export type { WidgetChatBody } from "./widget/service";
 export { getDashboardStats } from "./dashboard/service";
 export { buildWidgetEmbedCode } from "./widget/embed";
+export { verifyMetaWebhookChallenge, verifyMetaWebhookSignature } from "./meta/webhook";
+export { parseWhatsAppWebhookPayload } from "./meta/whatsapp-inbound";
+export { processWhatsAppInbound } from "./meta/process-inbound";
+export { sendWhatsAppReply } from "./meta/whatsapp-outbound";
+export {
+  listChannels,
+  connectMetaChannel,
+  disconnectMetaChannel,
+  getChannelHealth,
+  resolveTenantByPhoneNumberId,
+  ensureFreshMetaToken,
+  getMetaCredentialsForTenant,
+} from "./channels/service";
+export type { ConnectMetaBody, MetaCredentials, WhatsAppInboundMessage } from "./channels/types";
 export { parseCatalogCsv, type CatalogProduct } from "./ingest/parsers/catalog-csv";
 export { getDocClient } from "./db/client";

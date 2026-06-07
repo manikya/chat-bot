@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
 import type { ChannelInfo } from "@commercechat/mock-api";
+import { MetaConnectButton } from "@/components/channels/meta-connect-button";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,17 +16,10 @@ export default function OnboardingChannelsPage() {
   const router = useRouter();
   const { refreshMe } = useAuth();
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
-  const [connecting, setConnecting] = useState(false);
 
-  useEffect(() => { api.channels.list().then((r) => setChannels(r.data.channels)); }, []);
-
-  const connect = async () => {
-    setConnecting(true);
-    await api.channels.connectMeta();
-    toast.success("WhatsApp connected");
-    setConnecting(false);
+  useEffect(() => {
     api.channels.list().then((r) => setChannels(r.data.channels));
-  };
+  }, []);
 
   const next = async (skip = false) => {
     await api.onboarding.advanceStep("knowledge", skip);
@@ -41,7 +34,7 @@ export default function OnboardingChannelsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Connect channels</CardTitle>
-          <CardDescription>Start with WhatsApp — you can add more later</CardDescription>
+          <CardDescription>Authorize Meta to link your WhatsApp Business number</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between rounded-lg border p-4">
@@ -52,13 +45,13 @@ export default function OnboardingChannelsPage() {
             <Badge variant={wa?.status === "connected" ? "success" : "secondary"}>{wa?.status}</Badge>
           </div>
           {wa?.status !== "connected" && (
-            <Button onClick={connect} disabled={connecting}>
-              {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect WhatsApp"}
-            </Button>
+            <MetaConnectButton returnPath="/onboarding/channels" />
           )}
           <div className="flex gap-2">
             <Button onClick={() => next()}>Continue</Button>
-            <Button variant="outline" onClick={() => next(true)}>Skip for now</Button>
+            <Button variant="outline" onClick={() => next(true)}>
+              Skip for now
+            </Button>
           </div>
         </CardContent>
       </Card>

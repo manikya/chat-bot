@@ -198,8 +198,15 @@ export function createHttpApi(): MockApi {
     },
     channels: {
       list: () => request("/api/v1/channels"),
-      connectMeta: () =>
-        request("/api/v1/channels/meta/connect", { method: "POST", body: JSON.stringify({ code: "mock" }) }),
+      connectMeta: (body: {
+        code?: string;
+        redirectUri?: string;
+        wabaId?: string;
+        phoneNumberId?: string;
+        accessToken?: string;
+        displayPhone?: string;
+      }) =>
+        request("/api/v1/channels/meta/connect", { method: "POST", body: JSON.stringify(body) }),
       disconnect: (channel) => request(`/api/v1/channels/meta/${channel}`, { method: "DELETE" }),
       health: () => request("/api/v1/channels/meta/health"),
     },

@@ -33,6 +33,12 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/widget/config",
   "POST /api/v1/widget/chat",
   "GET /api/v1/dashboard/stats",
+  "GET /api/v1/channels",
+  "POST /api/v1/channels/meta/connect",
+  "DELETE /api/v1/channels/meta/:channel",
+  "GET /api/v1/channels/meta/health",
+  "GET /webhooks/meta",
+  "POST /webhooks/meta",
 ] as const;
 
 export const REAL_API_DOMAINS = [
@@ -47,4 +53,6 @@ export const REAL_API_DOMAINS = [
   "conversations",
   "widget",
   "dashboard",
+  "channels",
+  "webhooks",
 ] as const;

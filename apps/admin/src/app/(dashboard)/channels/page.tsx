@@ -1,37 +1,42 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { ChannelInfo } from "@commercechat/mock-api";
+import { MetaConnectButton } from "@/components/channels/meta-connect-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
-  const [connecting, setConnecting] = useState(false);
+  const [health, setHealth] = useState<Record<string, { status: string; detail?: string }>>({});
 
-  const load = () => api.channels.list().then((r) => setChannels(r.data.channels));
-  useEffect(() => { load(); }, []);
+  const load = async () => {
+    const [listRes, healthRes] = await Promise.all([
+      api.channels.list(),
+      api.channels.health().catch(() => null),
+    ]);
+    setChannels(listRes.data.channels);
+    if (healthRes?.data) setHealth(healthRes.data as Record<string, { status: string; detail?: string }>);
+  };
 
-  const connectWhatsApp = async () => {
-    setConnecting(true);
-    try {
-      await api.channels.connectMeta();
-      toast.success("WhatsApp connected!");
-      load();
-    } finally {
-      setConnecting(false);
-    }
+  useEffect(() => {
+    load();
+  }, []);
+
+  const disconnectWhatsApp = async () => {
+    await api.channels.disconnect("whatsapp");
+    toast.success("WhatsApp disconnected");
+    load();
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Channels</h1>
-        <p className="text-muted-foreground">Connect WhatsApp, Messenger, Instagram, and web</p>
+        <p className="text-muted-foreground">Connect WhatsApp via Meta OAuth — each store uses its own number</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -43,13 +48,14 @@ export default function ChannelsPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {ch.displayPhone && <p className="text-sm">{ch.displayPhone}</p>}
+              {ch.channel === "whatsapp" && health.whatsapp?.detail && (
+                <p className="text-xs text-muted-foreground">{health.whatsapp.detail}</p>
+              )}
               {ch.channel === "whatsapp" && ch.status === "disconnected" && (
-                <Button onClick={connectWhatsApp} disabled={connecting}>
-                  {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Connect WhatsApp"}
-                </Button>
+                <MetaConnectButton returnPath="/channels" />
               )}
               {ch.channel === "whatsapp" && ch.status === "connected" && (
-                <Button variant="outline" size="sm" onClick={async () => { await api.channels.disconnect("whatsapp"); load(); }}>
+                <Button variant="outline" size="sm" onClick={disconnectWhatsApp}>
                   Disconnect
                 </Button>
               )}
