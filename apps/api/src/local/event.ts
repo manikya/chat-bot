@@ -1,6 +1,10 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
-export function toApigwEvent(req: Request, bodyText?: string): APIGatewayProxyEventV2 {
+export function toApigwEvent(
+  req: Request,
+  bodyText?: string,
+  pathParameters?: Record<string, string>
+): APIGatewayProxyEventV2 {
   const url = new URL(req.url);
   const headers: Record<string, string> = {};
   req.headers.forEach((v, k) => {
@@ -33,5 +37,6 @@ export function toApigwEvent(req: Request, bodyText?: string): APIGatewayProxyEv
     },
     body: bodyText,
     isBase64Encoded: false,
+    pathParameters,
   };
 }

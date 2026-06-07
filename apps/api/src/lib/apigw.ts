@@ -18,6 +18,24 @@ export function parseBody<T>(event: APIGatewayProxyEventV2): T {
   }
 }
 
+export function pathParam(event: APIGatewayProxyEventV2, name: string): string | undefined {
+  return event.pathParameters?.[name];
+}
+
+export function matchPathParams(
+  path: string,
+  pattern: RegExp,
+  names: string[]
+): Record<string, string> | null {
+  const match = path.match(pattern);
+  if (!match) return null;
+  const params: Record<string, string> = {};
+  names.forEach((name, i) => {
+    params[name] = match[i + 1];
+  });
+  return params;
+}
+
 export function getBearerToken(event: APIGatewayProxyEventV2): string | null {
   const auth = event.headers?.authorization ?? event.headers?.Authorization;
   if (!auth?.startsWith("Bearer ")) return null;
@@ -32,6 +50,8 @@ export function toApigwResponse(result: ApiResponse<unknown>, statusCode = 200):
       : code === "FORBIDDEN" || code === "EMAIL_NOT_VERIFIED" || code === "ACCOUNT_LOCKED" ? 403
       : code === "NOT_FOUND" ? 404
       : code === "EMAIL_EXISTS" ? 409
+      : code === "PLAN_LIMIT_EXCEEDED" ? 403
+      : code === "ONBOARDING_INCOMPLETE" ? 400
       : 400;
     return {
       statusCode: status,

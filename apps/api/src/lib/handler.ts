@@ -39,11 +39,22 @@ export function createHandler(
         auth = toAuthContext(claims);
       }
       const result = await fn(event, auth);
-      const status =
-        options?.successStatus ??
-        (event.requestContext.http.method === "POST" && event.rawPath.includes("/auth/signup")
-          ? 201
-          : 200);
+      let status = options?.successStatus ?? 200;
+      if (!options?.successStatus) {
+        if (event.requestContext.http.method === "POST" && event.rawPath.includes("/auth/signup")) {
+          status = 201;
+        } else if (
+          event.requestContext.http.method === "POST" &&
+          event.rawPath.endsWith("/knowledge/sources")
+        ) {
+          status = 201;
+        } else if (
+          event.requestContext.http.method === "DELETE" &&
+          event.rawPath.includes("/knowledge/sources/")
+        ) {
+          status = 202;
+        }
+      }
 
       if (options?.noBody && result.success) {
         return { statusCode: status, headers: corsHeaders() };

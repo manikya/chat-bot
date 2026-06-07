@@ -35,8 +35,8 @@ export default function OnboardingKnowledgePage() {
     }, 2000);
   };
 
-  const next = async () => {
-    await api.onboarding.advanceStep("catalog");
+  const next = async (skip = false) => {
+    await api.onboarding.advanceStep("catalog", skip);
     await refreshMe();
     router.push("/onboarding/catalog");
   };
@@ -55,8 +55,8 @@ export default function OnboardingKnowledgePage() {
           </Button>
           {crawling && <Progress value={progress} />}
           <div className="flex gap-2 pt-2">
-            <Button onClick={next} disabled={crawling && progress < 100}>Continue</Button>
-            <Button variant="outline" onClick={next}>Skip</Button>
+            <Button onClick={() => next()} disabled={crawling && progress < 100}>Continue</Button>
+            <Button variant="outline" onClick={() => next(true)}>Skip</Button>
           </div>
         </CardContent>
       </Card>

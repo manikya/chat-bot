@@ -14,6 +14,12 @@ import { handler as resendVerificationHandler } from "../handlers/auth-resend-ve
 import { handler as tenantMeHandler } from "../handlers/tenant-me";
 import { handler as tenantConfigHandler } from "../handlers/tenant-config";
 import { handler as tenantLimitsHandler } from "../handlers/tenant-limits";
+import { handler as onboardingHandler } from "../handlers/onboarding";
+import { handler as onboardingTestChatHandler } from "../handlers/onboarding-test-chat";
+import { handler as knowledgeSourcesHandler } from "../handlers/knowledge-sources";
+import { handler as knowledgeSyncHandler } from "../handlers/knowledge-sync";
+import { handler as knowledgeJobsHandler } from "../handlers/knowledge-jobs";
+import { matchPathParams } from "../lib/apigw";
 import { toApigwEvent } from "./event";
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
 
@@ -39,14 +45,44 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "PATCH", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "GET", path: "/api/v1/tenants/me/limits", handler: tenantLimitsHandler },
+  { method: "GET", path: "/api/v1/onboarding", handler: onboardingHandler },
+  { method: "PATCH", path: "/api/v1/onboarding/step", handler: onboardingHandler },
+  { method: "POST", path: "/api/v1/onboarding/test-chat", handler: onboardingTestChatHandler },
+  { method: "GET", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
+  { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
+  { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
+];
+
+const PATTERN_ROUTES: Array<{
+  method: string;
+  pattern: RegExp;
+  paramNames: string[];
+  handler: LambdaHandler;
+}> = [
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/knowledge\/sources\/([^/]+)$/,
+    paramNames: ["sourceId"],
+    handler: knowledgeSourcesHandler,
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/knowledge\/sources\/([^/]+)\/sync$/,
+    paramNames: ["sourceId"],
+    handler: knowledgeSyncHandler,
+  },
 ];
 
 const emptyContext = {} as Context;
 
-async function invokeLambda(handler: LambdaHandler, req: Request): Promise<Response> {
+async function invokeLambda(
+  handler: LambdaHandler,
+  req: Request,
+  pathParameters?: Record<string, string>
+): Promise<Response> {
   const body =
     req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();
-  const event = toApigwEvent(req, body || undefined);
+  const event = toApigwEvent(req, body || undefined, pathParameters);
   const result = await handler(event, emptyContext);
   const res = result as { statusCode: number; headers?: Record<string, string>; body?: string };
   return new Response(res.body ?? "", {
@@ -55,18 +91,27 @@ async function invokeLambda(handler: LambdaHandler, req: Request): Promise<Respo
   });
 }
 
+function findRoute(method: string, path: string) {
+  const exact = REAL_ROUTES.find((r) => r.method === method && r.path === path);
+  if (exact) return { handler: exact.handler, pathParameters: undefined };
+
+  for (const route of PATTERN_ROUTES) {
+    if (route.method !== method) continue;
+    const params = matchPathParams(path, route.pattern, route.paramNames);
+    if (params) return { handler: route.handler, pathParameters: params };
+  }
+  return null;
+}
+
 export function createLocalApp() {
   const app = new Hono();
   const mockApp = createMockServerApp();
 
   app.all("*", async (c) => {
-    const match = REAL_ROUTES.find(
-      (r) => r.method === c.req.method && r.path === c.req.path
-    );
+    const match = findRoute(c.req.method, c.req.path);
     if (match) {
-      return invokeLambda(match.handler, c.req.raw);
+      return invokeLambda(match.handler, c.req.raw, match.pathParameters);
     }
-    // Unimplemented routes → mock API (temporary until more Lambdas ship)
     return mockApp.fetch(c.req.raw);
   });
 
@@ -77,7 +122,7 @@ const port = Number(process.env.PORT ?? 3001);
 const app = createLocalApp();
 
 console.log(`CommerceChat Lambda API (local) → http://localhost:${port}`);
-console.log(`  Real handlers: auth, tenant, health`);
+console.log(`  Real handlers: auth, tenant, onboarding, knowledge, health`);
 console.log(`  Mock fallback:   all other routes`);
 
 serve({ fetch: app.fetch, port });

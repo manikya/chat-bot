@@ -10,8 +10,8 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | 16 routes |
-| **Mock only** (UI works; fixture data) | 17 routes |
+| **Implemented** (real Lambda + DynamoDB) | 25 routes |
+| **Mock only** (UI works; fixture data) | 8 routes |
 | **Not started** (no handler, no mock) | 15+ routes |
 | **Phase 2** (billing, MFA, team) | 8 routes |
 
@@ -38,8 +38,18 @@ The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/
 | `GET` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `PATCH` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `GET` | `/api/v1/tenants/me/limits` | `tenant-limits` | Yes |
+| `GET` | `/api/v1/onboarding` | `onboarding` | Yes |
+| `PATCH` | `/api/v1/onboarding/step` | `onboarding` | Yes |
+| `POST` | `/api/v1/onboarding/test-chat` | `onboarding-test-chat` | Yes |
+| `GET` | `/api/v1/knowledge/sources` | `knowledge-sources` | Yes |
+| `POST` | `/api/v1/knowledge/sources` | `knowledge-sources` | Yes |
+| `DELETE` | `/api/v1/knowledge/sources/{sourceId}` | `knowledge-sources` | Yes |
+| `POST` | `/api/v1/knowledge/sources/{sourceId}/sync` | `knowledge-sync` | Yes |
+| `GET` | `/api/v1/knowledge/jobs` | `knowledge-jobs` | Yes |
 
 **Also built (not a route):** `jwt-authorizer` — API Gateway authorizer; used locally via Bearer token in handlers.
+
+**Note:** Knowledge sync completes synchronously with stub stats until the Step Functions ingest pipeline ships (Sprint 2).
 
 **Code locations:**
 - Handlers: `apps/api/src/handlers/`
@@ -51,14 +61,6 @@ The admin UI calls all endpoints over HTTP. The local dev server (`apps/api/src/
 ## 3. Mock only (next to replace)
 
 These routes have **mock HTTP handlers** (`packages/mock-api/src/server/app.ts`) and are **used by the admin UI**, but no real Lambda exists yet.
-
-### Onboarding (Sprint 1 / 5)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `GET` | `/api/v1/onboarding` | `onboarding` | P1 |
-| `PATCH` | `/api/v1/onboarding/step` | `onboarding` | P1 |
-| `POST` | `/api/v1/onboarding/test-chat` | `chat-api` | P2 |
 
 ### Tenant (Sprint 5)
 
@@ -81,16 +83,6 @@ These routes have **mock HTTP handlers** (`packages/mock-api/src/server/app.ts`)
 | `POST` | `/api/v1/channels/meta/connect` | `channels-meta-connect` | P1 |
 | `DELETE` | `/api/v1/channels/meta/{channel}` | `channels-meta-disconnect` | P1 |
 | `GET` | `/api/v1/channels/meta/health` | `channels-meta-health` | P2 |
-
-### Knowledge (Sprint 2)
-
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `GET` | `/api/v1/knowledge/sources` | `knowledge-sources` | P1 |
-| `POST` | `/api/v1/knowledge/sources` | `knowledge-sources` | P1 |
-| `POST` | `/api/v1/knowledge/sources/{sourceId}/sync` | `knowledge-sync` | P1 |
-| `GET` | `/api/v1/knowledge/jobs` | `knowledge-jobs` | P1 |
-| `DELETE` | `/api/v1/knowledge/sources/{sourceId}` | `knowledge-sources` | P2 |
 
 ### Conversations (Sprint 4)
 
@@ -168,13 +160,13 @@ Aligned with [03-task-plan.md](03-task-plan.md):
 |--------------|----------|---------------|
 | Signup, login, logout, refresh, verify, forgot/reset password | Auth | — |
 | Settings → Profile | `GET/PATCH /tenants/me` | — |
-| Onboarding → Profile | `PATCH /tenants/me` | Onboarding step advance |
+| Onboarding (all steps) | Onboarding + tenant APIs | Channels connect (mock) |
 | Bot config | `GET/PATCH /tenants/me/config` | Test chat simulator |
 | Widget appearance | `PATCH /tenants/me/config` | Embed code, widget config GET |
 | Usage → plan limits | `GET /tenants/me/limits` | Usage metrics, message counts |
 | Dashboard | — | Stats, channel health |
 | Conversations | — | List, thread, messages |
-| Knowledge | — | Sources, jobs, sync |
+| Knowledge | Sources, jobs, sync | Full ingest pipeline (async) |
 | Channels | — | Connect, health |
 | Team / API keys | — | Team list, invite, key regen |
 | Onboarding steps 2–6 | — | Channels, knowledge, test, widget |

@@ -7,8 +7,10 @@ import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TimezoneSelect } from "@/components/timezone-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getBrowserTimezone } from "@/lib/timezones";
 
 export default function ProfileSettingsPage() {
   const { user, refreshMe } = useAuth();
@@ -66,8 +68,8 @@ export default function ProfileSettingsPage() {
             <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Timezone</Label>
-            <Input value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+            <Label htmlFor="timezone">Timezone</Label>
+            <TimezoneSelect id="timezone" value={timezone} onChange={setTimezone} />
           </div>
           <div className="space-y-2"><Label>Plan</Label><Input value={user?.email ? "trial" : ""} readOnly /></div>
           <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save store profile"}</Button>

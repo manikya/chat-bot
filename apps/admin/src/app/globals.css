@@ -16,6 +16,8 @@
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -44,6 +46,8 @@
   --destructive: #ef4444;
   --border: #e2e8f0;
   --input: #e2e8f0;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
   --ring: #4f46e5;
   --sidebar: #fafafa;
   --sidebar-foreground: #334155;
@@ -56,4 +60,19 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Radix Select portal — ensure opaque menu (not see-through over page content) */
+[data-radix-popper-content-wrapper],
+[data-radix-popper-content-wrapper] > *,
+[role="listbox"],
+[data-radix-select-viewport] {
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+[data-radix-popper-content-wrapper] [role="listbox"] {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }

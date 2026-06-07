@@ -15,4 +15,7 @@ export const Keys = {
   refreshLookupSk: () => "SESSION",
   apiKeyPk: (hash: string) => `APIKEY#${hash}`,
   apiKeySk: () => "TENANT",
+  onboardingState: () => "ONBOARDING#STATE",
+  source: (sourceId: string) => `SOURCE#${sourceId}`,
+  job: (jobId: string) => `JOB#${jobId}`,
 };

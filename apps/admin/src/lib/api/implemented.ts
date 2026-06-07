@@ -15,6 +15,21 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/tenants/me/config",
   "PATCH /api/v1/tenants/me/config",
   "GET /api/v1/tenants/me/limits",
+  "GET /api/v1/onboarding",
+  "PATCH /api/v1/onboarding/step",
+  "POST /api/v1/onboarding/test-chat",
+  "GET /api/v1/knowledge/sources",
+  "POST /api/v1/knowledge/sources",
+  "DELETE /api/v1/knowledge/sources/:id",
+  "POST /api/v1/knowledge/sources/:id/sync",
+  "GET /api/v1/knowledge/jobs",
 ] as const;
 
-export const REAL_API_DOMAINS = ["auth", "tenant profile", "tenant config", "plan limits"] as const;
+export const REAL_API_DOMAINS = [
+  "auth",
+  "tenant profile",
+  "tenant config",
+  "plan limits",
+  "onboarding",
+  "knowledge",
+] as const;

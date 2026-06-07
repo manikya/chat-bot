@@ -8,8 +8,10 @@ import { useAuth } from "@/lib/auth/context";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { TimezoneSelect } from "@/components/timezone-select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getBrowserTimezone } from "@/lib/timezones";
 
 export default function OnboardingProfilePage() {
   const { tenant, refreshMe } = useAuth();
@@ -20,12 +22,8 @@ export default function OnboardingProfilePage() {
 
   const continueNext = async () => {
     setLoading(true);
-    await api.tenant.updateMe({ storeName, timezone, onboardingStep: "channels" });
-    try {
-      await api.onboarding.advanceStep("channels");
-    } catch {
-      /* onboarding Lambda not built — tenant profile step still saved */
-    }
+    await api.tenant.updateMe({ storeName, timezone });
+    await api.onboarding.advanceStep("channels");
     await refreshMe();
     toast.success("Profile saved (real tenant API)");
     router.push("/onboarding/channels");
@@ -41,7 +39,10 @@ export default function OnboardingProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2"><Label>Store name</Label><Input value={storeName} onChange={(e) => setStoreName(e.target.value)} /></div>
-          <div className="space-y-2"><Label>Timezone</Label><Input value={timezone} onChange={(e) => setTimezone(e.target.value)} /></div>
+          <div className="space-y-2">
+            <Label htmlFor="timezone">Timezone</Label>
+            <TimezoneSelect id="timezone" value={timezone} onChange={setTimezone} />
+          </div>
           <Button onClick={continueNext} disabled={loading || !storeName}>Continue</Button>
         </CardContent>
       </Card>

@@ -69,6 +69,62 @@ export interface PlanLimits {
   enabledChannels: string[];
 }
 
+export type OnboardingStepStatus = "completed" | "in_progress" | "pending";
+
+export interface OnboardingState {
+  currentStep: OnboardingStep;
+  steps: Array<{
+    step: OnboardingStep;
+    status: OnboardingStepStatus;
+    completedAt?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+  canSkip: OnboardingStep[];
+  estimatedMinutesRemaining: number;
+}
+
+export interface AdvanceOnboardingStepResult {
+  previousStep: OnboardingStep;
+  currentStep: OnboardingStep;
+  onboardingStep: OnboardingStep;
+}
+
+export interface OnboardingTestChatResult {
+  reply: { type: string; content: string };
+  testMessageCount: number;
+  canAdvanceToWidget: boolean;
+}
+
+export type KnowledgeSourceType = "website" | "catalog" | "faq" | "conversation" | "social";
+export type KnowledgeSourceStatus = "active" | "syncing" | "error" | "deleted";
+export type IngestJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export interface KnowledgeSource {
+  sourceId: string;
+  type: KnowledgeSourceType | string;
+  name: string;
+  status: KnowledgeSourceStatus | string;
+  chunkCount: number;
+  vectorCount: number;
+  lastSyncAt?: string;
+  createdAt?: string;
+}
+
+export interface IngestJob {
+  jobId: string;
+  sourceId: string;
+  type: string;
+  status: IngestJobStatus | string;
+  stats?: {
+    pagesProcessed?: number;
+    chunksCreated?: number;
+    durationSec?: number;
+  };
+  completedAt?: string;
+  error?: string;
+  createdAt?: string;
+}
+
 export interface AuthContext {
   tenantId: string;
   userId: string;
