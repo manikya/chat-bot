@@ -69,14 +69,13 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
   const tenantId = generateId("ten_");
   const userId = generateId("usr_");
   const passwordHash = await hashPassword(input.password);
+  const skipVerify = deps.config.skipEmailVerification;
   const verifyToken = randomBytes(32).toString("hex");
   const verifyHash = tokenHash(verifyToken);
   const widget = widgetKeyPair();
   const ttl = Math.floor(Date.now() / 1000) + 86400;
 
-  await db.send(
-    new TransactWriteCommand({
-      TransactItems: [
+  const transactItems: Parameters<typeof TransactWriteCommand>[0]["input"]["TransactItems"] = [
         {
           Put: {
             TableName: deps.config.tableName,
@@ -127,7 +126,7 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
               passwordHash,
               role: "owner",
               status: "active",
-              emailVerified: false,
+              emailVerified: skipVerify,
               mfa: { enabled: false, method: "none" },
               failedLoginAttempts: 0,
               createdAt: now,
@@ -143,40 +142,45 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
         {
           Put: {
             TableName: deps.config.tableName,
-            Item: {
-              PK: Keys.tokenPk(verifyHash),
-              SK: Keys.tokenSk(),
-              purpose: "email_verify",
-              tenantId,
-              userId,
-              email,
-              used: false,
-              ttl,
-              expiresAt: ttl,
-            },
-          },
-        },
-        {
-          Put: {
-            TableName: deps.config.tableName,
             Item: { PK: Keys.apiKeyPk(widget.hash), SK: Keys.apiKeySk(), tenantId },
           },
         },
-      ],
-    })
-  );
+  ];
 
-  await deps.email.sendVerifyEmail(email, verifyToken, deps.config.appUrl);
+  if (!skipVerify) {
+    transactItems.push({
+      Put: {
+        TableName: deps.config.tableName,
+        Item: {
+          PK: Keys.tokenPk(verifyHash),
+          SK: Keys.tokenSk(),
+          purpose: "email_verify",
+          tenantId,
+          userId,
+          email,
+          used: false,
+          ttl,
+          expiresAt: ttl,
+        },
+      },
+    });
+  }
+
+  await db.send(new TransactWriteCommand({ TransactItems: transactItems }));
+
+  if (!skipVerify) {
+    await deps.email.sendVerifyEmail(email, verifyToken, deps.config.appUrl);
+  }
 
   return ok(
     {
       tenantId,
       userId,
       email,
-      emailVerified: false,
+      emailVerified: skipVerify,
       onboardingStep: "profile" as const,
     },
-    "Account created. Please verify your email."
+    skipVerify ? "Account created. You can sign in now." : "Account created. Please verify your email."
   );
 }
 
@@ -228,7 +232,19 @@ export async function login(input: LoginInput, deps: AuthDeps) {
   }
 
   if (!userRecord.emailVerified) {
-    throw new ApiError(ErrorCodes.EMAIL_NOT_VERIFIED, "Please verify your email first", 403);
+    if (deps.config.skipEmailVerification) {
+      await db.send(
+        new UpdateCommand({
+          TableName: deps.config.tableName,
+          Key: { PK: Keys.tenantPk(tenantId), SK: Keys.user(userId) },
+          UpdateExpression: "SET emailVerified = :v",
+          ExpressionAttributeValues: { ":v": true },
+        })
+      );
+      userRecord.emailVerified = true;
+    } else {
+      throw new ApiError(ErrorCodes.EMAIL_NOT_VERIFIED, "Please verify your email first", 403);
+    }
   }
 
   const profileRes = await db.send(

@@ -18,6 +18,7 @@ export interface CoreConfig {
   metaVerifyToken?: string;
   metaGraphVersion: string;
   metaOAuthRedirectUri?: string;
+  skipEmailVerification: boolean;
 }
 
 export function loadConfig(): CoreConfig {
@@ -43,5 +44,6 @@ export function loadConfig(): CoreConfig {
     metaOAuthRedirectUri:
       process.env.META_OAUTH_REDIRECT_URI ??
       `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/channels/meta/callback`,
+    skipEmailVerification: process.env.SKIP_EMAIL_VERIFICATION === "true",
   };
 }

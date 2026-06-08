@@ -26,13 +26,18 @@ function VerifyEmailPendingContent() {
       <CardContent className="space-y-4">
         <div className="space-y-2 text-left">
           <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="owner@store.com"
-          />
+          {email ? (
+            <p className="rounded-md border bg-muted/50 px-3 py-2 text-sm">{email}</p>
+          ) : (
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your signup email"
+              autoComplete="email"
+            />
+          )}
         </div>
         <Button
           variant="outline"

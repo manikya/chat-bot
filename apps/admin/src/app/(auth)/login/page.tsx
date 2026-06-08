@@ -29,7 +29,7 @@ export default function LoginPage() {
       const error = err as { code?: string; message?: string };
       if (error.code === "EMAIL_NOT_VERIFIED") {
         toast.error("Please verify your email first");
-        router.push("/verify-email-pending");
+        router.push(`/verify-email-pending?email=${encodeURIComponent(email)}`);
         return;
       }
       toast.error(error.message ?? "Login failed");
@@ -68,7 +68,9 @@ export default function LoginPage() {
               No account? <Link href="/signup" className="text-primary hover:underline">Start free trial</Link>
             </p>
             <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-              Uses <strong>real Lambda APIs</strong> (auth + tenant). Sign up first, verify email via API console log, then log in.
+              Uses <strong>real Lambda APIs</strong> (auth + tenant). With{" "}
+              <code className="text-[11px]">SKIP_EMAIL_VERIFICATION=true</code> in{" "}
+              <code className="text-[11px]">apps/api/.env</code>, sign up and log in without email verification.
             </p>
           </form>
         </CardContent>
