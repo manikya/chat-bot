@@ -274,6 +274,11 @@ export function createMockServerApp() {
   );
 
   app.get("/api/v1/team", async () => json(ok({ items: DEMO_TEAM })));
+  app.delete("/api/v1/team/:userId", async () => new Response(null, { status: 204 }));
+  app.patch("/api/v1/team/:userId", async (c) => {
+    const body = await c.req.json();
+    return json(ok({ userId: c.req.param("userId"), role: body.role }));
+  });
   app.post("/auth/invite", async (c) => {
     const body = await c.req.json();
     return json(

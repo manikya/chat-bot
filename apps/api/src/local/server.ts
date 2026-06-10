@@ -29,6 +29,8 @@ import { handler as knowledgeJobsHandler } from "../handlers/knowledge-jobs";
 import { handler as knowledgeFaqHandler } from "../handlers/knowledge-faq";
 import { handler as commerceProductsHandler } from "../handlers/commerce-products";
 import { handler as teamHandler } from "../handlers/team";
+import { deleteHandler as teamDeleteHandler, patchHandler as teamPatchHandler } from "../handlers/team-member";
+import { presignHandler as logoPresignHandler, completeHandler as logoCompleteHandler } from "../handlers/tenant-logo-presign";
 import { handler as chatApiHandler } from "../handlers/chat-api";
 import { handler as tenantUsageHandler } from "../handlers/tenant-usage";
 import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key";
@@ -72,6 +74,8 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "PATCH", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "POST", path: "/api/v1/tenants/me/logo", handler: tenantLogoHandler },
+  { method: "POST", path: "/api/v1/tenants/me/logo/presign", handler: logoPresignHandler },
+  { method: "POST", path: "/api/v1/tenants/me/logo/complete", handler: logoCompleteHandler },
   { method: "GET", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "PATCH", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "GET", path: "/api/v1/tenants/me/limits", handler: tenantLimitsHandler },
@@ -142,6 +146,18 @@ const PATTERN_ROUTES: Array<{
     pattern: /^\/api\/v1\/channels\/meta\/([^/]+)$/,
     paramNames: ["channel"],
     handler: channelsDisconnectHandler,
+  },
+  {
+    method: "DELETE",
+    pattern: /^\/api\/v1\/team\/([^/]+)$/,
+    paramNames: ["userId"],
+    handler: teamDeleteHandler,
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/team\/([^/]+)$/,
+    paramNames: ["userId"],
+    handler: teamPatchHandler,
   },
 ];
 

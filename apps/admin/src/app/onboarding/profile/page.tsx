@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
+import { uploadTenantLogoFile } from "@/lib/upload-logo";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,12 +60,18 @@ export default function OnboardingProfilePage() {
                 if (!file) return;
                 setUploadingLogo(true);
                 try {
-                  const res = await api.tenant.uploadLogo(file);
+                  const res = await uploadTenantLogoFile(file);
                   setLogoUrl(res.data.logoUrl);
                   await refreshMe();
                   toast.success("Logo uploaded");
                 } catch (err) {
-                  toast.error(err instanceof Error ? err.message : "Logo upload failed");
+                  const msg =
+                    err && typeof err === "object" && "message" in err
+                      ? String(err.message)
+                      : err instanceof Error
+                        ? err.message
+                        : "Logo upload failed";
+                  toast.error(msg);
                 } finally {
                   setUploadingLogo(false);
                 }

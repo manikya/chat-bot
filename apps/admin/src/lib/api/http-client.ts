@@ -189,6 +189,16 @@ export function createHttpApi(): MockApi {
         form.append("file", file);
         return request("/api/v1/tenants/me/logo", { method: "POST", body: form });
       },
+      presignLogo: (contentType: string) =>
+        request("/api/v1/tenants/me/logo/presign", {
+          method: "POST",
+          body: JSON.stringify({ contentType }),
+        }),
+      completeLogo: (key: string) =>
+        request("/api/v1/tenants/me/logo/complete", {
+          method: "POST",
+          body: JSON.stringify({ key }),
+        }),
       getConfig: () => request("/api/v1/tenants/me/config"),
       updateConfig: (patch: Partial<TenantConfig>) =>
         request("/api/v1/tenants/me/config", { method: "PATCH", body: JSON.stringify(patch) }),
@@ -260,6 +270,9 @@ export function createHttpApi(): MockApi {
     team: {
       list: () => request("/api/v1/team"),
       invite: (body) => request("/auth/invite", { method: "POST", body: JSON.stringify(body) }),
+      remove: (userId: string) => request(`/api/v1/team/${userId}`, { method: "DELETE" }),
+      updateRole: (userId: string, role: string) =>
+        request(`/api/v1/team/${userId}`, { method: "PATCH", body: JSON.stringify({ role }) }),
     },
     dashboard: {
       getStats: () => request("/api/v1/dashboard/stats"),

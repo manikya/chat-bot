@@ -56,8 +56,10 @@ packages/core/              → Real Lambda business logic + DynamoDB
 | Settings profile, onboarding profile | **Real** `GET/PATCH /tenants/me` (timezone dropdown) |
 | Onboarding wizard (steps, test-chat) | **Real** `/api/v1/onboarding/*` |
 | Knowledge sources, sync, jobs (website + catalog + FAQ) | **Real** `/api/v1/knowledge/*` |
-| Logo upload (onboarding profile) | **Real** `POST /api/v1/tenants/me/logo` |
-| Team list + invite | **Real** `GET /api/v1/team`, `POST /auth/invite` |
+| Logo upload (onboarding profile) | **Real** S3 presign (`/logo/presign` + `/complete`) or multipart `/logo` |
+| Team list, invite, remove, role change | **Real** `GET/PATCH/DELETE /api/v1/team`, `POST /auth/invite` |
+| Accept team invite | **Real** `POST /auth/accept-invite` at `/accept-invite` |
+| Auth emails (verify, reset, invite) | **Real** Zoho SMTP when `SMTP_*` set in `apps/api/.env` |
 | Commerce products (knowledge page) | **Real** `GET /api/v1/commerce/products` |
 | Bot config, chat simulator, widget colors | **Real** config + chat orchestrator |
 | Usage, dashboard stats, conversations | **Real** DynamoDB metering + threads |
@@ -72,6 +74,7 @@ Full API status: [docs/implementation/06-api-implementation-status.md](../../doc
 | ---------------- | ----------------------- |
 | `/login`         | Sign in                 |
 | `/signup`        | Register                |
+| `/accept-invite` | Join store from invite  |
 | `/onboarding/*`  | 6-step wizard           |
 | `/dashboard`     | Home                    |
 | `/conversations` | Conversation list       |

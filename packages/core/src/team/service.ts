@@ -1,5 +1,12 @@
 import { createHash, randomBytes } from "crypto";
-import { GetCommand, PutCommand, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DeleteCommand,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import {
   ApiError,
   ErrorCodes,
@@ -27,6 +34,60 @@ function tokenHash(raw: string) {
 function assertCanManageTeam(auth: AuthContext) {
   if (auth.role !== "owner" && auth.role !== "admin") {
     throw new ApiError(ErrorCodes.FORBIDDEN, "Insufficient permissions", 403);
+  }
+}
+
+function assertOwner(auth: AuthContext) {
+  if (auth.role !== "owner") {
+    throw new ApiError(ErrorCodes.FORBIDDEN, "Owner access required", 403);
+  }
+}
+
+async function getUserRecord(tenantId: string, userId: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  const res = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.user(userId) },
+    })
+  );
+  return res.Item;
+}
+
+async function revokeUserSessions(tenantId: string, userId: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  const sessions = await db.send(
+    new QueryCommand({
+      TableName: config.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": Keys.tenantPk(tenantId),
+        ":sk": "SESSION#",
+      },
+    })
+  );
+
+  for (const session of sessions.Items ?? []) {
+    if (session.userId !== userId || session.revoked) continue;
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: session.PK, SK: session.SK },
+        UpdateExpression: "SET revoked = :r",
+        ExpressionAttributeValues: { ":r": true },
+      })
+    );
+    if (session.refreshLookupHash) {
+      await db.send(
+        new DeleteCommand({
+          TableName: config.tableName,
+          Key: {
+            PK: Keys.refreshLookupPk(session.refreshLookupHash as string),
+            SK: Keys.refreshLookupSk(),
+          },
+        })
+      );
+    }
   }
 }
 
@@ -248,4 +309,79 @@ export async function acceptTeamInvite(
   };
 
   return issueAuthSession(tenantId, userId, user, config);
+}
+
+export async function removeTeamMember(auth: AuthContext, targetUserId: string, config: CoreConfig) {
+  assertOwner(auth);
+
+  if (targetUserId === auth.userId) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "You cannot remove yourself", 400);
+  }
+
+  const target = await getUserRecord(auth.tenantId, targetUserId, config);
+  if (!target) {
+    throw new ApiError(ErrorCodes.NOT_FOUND, "Team member not found", 404);
+  }
+  if (target.role === "owner") {
+    throw new ApiError(ErrorCodes.FORBIDDEN, "Cannot remove the store owner", 403);
+  }
+
+  const email = target.email as string;
+  const db = getDocClient(config);
+
+  await revokeUserSessions(auth.tenantId, targetUserId, config);
+  await db.send(
+    new DeleteCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.user(targetUserId) },
+    })
+  );
+  await db.send(
+    new DeleteCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.emailLookupPk(email), SK: Keys.emailLookupSk() },
+    })
+  );
+
+  return ok({ userId: targetUserId, removed: true });
+}
+
+export async function updateTeamMemberRole(
+  auth: AuthContext,
+  targetUserId: string,
+  body: { role: UserRole },
+  config: CoreConfig
+) {
+  assertOwner(auth);
+
+  const role = body.role;
+  if (role !== "admin" && role !== "viewer") {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "role must be admin or viewer", 400);
+  }
+
+  const target = await getUserRecord(auth.tenantId, targetUserId, config);
+  if (!target) {
+    throw new ApiError(ErrorCodes.NOT_FOUND, "Team member not found", 404);
+  }
+  if (target.role === "owner") {
+    throw new ApiError(ErrorCodes.FORBIDDEN, "Cannot change the owner role", 403);
+  }
+
+  const db = getDocClient(config);
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.user(targetUserId) },
+      UpdateExpression: "SET #role = :r",
+      ExpressionAttributeNames: { "#role": "role" },
+      ExpressionAttributeValues: { ":r": role },
+    })
+  );
+
+  return ok({
+    userId: targetUserId,
+    role,
+    email: target.email as string,
+    name: target.name as string,
+  });
 }

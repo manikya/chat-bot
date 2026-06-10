@@ -628,7 +628,7 @@ Base path: `/api/v1/tenants`
 
 ### 3.8 POST `/api/v1/tenants/me/logo`
 
-Upload store logo (onboarding step 1).
+Upload store logo (onboarding step 1). When `S3_BUCKET` is configured, the file is stored in S3; otherwise local dev filesystem.
 
 **Auth:** Bearer (`owner` | `admin`)
 
@@ -645,6 +645,55 @@ Upload store logo (onboarding step 1).
   }
 }
 ```
+
+---
+
+### 3.9 POST `/api/v1/tenants/me/logo/presign`
+
+Get a presigned PUT URL for direct browser → S3 upload (preferred when S3 is configured).
+
+**Auth:** Bearer (`owner` | `admin`)
+
+**Request:**
+
+```json
+{
+  "contentType": "image/png"
+}
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "uploadUrl": "https://s3.../logos/ten_abc123.png?...",
+    "logoUrl": "https://cdn.../logos/ten_abc123.png",
+    "key": "logos/ten_abc123.png",
+    "contentType": "image/png",
+    "expiresIn": 900
+  }
+}
+```
+
+---
+
+### 3.10 POST `/api/v1/tenants/me/logo/complete`
+
+Confirm presigned upload and save `logoUrl` on the tenant profile.
+
+**Auth:** Bearer (`owner` | `admin`)
+
+**Request:**
+
+```json
+{
+  "key": "logos/ten_abc123.png"
+}
+```
+
+**Response 200:** Same shape as §3.8.
 
 ---
 
@@ -677,7 +726,39 @@ Base path: `/api/v1/team`
 
 ---
 
-### 4.2 DELETE `/api/v1/team/{userId}`
+### 4.2 PATCH `/api/v1/team/{userId}`
+
+Change a team member's role.
+
+**Auth:** Bearer (`owner` only)
+
+**Request:**
+
+```json
+{
+  "role": "admin"
+}
+```
+
+Allowed values: `admin`, `viewer`. Cannot change the store owner.
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "usr_staff01",
+    "role": "admin",
+    "email": "staff@store.com",
+    "name": "Alex Staff"
+  }
+}
+```
+
+---
+
+### 4.3 DELETE `/api/v1/team/{userId}`
 
 **Auth:** Bearer (`owner` only)
 
@@ -1560,6 +1641,8 @@ Send a message in the onboarding simulator (wraps internal chat).
 | PATCH     | `/api/v1/onboarding/step`                  | Bearer     | MVP   |
 | POST      | `/api/v1/onboarding/test-chat`             | Bearer     | MVP   |
 | POST      | `/api/v1/tenants/me/logo`                  | Bearer     | MVP   |
+| POST      | `/api/v1/tenants/me/logo/presign`          | Bearer     | MVP   |
+| POST      | `/api/v1/tenants/me/logo/complete`         | Bearer     | MVP   |
 | GET       | `/api/v1/tenants/me`                       | Bearer     | MVP   |
 | PATCH     | `/api/v1/tenants/me`                       | Bearer     | MVP   |
 | GET/PATCH | `/api/v1/tenants/me/config`                | Bearer     | MVP   |
@@ -1582,7 +1665,9 @@ Send a message in the onboarding simulator (wraps internal chat).
 | GET       | `/health`                                  | —          | MVP   |
 | GET/POST  | `/api/v1/billing/*`                        | Bearer     | P2    |
 | POST      | `/webhooks/stripe`                         | Stripe sig | P2    |
-| GET       | `/api/v1/team`                             | Bearer     | P2    |
+| GET       | `/api/v1/team`                             | Bearer     | MVP   |
+| PATCH     | `/api/v1/team/{userId}`                    | Bearer     | MVP   |
+| DELETE    | `/api/v1/team/{userId}`                    | Bearer     | MVP   |
 | POST      | `/api/v1/widget/chat/stream`               | API Key    | P2    |
 
 

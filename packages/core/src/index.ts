@@ -4,7 +4,13 @@ export { SmtpEmailProvider } from "./email/smtp";
 export * from "./auth/service";
 export * from "./auth/jwt";
 export * from "./tenant/service";
-export { uploadTenantLogo, logoPublicUrl } from "./tenant/logo";
+export {
+  uploadTenantLogo,
+  presignTenantLogoUpload,
+  completeTenantLogoUpload,
+  logoPublicUrl,
+} from "./tenant/logo";
+export { isS3AssetsEnabled } from "./storage/s3";
 export * from "./team/service";
 export * from "./commerce/service";
 export * from "./onboarding/service";

@@ -20,8 +20,9 @@
 | 2026-06-08 | WhatsApp OAuth via ngrok, WABA discovery, dev token connect |
 | 2026-06-10 | Team list/invite, logo upload, FAQ ingest, commerce products APIs + admin UI |
 | 2026-06-10 | `POST /auth/accept-invite` + `/accept-invite` UI (team join E2E) |
+| 2026-06-10 | Team remove/role APIs, S3 presigned logo via LocalStack |
 
-**Git (local `main`):** through accept-invite E2E. Not pushed.
+**Git (local `main`):** through team management + S3 logo. Not pushed.
 
 ---
 
@@ -29,10 +30,10 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **43 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **47 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
 | **Not started** (no handler, no mock) | 8+ routes |
-| **Phase 2** (billing, MFA, team CRUD) | 8 routes |
+| **Phase 2** (billing, MFA, widget SSE) | 8 routes |
 
 The admin UI calls all endpoints over HTTP. The local dev server routes matching paths to Lambda handlers; everything else falls through to `@commercechat/mock-api`.
 
@@ -60,6 +61,8 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/tenants/me` | `tenant-me` | Yes |
 | `PATCH` | `/api/v1/tenants/me` | `tenant-me` | Yes |
 | `POST` | `/api/v1/tenants/me/logo` | `tenant-logo` | Yes |
+| `POST` | `/api/v1/tenants/me/logo/presign` | `tenant-logo-presign` | Yes |
+| `POST` | `/api/v1/tenants/me/logo/complete` | `tenant-logo-complete` | Yes |
 | `GET` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `PATCH` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `GET` | `/api/v1/tenants/me/limits` | `tenant-limits` | Yes |
@@ -77,6 +80,8 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `POST` | `/api/v1/knowledge/faq` | `knowledge-faq` | Yes |
 | `GET` | `/api/v1/commerce/products` | `commerce-products` | Yes |
 | `GET` | `/api/v1/team` | `team` | Yes |
+| `PATCH` | `/api/v1/team/{userId}` | `team-member` | Yes |
+| `DELETE` | `/api/v1/team/{userId}` | `team-member` | Yes |
 | `POST` | `/api/v1/chat` | `chat-api` | Yes |
 | `GET` | `/api/v1/conversations` | `conversations` | Yes |
 | `GET` | `/api/v1/conversations/{id}` | `conversations` | Yes |
@@ -96,7 +101,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 **Also built (not a route):**
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
 - Chat orchestrator — `packages/core/src/chat/`
-- Logo static files — `GET /assets/logos/{filename}` from `.data/assets/logos/` (local dev)
+- Logo storage — S3 presigned upload (`POST .../logo/presign` + `complete`) via LocalStack; local filesystem fallback when `S3_BUCKET` unset
 - Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, sync chat, `formatBotText` for `**bold**` / numbered lists / `\n`, `suggestedActions` product chips)
 - Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)
 
@@ -121,16 +126,16 @@ _None — core auth + team invite flow complete._
 
 ### Phase 2
 
-Billing, MFA, team member CRUD (remove/update roles), `POST /api/v1/widget/chat/stream` (SSE), S3 presigned logo upload for production.
+Billing, MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets.
 
 ---
 
 ## 5. Recommended build order
 
 1. **WhatsApp E2E** — ngrok API webhooks, inbound message + reply test
-2. **Infra** — CDK deploy, Resend email, CI
+2. **Infra** — CDK deploy, production S3/CDN, CI
 3. **Widget polish** — rich product cards, rate limiting, CDN deploy
-4. **Phase 2** — billing, MFA, production logo storage (S3)
+4. **Phase 2** — billing, MFA, widget SSE
 
 ---
 
@@ -139,8 +144,8 @@ Billing, MFA, team member CRUD (remove/update roles), `POST /api/v1/widget/chat/
 | Admin screen | Live API | Mock fallback |
 |--------------|----------|---------------|
 | Auth, profile, onboarding, knowledge | Yes | — |
-| Logo upload (onboarding profile) | Yes | — |
-| Team list, invite, accept invite | Yes | — |
+| Team list, invite, remove, role change, accept invite | Yes | — |
+| Logo upload — S3 presign (onboarding profile) | Yes | — |
 | FAQ quick-add, catalog products (knowledge page) | Yes | — |
 | Bot config + test simulator | Config + chat orchestrator | — |
 | Usage, dashboard | Usage + dashboard stats | — |
@@ -153,10 +158,15 @@ Billing, MFA, team member CRUD (remove/update roles), `POST /api/v1/widget/chat/
 ## 7. Local dev checklist
 
 ```bash
-docker compose up -d
+docker compose up -d          # LocalStack: DynamoDB + S3 (commercechat-assets)
 cp apps/api/.env.example apps/api/.env
+# Optional in apps/api/.env — S3 logo presign + Zoho SMTP (see .env.example)
 npm run dev                   # API :3001 + Admin :3000
 ```
+
+**S3 logos (LocalStack):** With `S3_BUCKET=commercechat-assets` set, logos upload via presigned PUT to  
+`http://localhost:4566/commercechat-assets/logos/{tenantId}.{ext}`. Bucket + CORS are created by  
+`scripts/localstack-init/02-create-s3-bucket.sh` on container start.
 
 **Widget demo:** Regenerate API key in Settings → API keys, then open  
 `http://localhost:3001/widget/demo.html?key=pk_live_...` while `npm run dev` is running.

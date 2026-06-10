@@ -4,7 +4,8 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=dynamodb
+      - SERVICES=dynamodb,s3
+      - S3_ASSETS_BUCKET=commercechat-assets
       - DEBUG=0
     volumes:
       - ./scripts/localstack-init:/etc/localstack/init/ready.d

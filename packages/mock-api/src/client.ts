@@ -459,6 +459,23 @@ export function createMockApi() {
           expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
         });
       },
+
+      async remove(_userId: string) {
+        await delay(300);
+        return { success: true, data: undefined, timestamp: new Date().toISOString() };
+      },
+
+      async updateRole(userId: string, role: string) {
+        await delay(300);
+        const session = loadSession() ?? defaultSession();
+        const member = DEMO_TEAM.find((m) => m.userId === userId);
+        return ok({
+          userId,
+          role,
+          email: member?.email ?? session.user.email,
+          name: member?.name ?? session.user.name,
+        });
+      },
     },
 
     dashboard: {

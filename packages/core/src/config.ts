@@ -28,6 +28,11 @@ export interface CoreConfig {
   smtpUser?: string;
   smtpPass?: string;
   smtpFrom?: string;
+  s3Endpoint?: string;
+  s3Bucket?: string;
+  s3PublicUrl?: string;
+  s3AccessKeyId?: string;
+  s3SecretAccessKey?: string;
 }
 
 export function loadConfig(): CoreConfig {
@@ -63,5 +68,10 @@ export function loadConfig(): CoreConfig {
     smtpUser: process.env.SMTP_USER,
     smtpPass: process.env.SMTP_PASS,
     smtpFrom: process.env.SMTP_FROM,
+    s3Endpoint: process.env.S3_ENDPOINT ?? process.env.AWS_ENDPOINT_URL,
+    s3Bucket: process.env.S3_BUCKET ?? process.env.S3_ASSETS_BUCKET,
+    s3PublicUrl: process.env.S3_PUBLIC_URL,
+    s3AccessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    s3SecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   };
 }
