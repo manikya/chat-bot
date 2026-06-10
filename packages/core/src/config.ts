@@ -23,6 +23,11 @@ export interface CoreConfig {
   metaDevPhoneNumberId?: string;
   metaDevDisplayPhone?: string;
   skipEmailVerification: boolean;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpFrom?: string;
 }
 
 export function loadConfig(): CoreConfig {
@@ -53,5 +58,10 @@ export function loadConfig(): CoreConfig {
     metaDevPhoneNumberId: process.env.META_DEV_PHONE_NUMBER_ID,
     metaDevDisplayPhone: process.env.META_DEV_DISPLAY_PHONE,
     skipEmailVerification: process.env.SKIP_EMAIL_VERIFICATION === "true",
+    smtpHost: process.env.SMTP_HOST,
+    smtpPort: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined,
+    smtpUser: process.env.SMTP_USER,
+    smtpPass: process.env.SMTP_PASS,
+    smtpFrom: process.env.SMTP_FROM,
   };
 }

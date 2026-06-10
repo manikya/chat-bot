@@ -1,3 +1,6 @@
+import type { CoreConfig } from "../config";
+import { SmtpEmailProvider } from "./smtp";
+
 export interface EmailProvider {
   sendVerifyEmail(to: string, token: string, appUrl: string): Promise<void>;
   sendPasswordReset(to: string, token: string, appUrl: string): Promise<void>;
@@ -23,4 +26,11 @@ export class ConsoleEmailProvider implements EmailProvider {
       })
     );
   }
+}
+
+export function createEmailProvider(config: CoreConfig): EmailProvider {
+  if (config.smtpHost && config.smtpUser && config.smtpPass) {
+    return new SmtpEmailProvider(config);
+  }
+  return new ConsoleEmailProvider();
 }

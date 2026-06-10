@@ -15,9 +15,11 @@
     "@aws-sdk/lib-dynamodb": "^3.758.0",
     "@commercechat/shared": "*",
     "cheerio": "^1.0.0",
-    "jose": "^6.0.10"
+    "jose": "^6.0.10",
+    "nodemailer": "^8.0.10"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.0",
     "typescript": "^5"
   }
 }
