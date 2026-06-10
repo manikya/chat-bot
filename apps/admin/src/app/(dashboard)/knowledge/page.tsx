@@ -17,13 +17,19 @@ export default function KnowledgePage() {
   const [jobs, setJobs] = useState<IngestJob[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [url, setUrl] = useState("https://acme-shoes.com");
+  const [faqQuestion, setFaqQuestion] = useState("");
+  const [faqAnswer, setFaqAnswer] = useState("");
+  const [products, setProducts] = useState<Array<{ sku: string; name: string; price: number }>>([]);
 
   const load = () => {
     api.knowledge.listSources().then((r) => setSources(r.data.items));
     api.knowledge.listJobs().then((r) => setJobs(r.data.items));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
+  }, []);
 
   const addWebsite = async () => {
     try {
@@ -66,6 +72,50 @@ export default function KnowledgePage() {
               <Button onClick={addWebsite}>Crawl site</Button>
               <Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Quick FAQ</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Question</Label>
+            <Input value={faqQuestion} onChange={(e) => setFaqQuestion(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Answer</Label>
+            <Input value={faqAnswer} onChange={(e) => setFaqAnswer(e.target.value)} />
+          </div>
+          <Button
+            onClick={async () => {
+              try {
+                await api.knowledge.ingestFaq([{ question: faqQuestion, answer: faqAnswer }]);
+                toast.success("FAQ saved");
+                setFaqQuestion("");
+                setFaqAnswer("");
+                load();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "FAQ save failed");
+              }
+            }}
+            disabled={!faqQuestion.trim() || !faqAnswer.trim()}
+          >
+            Add FAQ
+          </Button>
+        </CardContent>
+      </Card>
+
+      {products.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Catalog products</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {products.map((p) => (
+              <div key={p.sku} className="flex justify-between text-sm border-b py-2 last:border-0">
+                <span>{p.name}</span>
+                <span className="text-muted-foreground">{p.sku} · ${p.price}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

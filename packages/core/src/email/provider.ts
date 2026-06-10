@@ -1,6 +1,7 @@
 export interface EmailProvider {
   sendVerifyEmail(to: string, token: string, appUrl: string): Promise<void>;
   sendPasswordReset(to: string, token: string, appUrl: string): Promise<void>;
+  sendTeamInvite(to: string, token: string, appUrl: string, name: string): Promise<void>;
 }
 
 export class ConsoleEmailProvider implements EmailProvider {
@@ -10,5 +11,16 @@ export class ConsoleEmailProvider implements EmailProvider {
 
   async sendPasswordReset(to: string, token: string, appUrl: string) {
     console.log(JSON.stringify({ type: "password-reset", to, url: `${appUrl}/reset-password?token=${token}` }));
+  }
+
+  async sendTeamInvite(to: string, token: string, appUrl: string, name: string) {
+    console.log(
+      JSON.stringify({
+        type: "team-invite",
+        to,
+        name,
+        url: `${appUrl}/accept-invite?token=${token}`,
+      })
+    );
   }
 }

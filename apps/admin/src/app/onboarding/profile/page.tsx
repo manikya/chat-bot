@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -19,6 +20,9 @@ export default function OnboardingProfilePage() {
   const [storeName, setStoreName] = useState(tenant?.storeName ?? "");
   const [timezone, setTimezone] = useState(tenant?.timezone ?? "America/New_York");
   const [loading, setLoading] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | undefined>(tenant?.logoUrl);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const continueNext = async () => {
     setLoading(true);
@@ -42,6 +46,46 @@ export default function OnboardingProfilePage() {
           <div className="space-y-2">
             <Label htmlFor="timezone">Timezone</Label>
             <TimezoneSelect id="timezone" value={timezone} onChange={setTimezone} />
+          </div>
+          <div className="space-y-2">
+            <Label>Store logo (optional)</Label>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploadingLogo(true);
+                try {
+                  const res = await api.tenant.uploadLogo(file);
+                  setLogoUrl(res.data.logoUrl);
+                  await refreshMe();
+                  toast.success("Logo uploaded");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Logo upload failed");
+                } finally {
+                  setUploadingLogo(false);
+                }
+              }}
+            />
+            <div className="flex items-center gap-3">
+              {logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoUrl} alt="Store logo" className="h-12 w-12 rounded border object-cover" />
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={uploadingLogo}
+                onClick={() => logoInputRef.current?.click()}
+              >
+                <Upload className="h-4 w-4" />
+                {uploadingLogo ? "Uploading…" : logoUrl ? "Change logo" : "Upload logo"}
+              </Button>
+            </div>
           </div>
           <Button onClick={continueNext} disabled={loading || !storeName}>Continue</Button>
         </CardContent>

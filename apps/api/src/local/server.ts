@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, extname } from "path";
 import { fileURLToPath } from "url";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -15,7 +15,9 @@ import { handler as logoutHandler } from "../handlers/auth-logout";
 import { handler as forgotPasswordHandler } from "../handlers/auth-forgot-password";
 import { handler as resetPasswordHandler } from "../handlers/auth-reset-password";
 import { handler as resendVerificationHandler } from "../handlers/auth-resend-verification";
+import { handler as authInviteHandler } from "../handlers/auth-invite";
 import { handler as tenantMeHandler } from "../handlers/tenant-me";
+import { handler as tenantLogoHandler } from "../handlers/tenant-logo";
 import { handler as tenantConfigHandler } from "../handlers/tenant-config";
 import { handler as tenantLimitsHandler } from "../handlers/tenant-limits";
 import { handler as onboardingHandler } from "../handlers/onboarding";
@@ -23,6 +25,9 @@ import { handler as onboardingTestChatHandler } from "../handlers/onboarding-tes
 import { handler as knowledgeSourcesHandler } from "../handlers/knowledge-sources";
 import { handler as knowledgeSyncHandler } from "../handlers/knowledge-sync";
 import { handler as knowledgeJobsHandler } from "../handlers/knowledge-jobs";
+import { handler as knowledgeFaqHandler } from "../handlers/knowledge-faq";
+import { handler as commerceProductsHandler } from "../handlers/commerce-products";
+import { handler as teamHandler } from "../handlers/team";
 import { handler as chatApiHandler } from "../handlers/chat-api";
 import { handler as tenantUsageHandler } from "../handlers/tenant-usage";
 import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key";
@@ -61,8 +66,10 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/auth/forgot-password", handler: forgotPasswordHandler },
   { method: "POST", path: "/auth/reset-password", handler: resetPasswordHandler },
   { method: "POST", path: "/auth/resend-verification", handler: resendVerificationHandler },
+  { method: "POST", path: "/auth/invite", handler: authInviteHandler },
   { method: "GET", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "PATCH", path: "/api/v1/tenants/me", handler: tenantMeHandler },
+  { method: "POST", path: "/api/v1/tenants/me/logo", handler: tenantLogoHandler },
   { method: "GET", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "PATCH", path: "/api/v1/tenants/me/config", handler: tenantConfigHandler },
   { method: "GET", path: "/api/v1/tenants/me/limits", handler: tenantLimitsHandler },
@@ -77,6 +84,9 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/onboarding/test-chat", handler: onboardingTestChatHandler },
   { method: "GET", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
+  { method: "POST", path: "/api/v1/knowledge/faq", handler: knowledgeFaqHandler },
+  { method: "GET", path: "/api/v1/commerce/products", handler: commerceProductsHandler },
+  { method: "GET", path: "/api/v1/team", handler: teamHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },
   { method: "GET", path: "/api/v1/channels", handler: channelsListHandler },
@@ -204,6 +214,31 @@ export function createLocalApp() {
     return c.html(html);
   });
 
+  app.get("/assets/logos/:filename", (c) => {
+    const filename = c.req.param("filename");
+    if (!filename || filename.includes("..")) {
+      return c.text("Not found", 404);
+    }
+    const dataDir = process.env.DATA_DIR ?? ".data";
+    const path = join(dataDir, "assets", "logos", filename);
+    if (!existsSync(path)) {
+      return c.text("Not found", 404);
+    }
+    const ext = extname(filename).toLowerCase();
+    const contentType =
+      ext === ".png"
+        ? "image/png"
+        : ext === ".webp"
+          ? "image/webp"
+          : "image/jpeg";
+    const buf = readFileSync(path);
+    return c.body(buf, 200, {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+    });
+  });
+
   app.get("/widget/v1.js", (c) => {
     if (!existsSync(WIDGET_JS_PATH)) {
       return c.text("Widget bundle not found", 404);
@@ -234,7 +269,7 @@ const port = Number(process.env.PORT ?? 3001);
 const app = createLocalApp();
 
 console.log(`CommerceChat Lambda API (local) → http://localhost:${port}`);
-console.log(`  Real handlers: auth, tenant, onboarding, knowledge, chat, conversations, widget, dashboard, webhooks, health`);
+console.log(`  Real handlers: auth, tenant, team, knowledge, commerce, chat, conversations, widget, dashboard, webhooks, health`);
 const publicUrl = process.env.API_PUBLIC_URL ?? "http://localhost:3001";
 console.log(`  Widget bundle:   ${publicUrl}/widget/v1.js`);
 console.log(`  Widget demo:       ${publicUrl}/widget/demo.html`);

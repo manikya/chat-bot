@@ -79,9 +79,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
             <strong>Live:</strong> {REAL_API_DOMAINS.join(", ")}
           </div>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            <strong>Mock:</strong> team
-          </div>
         </div>
       </aside>
 

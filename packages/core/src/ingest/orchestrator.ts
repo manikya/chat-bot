@@ -14,6 +14,7 @@ import { createEmbeddingProvider } from "./embedding";
 import { getJobItem, updateJob } from "./jobs";
 import { extractPageTitle, extractSections } from "./parsers/html";
 import type { ChunkMetadata, IngestJobStats } from "./types";
+import { runFaqIngestForSource } from "./faq-ingest";
 import { createVectorStore } from "./vectors";
 
 async function getSourceItem(tenantId: string, sourceId: string, config: CoreConfig) {
@@ -360,6 +361,63 @@ export function scheduleCatalogIngestJob(
 ): void {
   scheduleIngestJob("catalog", tenantId, jobId, config, () =>
     runCatalogIngestJob(tenantId, jobId, config)
+  );
+}
+
+export async function runFaqIngestJob(
+  tenantId: string,
+  jobId: string,
+  config: CoreConfig
+): Promise<void> {
+  const started = Date.now();
+  const stats: IngestJobStats = { chunksCreated: 0, tokensEmbedded: 0, errors: [] };
+  let sourceId = "";
+
+  try {
+    const jobItem = await getJobItem(tenantId, jobId, config);
+    sourceId = jobItem.sourceId as string;
+    const result = await runFaqIngestForSource(tenantId, sourceId, config);
+    stats.chunksCreated = result.chunkCount;
+    stats.durationSec = Math.round((Date.now() - started) / 1000);
+
+    await updateJob(
+      tenantId,
+      jobId,
+      {
+        status: "completed",
+        stats,
+        progressPct: 100,
+        completedAt: new Date().toISOString(),
+        error: null,
+      },
+      config
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    stats.durationSec = Math.round((Date.now() - started) / 1000);
+    await updateJob(
+      tenantId,
+      jobId,
+      {
+        status: "failed",
+        stats,
+        progressPct: 100,
+        error: message,
+        completedAt: new Date().toISOString(),
+      },
+      config
+    );
+    if (sourceId) await setSourceStatus(tenantId, sourceId, "error", config);
+  }
+}
+
+export function scheduleFaqIngestJob(
+  tenantId: string,
+  jobId: string,
+  config: CoreConfig
+): void {
+  scheduleIngestJob("faq", tenantId, jobId, config, () =>
+    runFaqIngestJob(tenantId, jobId, config)
   );
 }
 

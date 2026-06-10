@@ -25,7 +25,9 @@ import {
 } from "../ingest/jobs";
 import { deleteProductsForSource } from "../catalog/products";
 import { parseCatalogCsv } from "../ingest/parsers/catalog-csv";
-import { scheduleCatalogIngestJob, scheduleWebsiteIngestJob } from "../ingest/orchestrator";
+import { type FaqItem } from "../ingest/chunker/faq";
+import { embedFaqItems } from "../ingest/faq-ingest";
+import { scheduleCatalogIngestJob, scheduleFaqIngestJob, scheduleWebsiteIngestJob } from "../ingest/orchestrator";
 import { saveCatalogFile } from "../ingest/storage/catalog-file";
 import { createVectorStore } from "../ingest/vectors";
 import { getTenantLimits } from "../tenant/service";
@@ -212,6 +214,8 @@ export async function syncKnowledgeSource(
     scheduleWebsiteIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "catalog") {
     scheduleCatalogIngestJob(auth.tenantId, jobId, config);
+  } else if (source.type === "faq") {
+    scheduleFaqIngestJob(auth.tenantId, jobId, config);
   } else {
     const { updateJob } = await import("../ingest/jobs");
     await updateJob(
@@ -299,4 +303,75 @@ export async function deleteKnowledgeSource(
   await deleteProductsForSource(auth.tenantId, sourceId, config);
 
   return ok({ sourceId, deleted: true });
+}
+
+export async function ingestFaqKnowledge(
+  auth: AuthContext,
+  body: { items: FaqItem[] },
+  config: CoreConfig
+) {
+  const items = (body.items ?? [])
+    .map((i) => ({ question: i.question?.trim() ?? "", answer: i.answer?.trim() ?? "" }))
+    .filter((i) => i.question && i.answer);
+
+  if (!items.length) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "At least one FAQ item is required", 400);
+  }
+  if (items.length > 100) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Maximum 100 FAQ items per request", 400);
+  }
+
+  const existingSources = await listSourceItems(auth, config);
+  const existingFaq = existingSources.find((s) => s.type === "faq");
+  const db = getDocClient(config);
+  const now = new Date().toISOString();
+  let sourceId = existingFaq?.sourceId as string | undefined;
+
+  if (!sourceId) {
+    const limits = await getTenantLimits(auth, config);
+    if (existingSources.length >= limits.data!.maxSources) {
+      throw new ApiError(ErrorCodes.PLAN_LIMIT_EXCEEDED, "Knowledge source limit reached", 403);
+    }
+    sourceId = generateId("src_");
+    await db.send(
+      new PutCommand({
+        TableName: config.tableName,
+        Item: {
+          PK: Keys.tenantPk(auth.tenantId),
+          SK: Keys.source(sourceId),
+          sourceId,
+          tenantId: auth.tenantId,
+          type: "faq",
+          name: "FAQ",
+          config: { items, itemCount: items.length },
+          status: "syncing",
+          chunkCount: 0,
+          vectorCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        },
+      })
+    );
+  } else {
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.source(sourceId) },
+        UpdateExpression: "SET #status = :s, #config = :cfg, #updatedAt = :u",
+        ExpressionAttributeNames: {
+          "#status": "status",
+          "#config": "config",
+          "#updatedAt": "updatedAt",
+        },
+        ExpressionAttributeValues: {
+          ":s": "syncing",
+          ":cfg": { items, itemCount: items.length },
+          ":u": now,
+        },
+      })
+    );
+  }
+
+  const result = await embedFaqItems(auth.tenantId, sourceId, items, config);
+  return ok({ sourceId, itemCount: result.itemCount, status: "active" });
 }

@@ -181,6 +181,11 @@ export function createHttpApi(): MockApi {
       getMe: () => request("/api/v1/tenants/me"),
       updateMe: (patch) =>
         request("/api/v1/tenants/me", { method: "PATCH", body: JSON.stringify(patch) }),
+      uploadLogo: (file: File) => {
+        const form = new FormData();
+        form.append("file", file);
+        return request("/api/v1/tenants/me/logo", { method: "POST", body: form });
+      },
       getConfig: () => request("/api/v1/tenants/me/config"),
       updateConfig: (patch: Partial<TenantConfig>) =>
         request("/api/v1/tenants/me/config", { method: "PATCH", body: JSON.stringify(patch) }),
@@ -237,6 +242,17 @@ export function createHttpApi(): MockApi {
       listJobs: () => request("/api/v1/knowledge/jobs"),
       getJob: (jobId: string) => request(`/api/v1/knowledge/jobs/${jobId}`),
       deleteSource: (sourceId) => request(`/api/v1/knowledge/sources/${sourceId}`, { method: "DELETE" }),
+      ingestFaq: (items: Array<{ question: string; answer: string }>) =>
+        request("/api/v1/knowledge/faq", { method: "POST", body: JSON.stringify({ items }) }),
+    },
+    commerce: {
+      listProducts: (params?: { q?: string; limit?: number }) => {
+        const search = new URLSearchParams();
+        if (params?.q) search.set("q", params.q);
+        if (params?.limit != null) search.set("limit", String(params.limit));
+        const qs = search.toString();
+        return request(`/api/v1/commerce/products${qs ? `?${qs}` : ""}`);
+      },
     },
     team: {
       list: () => request("/api/v1/team"),

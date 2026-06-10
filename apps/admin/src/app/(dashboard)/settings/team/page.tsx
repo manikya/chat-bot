@@ -21,9 +21,15 @@ export default function TeamPage() {
   useEffect(() => { load(); }, []);
 
   const sendInvite = async () => {
-    await api.team.invite(invite);
-    toast.success(`Invite sent to ${invite.email}`);
-    setShowInvite(false);
+    try {
+      await api.team.invite(invite);
+      toast.success(`Invite sent to ${invite.email}`);
+      setShowInvite(false);
+      setInvite({ email: "", name: "", role: "viewer" });
+    } catch (err) {
+      const msg = err && typeof err === "object" && "message" in err ? String(err.message) : err instanceof Error ? err.message : "Invite failed";
+      toast.error(msg);
+    }
   };
 
   return (
