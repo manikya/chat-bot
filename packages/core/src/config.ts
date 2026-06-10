@@ -18,6 +18,10 @@ export interface CoreConfig {
   metaVerifyToken?: string;
   metaGraphVersion: string;
   metaOAuthRedirectUri?: string;
+  metaDevAccessToken?: string;
+  metaDevWabaId?: string;
+  metaDevPhoneNumberId?: string;
+  metaDevDisplayPhone?: string;
   skipEmailVerification: boolean;
 }
 
@@ -44,6 +48,10 @@ export function loadConfig(): CoreConfig {
     metaOAuthRedirectUri:
       process.env.META_OAUTH_REDIRECT_URI ??
       `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/channels/meta/callback`,
+    metaDevAccessToken: process.env.META_DEV_ACCESS_TOKEN,
+    metaDevWabaId: process.env.META_DEV_WABA_ID,
+    metaDevPhoneNumberId: process.env.META_DEV_PHONE_NUMBER_ID,
+    metaDevDisplayPhone: process.env.META_DEV_DISPLAY_PHONE,
     skipEmailVerification: process.env.SKIP_EMAIL_VERIFICATION === "true",
   };
 }

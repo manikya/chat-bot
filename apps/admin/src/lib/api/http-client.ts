@@ -207,6 +207,9 @@ export function createHttpApi(): MockApi {
         displayPhone?: string;
       }) =>
         request("/api/v1/channels/meta/connect", { method: "POST", body: JSON.stringify(body) }),
+      connectMetaDev: () =>
+        request("/api/v1/channels/meta/connect-dev", { method: "POST", body: JSON.stringify({}) }),
+      metaDevStatus: () => request("/api/v1/channels/meta/dev-status"),
       disconnect: (channel) => request(`/api/v1/channels/meta/${channel}`, { method: "DELETE" }),
       health: () => request("/api/v1/channels/meta/health"),
     },

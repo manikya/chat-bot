@@ -11,7 +11,7 @@ import {
 import {
   MetaGraphError,
   debugAccessToken,
-  discoverWabaIdFromDebug,
+  discoverWabaFromAccessToken,
   exchangeOAuthCode,
   expiresAtFromSeconds,
   getPhoneNumberDetails,
@@ -189,6 +189,36 @@ async function persistWhatsAppConnection(
   }
 }
 
+export function isMetaDevConnectConfigured(config: CoreConfig): boolean {
+  return Boolean(
+    config.metaDevAccessToken && config.metaDevWabaId && config.metaDevPhoneNumberId
+  );
+}
+
+export async function connectMetaChannelWithDevCredentials(
+  auth: AuthContext,
+  config: CoreConfig
+) {
+  if (!isMetaDevConnectConfigured(config)) {
+    throw new ApiError(
+      ErrorCodes.NOT_FOUND,
+      "Dev Meta credentials not configured (META_DEV_ACCESS_TOKEN, META_DEV_WABA_ID, META_DEV_PHONE_NUMBER_ID)",
+      404
+    );
+  }
+
+  return connectMetaChannel(
+    auth,
+    {
+      accessToken: config.metaDevAccessToken,
+      wabaId: config.metaDevWabaId,
+      phoneNumberId: config.metaDevPhoneNumberId,
+      displayPhone: config.metaDevDisplayPhone,
+    },
+    config
+  );
+}
+
 export async function connectMetaChannel(
   auth: AuthContext,
   body: ConnectMetaBody,
@@ -227,12 +257,20 @@ async function connectMetaChannelInner(
     accessToken = exchanged.accessToken;
     tokenExpiresAt = expiresAtFromSeconds(exchanged.expiresIn);
 
+    try {
+      const longLived = await refreshLongLivedToken(config, accessToken);
+      accessToken = longLived.accessToken;
+      tokenExpiresAt = expiresAtFromSeconds(longLived.expiresIn) ?? tokenExpiresAt;
+    } catch {
+      // short-lived token is enough to finish setup
+    }
+
     const debug = await debugAccessToken(config, accessToken);
-    wabaId = wabaId || discoverWabaIdFromDebug(debug);
+    wabaId = wabaId || (await discoverWabaFromAccessToken(config, accessToken, debug));
     if (!wabaId) {
       throw new ApiError(
         ErrorCodes.VALIDATION_ERROR,
-        "Could not determine WhatsApp Business Account from token",
+        "Could not determine WhatsApp Business Account. Reconnect and select your WhatsApp Business account in Meta, or ensure your Facebook user manages a WABA.",
         400
       );
     }

@@ -35,6 +35,8 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/dashboard/stats",
   "GET /api/v1/channels",
   "POST /api/v1/channels/meta/connect",
+  "POST /api/v1/channels/meta/connect-dev",
+  "GET /api/v1/channels/meta/dev-status",
   "DELETE /api/v1/channels/meta/:channel",
   "GET /api/v1/channels/meta/health",
   "GET /webhooks/meta",

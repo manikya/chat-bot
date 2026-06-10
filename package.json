@@ -9,6 +9,8 @@
     "dev": "concurrently -n api,ui -c blue,green \"npm run dev:api\" \"npm run dev:ui\"",
     "dev:api": "npm run dev --workspace=@commercechat/api",
     "dev:ui": "npm run dev --workspace=@commercechat/admin",
+    "dev:ngrok:ui": "ngrok http 3000 --log=stdout",
+    "dev:ngrok:api": "ngrok http 3001 --log=stdout",
     "build": "npm run build:lambdas && npm run build --workspace=@commercechat/admin",
     "build:api": "npm run build --workspace=@commercechat/api",
     "build:ui": "npm run build --workspace=@commercechat/admin",

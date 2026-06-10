@@ -25,8 +25,10 @@ export { sendWhatsAppReply } from "./meta/whatsapp-outbound";
 export {
   listChannels,
   connectMetaChannel,
+  connectMetaChannelWithDevCredentials,
   disconnectMetaChannel,
   getChannelHealth,
+  isMetaDevConnectConfigured,
   resolveTenantByPhoneNumberId,
   ensureFreshMetaToken,
   getMetaCredentialsForTenant,

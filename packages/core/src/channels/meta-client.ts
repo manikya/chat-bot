@@ -178,13 +178,115 @@ export async function sendWhatsAppText(
   return json;
 }
 
+type GranularScope = { scope: string; target_ids?: string[] };
+
 export function discoverWabaIdFromDebug(debug: {
-  granular_scopes?: Array<{ scope: string; target_ids?: string[] }>;
+  granular_scopes?: GranularScope[];
 }): string | undefined {
-  const scope = debug.granular_scopes?.find(
-    (s) => s.scope === "whatsapp_business_management" || s.scope === "whatsapp_business_messaging"
+  for (const scopeName of ["whatsapp_business_management", "whatsapp_business_messaging"]) {
+    const scope = debug.granular_scopes?.find((s) => s.scope === scopeName);
+    const id = scope?.target_ids?.[0];
+    if (id) return id;
+  }
+  return undefined;
+}
+
+export async function listUserBusinesses(config: CoreConfig, accessToken: string) {
+  const res = await graphGet<{ data: Array<{ id: string; name?: string }> }>(
+    config,
+    "/me/businesses?fields=id,name",
+    accessToken
   );
-  return scope?.target_ids?.[0];
+  return res.data ?? [];
+}
+
+async function listBusinessWabas(
+  config: CoreConfig,
+  businessId: string,
+  accessToken: string,
+  edge: "owned_whatsapp_business_accounts" | "client_whatsapp_business_accounts"
+) {
+  const res = await graphGet<{ data: Array<{ id: string; name?: string }> }>(
+    config,
+    `/${businessId}/${edge}?fields=id,name`,
+    accessToken
+  );
+  return res.data ?? [];
+}
+
+async function discoverWabaFromMeBusinesses(
+  config: CoreConfig,
+  accessToken: string
+): Promise<string | undefined> {
+  try {
+    const res = await graphGet<{
+      businesses?: {
+        data?: Array<{
+          owned_whatsapp_business_accounts?: { data?: Array<{ id: string }> };
+          client_whatsapp_business_accounts?: { data?: Array<{ id: string }> };
+        }>;
+      };
+    }>(
+      config,
+      "/me?fields=businesses{owned_whatsapp_business_accounts.limit(5){id},client_whatsapp_business_accounts.limit(5){id}}",
+      accessToken
+    );
+    for (const biz of res.businesses?.data ?? []) {
+      const owned = biz.owned_whatsapp_business_accounts?.data?.[0]?.id;
+      if (owned) return owned;
+      const client = biz.client_whatsapp_business_accounts?.data?.[0]?.id;
+      if (client) return client;
+    }
+  } catch {
+    // try per-business edges next
+  }
+  return undefined;
+}
+
+/** Resolve WABA from debug_token target_ids or by querying the user's businesses. */
+export async function discoverWabaFromAccessToken(
+  config: CoreConfig,
+  accessToken: string,
+  debug?: { granular_scopes?: GranularScope[] }
+): Promise<string | undefined> {
+  const fromDebug = discoverWabaIdFromDebug(debug ?? {});
+  if (fromDebug) return fromDebug;
+
+  const fromMe = await discoverWabaFromMeBusinesses(config, accessToken);
+  if (fromMe) return fromMe;
+
+  const businessIds = new Set<string>();
+  for (const s of debug?.granular_scopes ?? []) {
+    if (s.scope === "business_management") {
+      for (const id of s.target_ids ?? []) businessIds.add(id);
+    }
+  }
+
+  if (businessIds.size === 0) {
+    try {
+      for (const b of await listUserBusinesses(config, accessToken)) {
+        businessIds.add(b.id);
+      }
+    } catch {
+      // fall through — caller reports a clear error if nothing is found
+    }
+  }
+
+  for (const businessId of businessIds) {
+    for (const edge of [
+      "owned_whatsapp_business_accounts",
+      "client_whatsapp_business_accounts",
+    ] as const) {
+      try {
+        const wabas = await listBusinessWabas(config, businessId, accessToken, edge);
+        if (wabas[0]?.id) return wabas[0].id;
+      } catch {
+        // try next edge / business
+      }
+    }
+  }
+
+  return undefined;
 }
 
 export function expiresAtFromSeconds(seconds?: number): string | undefined {

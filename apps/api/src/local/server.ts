@@ -35,6 +35,8 @@ import {
   connectHandler as channelsConnectHandler,
   disconnectHandler as channelsDisconnectHandler,
   healthHandler as channelsHealthHandler,
+  devConnectHandler as channelsDevConnectHandler,
+  devStatusHandler as channelsDevStatusHandler,
 } from "../handlers/channels";
 import { corsHeaders, matchPathParams } from "../lib/apigw";
 import { toApigwEvent } from "./event";
@@ -79,6 +81,8 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },
   { method: "GET", path: "/api/v1/channels", handler: channelsListHandler },
   { method: "POST", path: "/api/v1/channels/meta/connect", handler: channelsConnectHandler },
+  { method: "POST", path: "/api/v1/channels/meta/connect-dev", handler: channelsDevConnectHandler },
+  { method: "GET", path: "/api/v1/channels/meta/dev-status", handler: channelsDevStatusHandler },
   { method: "GET", path: "/api/v1/channels/meta/health", handler: channelsHealthHandler },
 ];
 
