@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth/context";
 import { Loader2 } from "lucide-react";
 
 export default function HomePage() {
-  const { isAuthenticated, isLoading, tenant } = useAuth();
+  const { isAuthenticated, isLoading, tenant, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -15,12 +15,16 @@ export default function HomePage() {
       router.replace("/login");
       return;
     }
-    if (tenant?.onboardingStep && tenant.onboardingStep !== "complete") {
+    if (
+      user?.role === "owner" &&
+      tenant?.onboardingStep &&
+      tenant.onboardingStep !== "complete"
+    ) {
       router.replace(`/onboarding/${tenant.onboardingStep}`);
       return;
     }
     router.replace("/dashboard");
-  }, [isLoading, isAuthenticated, tenant, router]);
+  }, [isLoading, isAuthenticated, tenant, user, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center">

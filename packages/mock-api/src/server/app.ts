@@ -286,6 +286,27 @@ export function createMockServerApp() {
       201
     );
   });
+  app.post("/auth/accept-invite", async (c) => {
+    const body = await c.req.json();
+    const session = store.resolve(getToken(c));
+    return json(
+      ok({
+        accessToken: "mock_access_invite",
+        refreshToken: "mock_refresh_invite",
+        expiresIn: 3600,
+        tokenType: "Bearer",
+        user: {
+          ...session.user,
+          userId: "usr_invited",
+          email: body.email ?? "invited@example.com",
+          name: body.name ?? "Invited User",
+          role: "viewer",
+          emailVerified: true,
+        },
+        tenant: session.tenant,
+      })
+    );
+  });
 
   app.get("/api/v1/dashboard/stats", async () => json(ok(DEMO_DASHBOARD)));
 

@@ -184,6 +184,30 @@ export function createMockApi() {
         return ok({ reset: true }, "Password updated successfully.");
       },
 
+      async acceptInvite(body: { token: string; password: string; name?: string }) {
+        await delay(400);
+        const invited = defaultSession({
+          user: {
+            userId: "usr_invited",
+            tenantId: DEMO_TENANT.tenantId,
+            email: "invited@example.com",
+            name: body.name ?? "Invited User",
+            role: "viewer",
+            emailVerified: true,
+            mfaEnabled: false,
+          },
+        });
+        saveSession(invited);
+        return ok<LoginResult>({
+          accessToken: "mock_access_" + Date.now(),
+          refreshToken: "mock_refresh_" + Date.now(),
+          expiresIn: 3600,
+          tokenType: "Bearer",
+          user: invited.user,
+          tenant: invited.tenant,
+        });
+      },
+
       async logout() {
         await delay(200);
         if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);

@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import {
   ApiError,
   ErrorCodes,
@@ -7,9 +7,12 @@ import {
   normalizeEmail,
   ok,
   type AuthContext,
+  type User,
   type UserRole,
 } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
+import { issueAuthSession } from "../auth/service";
+import { hashPassword, validatePassword } from "../auth/password";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import type { EmailProvider } from "../email/provider";
@@ -125,4 +128,124 @@ export async function inviteTeamMember(
     role,
     expiresAt,
   });
+}
+
+export async function acceptTeamInvite(
+  body: { token: string; password: string; name?: string },
+  config: CoreConfig
+) {
+  const passwordError = validatePassword(body.password);
+  if (passwordError) throw new ApiError(ErrorCodes.VALIDATION_ERROR, passwordError, 400);
+
+  const rawToken = body.token?.trim();
+  if (!rawToken) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "token is required", 400);
+  }
+
+  const hash = tokenHash(rawToken);
+  const db = getDocClient(config);
+  const tokenRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tokenPk(hash), SK: Keys.tokenSk() },
+    })
+  );
+  const record = tokenRes.Item;
+  if (!record || record.purpose !== "team_invite") {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Invalid or expired invite", 400);
+  }
+  if (record.used) {
+    throw new ApiError(ErrorCodes.INVITE_USED, "Invite already used", 400);
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expiresAt = (record.expiresAt ?? record.ttl) as number;
+  if (expiresAt < nowSec) {
+    throw new ApiError(ErrorCodes.INVITE_EXPIRED, "Invite expired", 422);
+  }
+
+  const tenantId = record.tenantId as string;
+  const email = record.email as string;
+  const role = record.role as UserRole;
+  const displayName = (body.name?.trim() || (record.name as string)?.trim() || "");
+  if (!displayName) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "name is required", 400);
+  }
+
+  const existing = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.emailLookupPk(email), SK: Keys.emailLookupSk() },
+    })
+  );
+  if (existing.Item) {
+    throw new ApiError(ErrorCodes.EMAIL_EXISTS, "Email already registered", 409);
+  }
+
+  const limitsRes = await getTenantLimits({ tenantId, userId: "", role: "viewer", email: "" }, config);
+  const members = await listUserRecords(tenantId, config);
+  if (members.length >= limitsRes.data!.maxTeamMembers) {
+    throw new ApiError(ErrorCodes.PLAN_LIMIT_EXCEEDED, "Team member limit reached", 403);
+  }
+
+  const userId = generateId("usr_");
+  const passwordHash = await hashPassword(body.password);
+  const now = new Date().toISOString();
+
+  await db.send(
+    new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: {
+            TableName: config.tableName,
+            Item: {
+              PK: Keys.tenantPk(tenantId),
+              SK: Keys.user(userId),
+              userId,
+              tenantId,
+              email,
+              emailNormalized: email,
+              name: displayName,
+              passwordHash,
+              role,
+              status: "active",
+              emailVerified: true,
+              mfa: { enabled: false, method: "none" },
+              failedLoginAttempts: 0,
+              createdAt: now,
+            },
+            ConditionExpression: "attribute_not_exists(SK)",
+          },
+        },
+        {
+          Put: {
+            TableName: config.tableName,
+            Item: { PK: Keys.emailLookupPk(email), SK: Keys.emailLookupSk(), tenantId, userId },
+            ConditionExpression: "attribute_not_exists(PK)",
+          },
+        },
+        {
+          Update: {
+            TableName: config.tableName,
+            Key: { PK: Keys.tokenPk(hash), SK: Keys.tokenSk() },
+            UpdateExpression: "SET used = :u",
+            ConditionExpression: "attribute_not_exists(used) OR used = :f",
+            ExpressionAttributeValues: { ":u": true, ":f": false },
+          },
+        },
+      ],
+    })
+  );
+
+  const user: User = {
+    userId,
+    tenantId,
+    email,
+    name: displayName,
+    role,
+    emailVerified: true,
+    mfaEnabled: false,
+  };
+
+  return issueAuthSession(tenantId, userId, user, config);
 }

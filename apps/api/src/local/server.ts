@@ -16,6 +16,7 @@ import { handler as forgotPasswordHandler } from "../handlers/auth-forgot-passwo
 import { handler as resetPasswordHandler } from "../handlers/auth-reset-password";
 import { handler as resendVerificationHandler } from "../handlers/auth-resend-verification";
 import { handler as authInviteHandler } from "../handlers/auth-invite";
+import { handler as authAcceptInviteHandler } from "../handlers/auth-accept-invite";
 import { handler as tenantMeHandler } from "../handlers/tenant-me";
 import { handler as tenantLogoHandler } from "../handlers/tenant-logo";
 import { handler as tenantConfigHandler } from "../handlers/tenant-config";
@@ -67,6 +68,7 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/auth/reset-password", handler: resetPasswordHandler },
   { method: "POST", path: "/auth/resend-verification", handler: resendVerificationHandler },
   { method: "POST", path: "/auth/invite", handler: authInviteHandler },
+  { method: "POST", path: "/auth/accept-invite", handler: authAcceptInviteHandler },
   { method: "GET", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "PATCH", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "POST", path: "/api/v1/tenants/me/logo", handler: tenantLogoHandler },

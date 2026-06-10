@@ -21,6 +21,7 @@ const NO_REFRESH_PATHS = new Set([
   "/auth/reset-password",
   "/auth/verify-email",
   "/auth/resend-verification",
+  "/auth/accept-invite",
 ]);
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -160,6 +161,8 @@ export function createHttpApi(): MockApi {
         request("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
       resetPassword: (token: string, password: string) =>
         request("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
+      acceptInvite: (body: { token: string; password: string; name?: string }) =>
+        request("/auth/accept-invite", { method: "POST", body: JSON.stringify(body) }),
       logout: async () => {
         const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
         try {

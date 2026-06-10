@@ -60,6 +60,8 @@ export function toApigwResponse(result: ApiResponse<unknown>, statusCode = 200):
       : code === "EMAIL_EXISTS" ? 409
       : code === "PLAN_LIMIT_EXCEEDED" ? 403
       : code === "ONBOARDING_INCOMPLETE" ? 400
+      : code === "INVITE_EXPIRED" ? 422
+      : code === "INVITE_USED" ? 400
       : 400;
     return {
       statusCode: status,

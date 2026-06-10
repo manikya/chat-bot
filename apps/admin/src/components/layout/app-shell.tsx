@@ -40,7 +40,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, tenant, logout } = useAuth();
 
   const showOnboardingBanner =
-    tenant?.onboardingStep && tenant.onboardingStep !== "complete";
+    user?.role === "owner" &&
+    tenant?.onboardingStep &&
+    tenant.onboardingStep !== "complete";
 
   return (
     <div className="flex min-h-screen bg-muted/30">

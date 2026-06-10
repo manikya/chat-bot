@@ -635,6 +635,93 @@ export async function resendVerification(email: string, deps: AuthDeps) {
   );
 }
 
+export async function issueAuthSession(
+  tenantId: string,
+  userId: string,
+  user: User,
+  config: CoreConfig
+) {
+  const db = getDocClient(config);
+  const profileRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.profile() },
+    })
+  );
+  if (!profileRes.Item) {
+    throw new ApiError(ErrorCodes.NOT_FOUND, "Tenant not found", 404);
+  }
+
+  const sessionId = generateId("sess_");
+  const refreshToken = randomBytes(32).toString("hex");
+  const refreshHash = await hashPassword(refreshToken);
+  const sessionTtl = Math.floor(Date.now() / 1000) + config.refreshTokenTtlSec;
+
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.tenantPk(tenantId),
+        SK: Keys.session(sessionId),
+        sessionId,
+        userId,
+        refreshTokenHash: refreshHash,
+        refreshLookupHash: tokenHash(refreshToken),
+        mfaVerified: true,
+        createdAt: new Date().toISOString(),
+        expiresAt: sessionTtl,
+        ttl: sessionTtl,
+        revoked: false,
+      },
+    })
+  );
+
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.refreshLookupPk(tokenHash(refreshToken)),
+        SK: Keys.refreshLookupSk(),
+        tenantId,
+        sessionId,
+        ttl: sessionTtl,
+      },
+    })
+  );
+
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.user(userId) },
+      UpdateExpression: "SET failedLoginAttempts = :z, lastLoginAt = :n REMOVE lockedUntil",
+      ExpressionAttributeValues: { ":z": 0, ":n": new Date().toISOString() },
+    })
+  );
+
+  const profile = profileRes.Item;
+  const accessToken = await signAccessToken(
+    { sub: userId, tid: tenantId, role: user.role, email: user.email, mfa: true },
+    config
+  );
+
+  return ok({
+    accessToken,
+    refreshToken,
+    expiresIn: config.accessTokenTtlSec,
+    tokenType: "Bearer",
+    user,
+    tenant: {
+      tenantId,
+      storeName: profile.storeName,
+      plan: profile.plan,
+      status: profile.status,
+      timezone: profile.timezone,
+      onboardingStep: profile.onboardingStep,
+      logoUrl: profile.logoUrl,
+    },
+  });
+}
+
 export async function getMe(auth: { tenantId: string; userId: string }, deps: AuthDeps) {
   const db = getDocClient(deps.config);
   const [userRes, profileRes] = await Promise.all([

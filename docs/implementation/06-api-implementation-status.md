@@ -19,8 +19,9 @@
 | 2026-06-07 | Widget message formatting (bold, lists, line breaks) + product action chips |
 | 2026-06-08 | WhatsApp OAuth via ngrok, WABA discovery, dev token connect |
 | 2026-06-10 | Team list/invite, logo upload, FAQ ingest, commerce products APIs + admin UI |
+| 2026-06-10 | `POST /auth/accept-invite` + `/accept-invite` UI (team join E2E) |
 
-**Git (local `main`):** through `ee29417` (team, logo, FAQ, commerce). Not pushed.
+**Git (local `main`):** through accept-invite E2E. Not pushed.
 
 ---
 
@@ -28,7 +29,7 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **42 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **43 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
 | **Not started** (no handler, no mock) | 8+ routes |
 | **Phase 2** (billing, MFA, team CRUD) | 8 routes |
@@ -55,6 +56,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `POST` | `/auth/reset-password` | `auth-reset-password` | Yes |
 | `POST` | `/auth/resend-verification` | `auth-resend-verification` | Yes |
 | `POST` | `/auth/invite` | `auth-invite` | Yes |
+| `POST` | `/auth/accept-invite` | `auth-accept-invite` | Yes |
 | `GET` | `/api/v1/tenants/me` | `tenant-me` | Yes |
 | `PATCH` | `/api/v1/tenants/me` | `tenant-me` | Yes |
 | `POST` | `/api/v1/tenants/me/logo` | `tenant-logo` | Yes |
@@ -115,9 +117,7 @@ _None — all admin screens use real handlers locally._
 
 ### MVP — remaining
 
-| Method | Route | Sprint | Notes |
-|--------|-------|--------|-------|
-| `POST` | `/auth/accept-invite` | 8 | Team onboarding (invite email links here) |
+_None — core auth + team invite flow complete._
 
 ### Phase 2
 
@@ -127,11 +127,10 @@ Billing, MFA, team member CRUD (remove/update roles), `POST /api/v1/widget/chat/
 
 ## 5. Recommended build order
 
-1. **Accept invite** — complete team onboarding flow
-2. **WhatsApp E2E** — ngrok API webhooks, inbound message + reply test
-3. **Infra** — CDK deploy, Resend email, CI
-4. **Widget polish** — rich product cards, rate limiting, CDN deploy
-5. **Phase 2** — billing, MFA, production logo storage (S3)
+1. **WhatsApp E2E** — ngrok API webhooks, inbound message + reply test
+2. **Infra** — CDK deploy, Resend email, CI
+3. **Widget polish** — rich product cards, rate limiting, CDN deploy
+4. **Phase 2** — billing, MFA, production logo storage (S3)
 
 ---
 
@@ -141,7 +140,7 @@ Billing, MFA, team member CRUD (remove/update roles), `POST /api/v1/widget/chat/
 |--------------|----------|---------------|
 | Auth, profile, onboarding, knowledge | Yes | — |
 | Logo upload (onboarding profile) | Yes | — |
-| Team list + invite | Yes | — |
+| Team list, invite, accept invite | Yes | — |
 | FAQ quick-add, catalog products (knowledge page) | Yes | — |
 | Bot config + test simulator | Config + chat orchestrator | — |
 | Usage, dashboard | Usage + dashboard stats | — |

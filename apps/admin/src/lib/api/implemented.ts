@@ -9,6 +9,7 @@ export const IMPLEMENTED_ROUTES = [
   "POST /auth/reset-password",
   "POST /auth/resend-verification",
   "POST /auth/invite",
+  "POST /auth/accept-invite",
   "GET /auth/me",
   "POST /auth/verify-email",
   "GET /api/v1/tenants/me",
