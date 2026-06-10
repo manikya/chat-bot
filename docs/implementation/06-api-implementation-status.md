@@ -1,7 +1,7 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-07  
+**Last updated:** 2026-06-10  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)
 
 ---
@@ -17,8 +17,10 @@
 | 2026-06-07 | Usage, conversations, widget APIs + API key auth |
 | 2026-06-07 | Dashboard stats (live DynamoDB counts), widget `v1.js` bundle |
 | 2026-06-07 | Widget message formatting (bold, lists, line breaks) + product action chips |
+| 2026-06-08 | WhatsApp OAuth via ngrok, WABA discovery, dev token connect |
+| 2026-06-10 | Team list/invite, logo upload, FAQ ingest, commerce products APIs + admin UI |
 
-**Git (local `main`):** through `cf779fc` (dashboard stats + widget bundle). Not pushed.
+**Git (local `main`):** through `ee29417` (team, logo, FAQ, commerce). Not pushed.
 
 ---
 
@@ -26,10 +28,10 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **35 routes** |
-| **Mock only** (UI works; fixture data) | **6 routes** |
-| **Not started** (no handler, no mock) | 12+ routes |
-| **Phase 2** (billing, MFA, team list) | 8 routes |
+| **Implemented** (real Lambda + DynamoDB) | **42 routes** |
+| **Mock only** (UI works; fixture data) | **0 routes** |
+| **Not started** (no handler, no mock) | 8+ routes |
+| **Phase 2** (billing, MFA, team CRUD) | 8 routes |
 
 The admin UI calls all endpoints over HTTP. The local dev server routes matching paths to Lambda handlers; everything else falls through to `@commercechat/mock-api`.
 
@@ -52,8 +54,10 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `POST` | `/auth/forgot-password` | `auth-forgot-password` | Yes |
 | `POST` | `/auth/reset-password` | `auth-reset-password` | Yes |
 | `POST` | `/auth/resend-verification` | `auth-resend-verification` | Yes |
+| `POST` | `/auth/invite` | `auth-invite` | Yes |
 | `GET` | `/api/v1/tenants/me` | `tenant-me` | Yes |
 | `PATCH` | `/api/v1/tenants/me` | `tenant-me` | Yes |
+| `POST` | `/api/v1/tenants/me/logo` | `tenant-logo` | Yes |
 | `GET` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `PATCH` | `/api/v1/tenants/me/config` | `tenant-config` | Yes |
 | `GET` | `/api/v1/tenants/me/limits` | `tenant-limits` | Yes |
@@ -68,6 +72,9 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `POST` | `/api/v1/knowledge/sources/{sourceId}/sync` | `knowledge-sync` | Yes |
 | `GET` | `/api/v1/knowledge/jobs` | `knowledge-jobs` | Yes |
 | `GET` | `/api/v1/knowledge/jobs/{jobId}` | `knowledge-jobs` | Yes |
+| `POST` | `/api/v1/knowledge/faq` | `knowledge-faq` | Yes |
+| `GET` | `/api/v1/commerce/products` | `commerce-products` | Yes |
+| `GET` | `/api/v1/team` | `team` | Yes |
 | `POST` | `/api/v1/chat` | `chat-api` | Yes |
 | `GET` | `/api/v1/conversations` | `conversations` | Yes |
 | `GET` | `/api/v1/conversations/{id}` | `conversations` | Yes |
@@ -75,10 +82,19 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/widget/config` | `widget` | Yes |
 | `POST` | `/api/v1/widget/chat` | `widget` | Yes (embed) |
 | `GET` | `/api/v1/dashboard/stats` | `dashboard-stats` | Yes |
+| `GET` | `/api/v1/channels` | `channels` | Yes |
+| `POST` | `/api/v1/channels/meta/connect` | `channels-meta-connect` | Yes |
+| `POST` | `/api/v1/channels/meta/connect-dev` | `channels-meta-connect-dev` | Yes |
+| `GET` | `/api/v1/channels/meta/dev-status` | `channels-meta-dev-status` | Yes |
+| `DELETE` | `/api/v1/channels/meta/{channel}` | `channels-meta-disconnect` | Yes |
+| `GET` | `/api/v1/channels/meta/health` | `channels-meta-health` | Yes |
+| `GET` | `/webhooks/meta` | `webhooks-meta` | — |
+| `POST` | `/webhooks/meta` | `webhooks-meta` | — |
 
 **Also built (not a route):**
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
 - Chat orchestrator — `packages/core/src/chat/`
+- Logo static files — `GET /assets/logos/{filename}` from `.data/assets/logos/` (local dev)
 - Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, sync chat, `formatBotText` for `**bold**` / numbered lists / `\n`, `suggestedActions` product chips)
 - Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)
 
@@ -91,14 +107,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 
 ## 3. Mock only (next to replace)
 
-| Method | Route | Suggested Lambda | Priority |
-|--------|-------|------------------|----------|
-| `GET` | `/api/v1/channels` | `channels` | P1 |
-| `POST` | `/api/v1/channels/meta/connect` | `channels-meta-connect` | P1 |
-| `DELETE` | `/api/v1/channels/meta/{channel}` | `channels-meta-disconnect` | P1 |
-| `GET` | `/api/v1/channels/meta/health` | `channels-meta-health` | P2 |
-| `GET` | `/api/v1/team` | `team` | P2 |
-| `POST` | `/auth/invite` | `auth-invite` | P2 |
+_None — all admin screens use real handlers locally._
 
 ---
 
@@ -108,24 +117,21 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 
 | Method | Route | Sprint | Notes |
 |--------|-------|--------|-------|
-| `POST` | `/api/v1/tenants/me/logo` | 1 | S3 presigned upload |
-| `POST` | `/api/v1/knowledge/faq` | 2 | Inline FAQ ingest |
-| `GET` | `/api/v1/commerce/products` | 3 | Product catalog admin |
-| `GET/POST` | `/webhooks/meta` | 4 | WhatsApp inbound |
-| `POST` | `/auth/accept-invite` | 8 | Team onboarding |
+| `POST` | `/auth/accept-invite` | 8 | Team onboarding (invite email links here) |
 
 ### Phase 2
 
-Billing, MFA, team CRUD, `POST /api/v1/widget/chat/stream` (SSE).
+Billing, MFA, team member CRUD (remove/update roles), `POST /api/v1/widget/chat/stream` (SSE), S3 presigned logo upload for production.
 
 ---
 
 ## 5. Recommended build order
 
-1. **Sprint 4 Meta** — webhooks, WhatsApp connect, real channel health on dashboard
-2. **Infra** — CDK deploy, Resend email, CI
-3. **Widget polish** — rich product cards (image + add-to-cart), reliable `suggestedActions` without tool call, rate limiting, CDN deploy
-4. **Phase 2** — billing, team, MFA
+1. **Accept invite** — complete team onboarding flow
+2. **WhatsApp E2E** — ngrok API webhooks, inbound message + reply test
+3. **Infra** — CDK deploy, Resend email, CI
+4. **Widget polish** — rich product cards, rate limiting, CDN deploy
+5. **Phase 2** — billing, MFA, production logo storage (S3)
 
 ---
 
@@ -134,12 +140,14 @@ Billing, MFA, team CRUD, `POST /api/v1/widget/chat/stream` (SSE).
 | Admin screen | Live API | Mock fallback |
 |--------------|----------|---------------|
 | Auth, profile, onboarding, knowledge | Yes | — |
+| Logo upload (onboarding profile) | Yes | — |
+| Team list + invite | Yes | — |
+| FAQ quick-add, catalog products (knowledge page) | Yes | — |
 | Bot config + test simulator | Config + chat orchestrator | — |
 | Usage, dashboard | Usage + dashboard stats | — |
 | Conversations | List, thread, messages | — |
 | Widget / API keys | Config, regen-key, embed snippet | — |
-| Channels | — | Connect, health |
-| Team | — | List, invite |
+| Channels | Connect, health, webhooks | — |
 
 ---
 

@@ -55,11 +55,14 @@ packages/core/              → Real Lambda business logic + DynamoDB
 | Session auto-refresh + expired-session dialog | **Real** (client + `/auth/refresh`) |
 | Settings profile, onboarding profile | **Real** `GET/PATCH /tenants/me` (timezone dropdown) |
 | Onboarding wizard (steps, test-chat) | **Real** `/api/v1/onboarding/*` |
-| Knowledge sources, sync, jobs (website + catalog) | **Real** `/api/v1/knowledge/*` |
+| Knowledge sources, sync, jobs (website + catalog + FAQ) | **Real** `/api/v1/knowledge/*` |
+| Logo upload (onboarding profile) | **Real** `POST /api/v1/tenants/me/logo` |
+| Team list + invite | **Real** `GET /api/v1/team`, `POST /auth/invite` |
+| Commerce products (knowledge page) | **Real** `GET /api/v1/commerce/products` |
 | Bot config, chat simulator, widget colors | **Real** config + chat orchestrator |
 | Usage, dashboard stats, conversations | **Real** DynamoDB metering + threads |
 | Widget embed, API key regen | **Real** `/widget/v1.js` + widget APIs |
-| Onboarding channels, team | Mock fallback on API server |
+| Channels (Meta connect, health) | **Real** `/api/v1/channels/*` |
 
 Full API status: [docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md)
 
