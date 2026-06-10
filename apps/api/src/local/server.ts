@@ -38,6 +38,13 @@ import { handler as conversationsHandler } from "../handlers/conversations";
 import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler } from "../handlers/widget";
 import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
 import { handler as webhookMetaHandler } from "../handlers/webhook-meta";
+import { handler as webhookPaymentHandler } from "../handlers/webhook-payment";
+import {
+  plansHandler as billingPlansHandler,
+  subscriptionHandler as billingSubscriptionHandler,
+  overviewHandler as billingOverviewHandler,
+  checkoutHandler as billingCheckoutHandler,
+} from "../handlers/billing";
 import {
   listHandler as channelsListHandler,
   connectHandler as channelsConnectHandler,
@@ -60,6 +67,11 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/health", handler: healthHandler },
   { method: "GET", path: "/webhooks/meta", handler: webhookMetaHandler },
   { method: "POST", path: "/webhooks/meta", handler: webhookMetaHandler },
+  { method: "POST", path: "/webhooks/payment", handler: webhookPaymentHandler },
+  { method: "GET", path: "/api/v1/billing/plans", handler: billingPlansHandler },
+  { method: "GET", path: "/api/v1/billing/subscription", handler: billingSubscriptionHandler },
+  { method: "GET", path: "/api/v1/billing/overview", handler: billingOverviewHandler },
+  { method: "POST", path: "/api/v1/billing/checkout", handler: billingCheckoutHandler },
   { method: "POST", path: "/auth/signup", handler: signupHandler },
   { method: "POST", path: "/auth/login", handler: loginHandler },
   { method: "GET", path: "/auth/me", handler: meHandler },

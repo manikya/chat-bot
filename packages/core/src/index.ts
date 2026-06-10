@@ -21,6 +21,16 @@ export { retrieveKnowledge } from "./ingest/retrieve";
 export { processChat, type ChatRequestBody } from "./chat/service";
 export { runChatOrchestrator } from "./chat/orchestrator";
 export { getTenantUsage } from "./chat/usage";
+export { BILLING_PLANS, type BillingPlan } from "./billing/plans";
+export {
+  listBillingPlans,
+  getBillingSubscription,
+  getBillingOverview,
+  createBillingCheckout,
+  confirmBillingCheckout,
+  applyPlanToTenant,
+  verifyPaymentWebhookSecret,
+} from "./billing/service";
 export { createLLMProvider } from "./llm/provider";
 export { verifyWidgetApiKey, regenerateWidgetApiKey } from "./auth/api-key";
 export * from "./conversations/service";

@@ -51,6 +51,11 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/channels/meta/health",
   "GET /webhooks/meta",
   "POST /webhooks/meta",
+  "GET /api/v1/billing/plans",
+  "GET /api/v1/billing/subscription",
+  "GET /api/v1/billing/overview",
+  "POST /api/v1/billing/checkout",
+  "POST /webhooks/payment",
 ] as const;
 
 export const REAL_API_DOMAINS = [
@@ -69,4 +74,5 @@ export const REAL_API_DOMAINS = [
   "team",
   "commerce",
   "webhooks",
+  "billing",
 ] as const;

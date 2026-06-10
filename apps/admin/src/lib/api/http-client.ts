@@ -277,6 +277,13 @@ export function createHttpApi(): MockApi {
     dashboard: {
       getStats: () => request("/api/v1/dashboard/stats"),
     },
+    billing: {
+      getPlans: () => request("/api/v1/billing/plans"),
+      getSubscription: () => request("/api/v1/billing/subscription"),
+      getOverview: () => request("/api/v1/billing/overview"),
+      checkout: (body: { plan: string; successUrl?: string; cancelUrl?: string }) =>
+        request("/api/v1/billing/checkout", { method: "POST", body: JSON.stringify(body) }),
+    },
     widget: {
       getConfig: () => request("/api/v1/widget/config"),
     },

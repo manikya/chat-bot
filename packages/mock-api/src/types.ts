@@ -95,6 +95,59 @@ export interface Usage {
   limits: { maxMessages: number; messagesRemaining: number };
 }
 
+export type TenantPlan = "trial" | "starter" | "pro" | "business" | "enterprise";
+
+export interface BillingPlan {
+  id: TenantPlan;
+  name: string;
+  description: string;
+  priceLkr: number;
+  priceUsd: number;
+  interval: "month";
+  trialDays?: number;
+  limits: PlanLimits;
+  features: string[];
+  highlighted?: boolean;
+  contactSales?: boolean;
+}
+
+export interface BillingSubscription {
+  plan: TenantPlan;
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  billingPeriodStart: string | null;
+}
+
+export interface BillingCheckoutSession {
+  checkoutId: string;
+  plan: TenantPlan;
+  amountLkr: number;
+  currency: "LKR";
+  status: "pending" | "paid" | "failed";
+  redirectUrl: string | null;
+  gateway: string;
+  message?: string;
+  successUrl?: string;
+  cancelUrl?: string;
+}
+
+export interface BillingOverview {
+  subscription: BillingSubscription;
+  usage: Omit<Usage, "limits">;
+  limits: PlanLimits;
+  resources: {
+    sources: number;
+    teamMembers: number;
+    messagesRemaining: number;
+  };
+  utilization: {
+    messagesPct: number;
+    sourcesPct: number;
+    teamPct: number;
+  };
+}
+
 export interface ChannelInfo {
   channel: ChannelType;
   status: "connected" | "disconnected";

@@ -33,6 +33,12 @@ export interface CoreConfig {
   s3PublicUrl?: string;
   s3AccessKeyId?: string;
   s3SecretAccessKey?: string;
+  /** Template URL for Sri Lankan / external payment gateway redirect */
+  paymentGatewayCheckoutUrl?: string;
+  /** Shared secret for POST /webhooks/payment (gateway callback) */
+  paymentWebhookSecret?: string;
+  /** Dev only: auto-activate plan on checkout without payment */
+  billingSkipPayment: boolean;
 }
 
 export function loadConfig(): CoreConfig {
@@ -73,5 +79,8 @@ export function loadConfig(): CoreConfig {
     s3PublicUrl: process.env.S3_PUBLIC_URL,
     s3AccessKeyId: process.env.AWS_ACCESS_KEY_ID,
     s3SecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    paymentGatewayCheckoutUrl: process.env.PAYMENT_GATEWAY_CHECKOUT_URL,
+    paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET,
+    billingSkipPayment: process.env.BILLING_SKIP_PAYMENT === "true",
   };
 }

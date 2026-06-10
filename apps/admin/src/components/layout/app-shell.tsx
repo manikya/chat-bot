@@ -13,6 +13,7 @@ import {
   Settings,
   Users,
   BarChart3,
+  CreditCard,
   Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ const nav = [
   { href: "/channels", label: "Channels", icon: Radio },
   { href: "/widget", label: "Widget", icon: Code2 },
   { href: "/usage", label: "Usage", icon: BarChart3 },
+  { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings/team", label: "Team", icon: Users },
   { href: "/settings/api-keys", label: "API keys", icon: Hash },
   { href: "/settings/profile", label: "Settings", icon: Settings },

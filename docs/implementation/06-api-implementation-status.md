@@ -21,8 +21,9 @@
 | 2026-06-10 | Team list/invite, logo upload, FAQ ingest, commerce products APIs + admin UI |
 | 2026-06-10 | `POST /auth/accept-invite` + `/accept-invite` UI (team join E2E) |
 | 2026-06-10 | Team remove/role APIs, S3 presigned logo via LocalStack |
+| 2026-06-10 | Billing plans + usage overview APIs, payment webhook stub (no Stripe) |
 
-**Git (local `main`):** through team management + S3 logo. Not pushed.
+**Git (local `main`):** through billing UI + gateway-ready checkout. Not pushed.
 
 ---
 
@@ -30,7 +31,7 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **47 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **52 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
 | **Not started** (no handler, no mock) | 8+ routes |
 | **Phase 2** (billing, MFA, widget SSE) | 8 routes |
@@ -95,6 +96,11 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/channels/meta/dev-status` | `channels-meta-dev-status` | Yes |
 | `DELETE` | `/api/v1/channels/meta/{channel}` | `channels-meta-disconnect` | Yes |
 | `GET` | `/api/v1/channels/meta/health` | `channels-meta-health` | Yes |
+| `GET` | `/api/v1/billing/plans` | `billing` | Yes |
+| `GET` | `/api/v1/billing/subscription` | `billing` | Yes |
+| `GET` | `/api/v1/billing/overview` | `billing` | Yes |
+| `POST` | `/api/v1/billing/checkout` | `billing` | Yes |
+| `POST` | `/webhooks/payment` | `webhook-payment` | — |
 | `GET` | `/webhooks/meta` | `webhooks-meta` | — |
 | `POST` | `/webhooks/meta` | `webhooks-meta` | — |
 
@@ -126,7 +132,7 @@ _None — core auth + team invite flow complete._
 
 ### Phase 2
 
-Billing, MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets.
+MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets, full payment gateway adapter (Sri Lankan provider).
 
 ---
 
@@ -135,7 +141,7 @@ Billing, MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 ass
 1. **WhatsApp E2E** — ngrok API webhooks, inbound message + reply test
 2. **Infra** — CDK deploy, production S3/CDN, CI
 3. **Widget polish** — rich product cards, rate limiting, CDN deploy
-4. **Phase 2** — billing, MFA, widget SSE
+4. **Phase 2** — payment gateway adapter, MFA, widget SSE
 
 ---
 
@@ -148,7 +154,7 @@ Billing, MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 ass
 | Logo upload — S3 presign (onboarding profile) | Yes | — |
 | FAQ quick-add, catalog products (knowledge page) | Yes | — |
 | Bot config + test simulator | Config + chat orchestrator | — |
-| Usage, dashboard | Usage + dashboard stats | — |
+| Usage, billing, dashboard | Usage overview, billing plans/checkout | — |
 | Conversations | List, thread, messages | — |
 | Widget / API keys | Config, regen-key, embed snippet | — |
 | Channels | Connect, health, webhooks | — |

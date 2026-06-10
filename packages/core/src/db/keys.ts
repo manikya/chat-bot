@@ -27,4 +27,7 @@ export const Keys = {
   phoneRoutingPk: (phoneNumberId: string) => `PHONE#${phoneNumberId}`,
   phoneRoutingSk: () => "TENANT",
   idempotency: (key: string) => `IDEMPOTENCY#${key}`,
+  checkoutPk: (checkoutId: string) => `CHECKOUT#${checkoutId}`,
+  checkoutMeta: () => "META",
+  checkout: (checkoutId: string) => `CHECKOUT#${checkoutId}`,
 };
