@@ -17,7 +17,7 @@ import {
 import { detectIntent, ragSourceTypesForIntent } from "./intent";
 import { buildSystemPrompt } from "./prompts";
 import { executeTool, toolsForIntent } from "./tools";
-import { checkMessageQuota, incrementUsage } from "./usage";
+import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -118,14 +118,8 @@ export async function runChatOrchestrator(
   const text = input.message?.trim();
   if (!text) throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Message is required", 400);
 
-  const quota = await checkMessageQuota(auth.tenantId, config);
-  if (!quota.allowed) {
-    throw new ApiError(
-      ErrorCodes.PLAN_LIMIT_EXCEEDED,
-      `Monthly message limit reached (${quota.maxMessages})`,
-      429
-    );
-  }
+  await assertChannelEnabled(auth.tenantId, input.channel, config);
+  await reserveMessageQuota(auth.tenantId, config);
 
   const { storeName, config: tenantConfig } = await loadTenantContext(auth, config);
   const conversation = await resolveConversation(
@@ -237,7 +231,6 @@ export async function runChatOrchestrator(
   });
 
   await incrementUsage(auth.tenantId, config, {
-    messages: 1,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
   });

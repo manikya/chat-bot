@@ -28,7 +28,13 @@ export { createEmbeddingProvider } from "./ingest/embedding";
 export { retrieveKnowledge } from "./ingest/retrieve";
 export { processChat, type ChatRequestBody } from "./chat/service";
 export { runChatOrchestrator } from "./chat/orchestrator";
-export { getTenantUsage } from "./chat/usage";
+export {
+  getTenantUsage,
+  reserveMessageQuota,
+  assertChannelEnabled,
+  QUOTA_EXCEEDED_USER_MESSAGE,
+  isPlanLimitError,
+} from "./chat/usage";
 export { BILLING_PLANS, type BillingPlan } from "./billing/plans";
 export {
   listBillingPlans,

@@ -7,22 +7,29 @@ import {
   MessagingWindowClosedError,
 } from "../channels/messaging-policy";
 
+export interface MetaOutboundOptions {
+  bypassMessagingWindow?: boolean;
+}
+
 export async function sendWhatsAppReply(
   tenantId: string,
   phoneNumberId: string,
   to: string,
   text: string,
-  config: CoreConfig
+  config: CoreConfig,
+  options?: MetaOutboundOptions
 ) {
-  const conversation = await resolveConversation(tenantId, "whatsapp", to, config);
-  try {
-    assertCanSendFreeFormMessage(conversation);
-  } catch (err) {
-    if (err instanceof MessagingWindowClosedError) {
-      console.warn("[whatsapp] messaging window closed for", to, "tenant", tenantId);
-      return;
+  if (!options?.bypassMessagingWindow) {
+    const conversation = await resolveConversation(tenantId, "whatsapp", to, config);
+    try {
+      assertCanSendFreeFormMessage(conversation);
+    } catch (err) {
+      if (err instanceof MessagingWindowClosedError) {
+        console.warn("[whatsapp] messaging window closed for", to, "tenant", tenantId);
+        return;
+      }
+      throw err;
     }
-    throw err;
   }
 
   const creds = await ensureFreshMetaToken(tenantId, config);

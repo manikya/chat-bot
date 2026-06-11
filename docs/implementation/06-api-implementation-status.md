@@ -24,6 +24,7 @@
 | 2026-06-10 | Billing plans + usage overview APIs, payment webhook stub (no Stripe) |
 | 2026-06-11 | Facebook Messenger OAuth connect, inbound webhook + AI reply, dev connect |
 | 2026-06-11 | Meta creds → Secrets Manager (LocalStack), token refresh cron, 24h window policy |
+| 2026-06-11 | Hard message quota: atomic `reserveMessageQuota`, channel plan limits, Meta quota auto-reply |
 
 **Git (local `main`):** through Messenger E2E (local). Not pushed.
 

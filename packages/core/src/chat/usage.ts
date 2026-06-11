@@ -1,8 +1,15 @@
 import { UpdateCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { ok, type AuthContext } from "@commercechat/shared";
+import { ApiError, ErrorCodes, ok, type AuthContext } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
+
+export const QUOTA_EXCEEDED_USER_MESSAGE =
+  "Sorry, this store has reached its monthly message limit. Please try again later or contact the store directly.";
+
+export function isPlanLimitError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === ErrorCodes.PLAN_LIMIT_EXCEEDED;
+}
 
 function currentPeriod(): string {
   const d = new Date();
@@ -117,4 +124,70 @@ export async function checkMessageQuota(tenantId: string, config: CoreConfig) {
     return { allowed: false as const, usage, maxMessages };
   }
   return { allowed: true as const, usage, maxMessages };
+}
+
+/** Atomically reserve one message against the tenant's monthly cap before LLM work runs. */
+export async function reserveMessageQuota(tenantId: string, config: CoreConfig) {
+  const period = currentPeriod();
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+
+  const limitsRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.limits() },
+    })
+  );
+  const maxMessages = Number(limitsRes.Item?.maxMessages ?? 2000);
+
+  try {
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.usage(period) },
+        UpdateExpression:
+          "SET #period = if_not_exists(#period, :period), #updatedAt = :u ADD #messages :one",
+        ConditionExpression: "attribute_not_exists(#messages) OR #messages < :max",
+        ExpressionAttributeNames: {
+          "#period": "period",
+          "#updatedAt": "updatedAt",
+          "#messages": "messages",
+        },
+        ExpressionAttributeValues: {
+          ":period": period,
+          ":u": now,
+          ":one": 1,
+          ":max": maxMessages,
+        },
+      })
+    );
+  } catch (err) {
+    const e = err as { name?: string };
+    if (e.name === "ConditionalCheckFailedException") {
+      throw new ApiError(
+        ErrorCodes.PLAN_LIMIT_EXCEEDED,
+        `Monthly message limit reached (${maxMessages})`,
+        429
+      );
+    }
+    throw err;
+  }
+}
+
+export async function assertChannelEnabled(tenantId: string, channel: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  const limitsRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.limits() },
+    })
+  );
+  const enabled = (limitsRes.Item?.enabledChannels as string[] | undefined) ?? ["web", "whatsapp"];
+  if (!enabled.includes(channel)) {
+    throw new ApiError(
+      ErrorCodes.PLAN_LIMIT_EXCEEDED,
+      `Channel "${channel}" is not enabled on your plan`,
+      403
+    );
+  }
 }

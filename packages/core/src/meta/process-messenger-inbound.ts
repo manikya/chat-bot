@@ -1,6 +1,7 @@
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoreConfig } from "../config";
 import { runChatOrchestrator } from "../chat/orchestrator";
+import { isPlanLimitError, QUOTA_EXCEEDED_USER_MESSAGE } from "../chat/usage";
 import { resolveTenantByPageId } from "../channels/service";
 import type { MessengerInboundMessage } from "../channels/types";
 import { getDocClient } from "../db/client";
@@ -58,17 +59,32 @@ export async function processMessengerInbound(
     email: "",
   };
 
-  const result = await runChatOrchestrator(
-    auth,
-    {
-      channel: "messenger",
-      externalUserId: inbound.from,
-      message: inbound.text,
-    },
-    config
-  );
+  try {
+    const result = await runChatOrchestrator(
+      auth,
+      {
+        channel: "messenger",
+        externalUserId: inbound.from,
+        message: inbound.text,
+      },
+      config
+    );
 
-  await sendMessengerReply(tenantId, inbound.from, result.reply.content, config);
+    await sendMessengerReply(tenantId, inbound.from, result.reply.content, config);
 
-  console.log("[messenger] replied to", inbound.from, "tenant", tenantId);
+    console.log("[messenger] replied to", inbound.from, "tenant", tenantId);
+  } catch (err) {
+    if (isPlanLimitError(err) && err.statusCode === 429) {
+      await sendMessengerReply(
+        tenantId,
+        inbound.from,
+        QUOTA_EXCEEDED_USER_MESSAGE,
+        config,
+        { bypassMessagingWindow: true }
+      ).catch((sendErr) => console.warn("[messenger] quota notice failed", sendErr));
+      console.log("[messenger] quota exceeded for tenant", tenantId);
+      return;
+    }
+    throw err;
+  }
 }

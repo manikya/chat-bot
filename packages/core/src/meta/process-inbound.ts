@@ -1,6 +1,7 @@
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoreConfig } from "../config";
 import { runChatOrchestrator } from "../chat/orchestrator";
+import { isPlanLimitError, QUOTA_EXCEEDED_USER_MESSAGE } from "../chat/usage";
 import {
   ensureFreshMetaToken,
   resolveTenantByPhoneNumberId,
@@ -67,23 +68,39 @@ export async function processWhatsAppInbound(
     email: "",
   };
 
-  const result = await runChatOrchestrator(
-    auth,
-    {
-      channel: "whatsapp",
-      externalUserId: inbound.from,
-      message: inbound.text,
-    },
-    config
-  );
+  try {
+    const result = await runChatOrchestrator(
+      auth,
+      {
+        channel: "whatsapp",
+        externalUserId: inbound.from,
+        message: inbound.text,
+      },
+      config
+    );
 
-  await sendWhatsAppReply(
-    tenantId,
-    inbound.phoneNumberId,
-    inbound.from,
-    result.reply.content,
-    config
-  );
+    await sendWhatsAppReply(
+      tenantId,
+      inbound.phoneNumberId,
+      inbound.from,
+      result.reply.content,
+      config
+    );
 
-  console.log("[whatsapp] replied to", inbound.from, "tenant", tenantId);
+    console.log("[whatsapp] replied to", inbound.from, "tenant", tenantId);
+  } catch (err) {
+    if (isPlanLimitError(err) && err.statusCode === 429) {
+      await sendWhatsAppReply(
+        tenantId,
+        inbound.phoneNumberId,
+        inbound.from,
+        QUOTA_EXCEEDED_USER_MESSAGE,
+        config,
+        { bypassMessagingWindow: true }
+      ).catch((sendErr) => console.warn("[whatsapp] quota notice failed", sendErr));
+      console.log("[whatsapp] quota exceeded for tenant", tenantId);
+      return;
+    }
+    throw err;
+  }
 }

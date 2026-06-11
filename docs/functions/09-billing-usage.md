@@ -71,21 +71,14 @@ stripe products:
 
 **Atomic increment:** DynamoDB `UpdateItem` with `ADD`.
 
-### Quota check (before orchestration)
+### Quota check (before orchestration) — implemented
 
-```typescript
-async function checkQuota(tenantId: string): Promise<QuotaResult> {
-  const usage = await getUsage(tenantId, currentPeriod());
-  const limits = await getLimits(tenantId);
-  if (usage.messages >= limits.maxMessages) {
-    return { allowed: false, reason: "MESSAGE_QUOTA_EXCEEDED" };
-  }
-  return { allowed: true };
-}
-```
+`reserveMessageQuota(tenantId)` atomically increments the monthly `messages` counter with a DynamoDB condition (`messages < maxMessages`) before the LLM runs. Returns `PLAN_LIMIT_EXCEEDED` (HTTP 429) when at cap.
 
-**Soft limit (80%):** Email warning.  
-**Hard limit (100%):** Block AI processing; auto-reply with upgrade message.
+`assertChannelEnabled(tenantId, channel)` blocks channels not in the tenant `LIMITS.enabledChannels` list.
+
+**Soft limit (80%):** Shown in admin Usage/Billing UI (`messagesPct`). Email warning — planned.  
+**Hard limit (100%):** Orchestrator rejects new AI turns; Meta channels receive a short auto-reply explaining the limit.
 
 ---
 
