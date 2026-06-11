@@ -52,6 +52,10 @@ export interface TenantConfig {
     type: string;
     status: string;
     checkoutBaseUrl: string;
+    siteUrl?: string;
+    lastSyncAt?: string;
+    storeName?: string;
+    currency?: string;
   };
   widgetConfig: {
     primaryColor: string;

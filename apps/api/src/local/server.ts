@@ -28,6 +28,12 @@ import { handler as knowledgeSyncHandler } from "../handlers/knowledge-sync";
 import { handler as knowledgeJobsHandler } from "../handlers/knowledge-jobs";
 import { handler as knowledgeFaqHandler } from "../handlers/knowledge-faq";
 import { handler as commerceProductsHandler } from "../handlers/commerce-products";
+import {
+  connectHandler as wordpressConnectHandler,
+  disconnectHandler as wordpressDisconnectHandler,
+  statusHandler as wordpressStatusHandler,
+  syncHandler as wordpressSyncHandler,
+} from "../handlers/commerce-wordpress";
 import { handler as teamHandler } from "../handlers/team";
 import { deleteHandler as teamDeleteHandler, patchHandler as teamPatchHandler } from "../handlers/team-member";
 import { presignHandler as logoPresignHandler, completeHandler as logoCompleteHandler } from "../handlers/tenant-logo-presign";
@@ -108,6 +114,10 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "POST", path: "/api/v1/knowledge/faq", handler: knowledgeFaqHandler },
   { method: "GET", path: "/api/v1/commerce/products", handler: commerceProductsHandler },
+  { method: "GET", path: "/api/v1/commerce/wordpress/status", handler: wordpressStatusHandler },
+  { method: "POST", path: "/api/v1/commerce/wordpress/connect", handler: wordpressConnectHandler },
+  { method: "POST", path: "/api/v1/commerce/wordpress/sync", handler: wordpressSyncHandler },
+  { method: "DELETE", path: "/api/v1/commerce/wordpress", handler: wordpressDisconnectHandler },
   { method: "GET", path: "/api/v1/team", handler: teamHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },

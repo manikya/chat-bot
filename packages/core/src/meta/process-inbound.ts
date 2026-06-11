@@ -89,7 +89,7 @@ export async function processWhatsAppInbound(
 
     console.log("[whatsapp] replied to", inbound.from, "tenant", tenantId);
   } catch (err) {
-    if (isPlanLimitError(err) && err.statusCode === 429) {
+    if (isPlanLimitError(err)) {
       await sendWhatsAppReply(
         tenantId,
         inbound.phoneNumberId,

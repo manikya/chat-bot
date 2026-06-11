@@ -282,6 +282,16 @@ export function createHttpApi(): MockApi {
         const qs = search.toString();
         return request(`/api/v1/commerce/products${qs ? `?${qs}` : ""}`);
       },
+      wordpressStatus: () => request("/api/v1/commerce/wordpress/status"),
+      connectWordPress: (body: { siteUrl: string; apiKey: string }) =>
+        request("/api/v1/commerce/wordpress/connect", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      syncWordPress: () =>
+        request("/api/v1/commerce/wordpress/sync", { method: "POST", body: JSON.stringify({}) }),
+      disconnectWordPress: () =>
+        request("/api/v1/commerce/wordpress", { method: "DELETE" }),
     },
     team: {
       list: () => request("/api/v1/team"),

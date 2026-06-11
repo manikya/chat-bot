@@ -146,6 +146,8 @@ export async function runChatOrchestrator(
     config,
     conversationId: conversation.conversationId,
     checkoutBaseUrl: tenantConfig.commerceConnector.checkoutBaseUrl,
+    channel: input.channel,
+    externalUserId: input.externalUserId,
   };
 
   const messages: ChatMessage[] = [

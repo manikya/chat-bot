@@ -216,6 +216,9 @@ export async function syncKnowledgeSource(
     scheduleCatalogIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "faq") {
     scheduleFaqIngestJob(auth.tenantId, jobId, config);
+  } else if (source.type === "woocommerce") {
+    const { scheduleWordPressCatalogIngestJob } = await import("../ingest/orchestrator");
+    scheduleWordPressCatalogIngestJob(auth.tenantId, jobId, config);
   } else {
     const { updateJob } = await import("../ingest/jobs");
     await updateJob(

@@ -174,6 +174,8 @@ MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets, full
 
 ```bash
 docker compose up -d          # LocalStack: DynamoDB + S3 (commercechat-assets)
+# Data persists in Docker volume `localstack-data` across stop/start/restart.
+# Avoid `docker compose down -v` unless you want to wipe local dev data.
 cp apps/api/.env.example apps/api/.env
 # Optional in apps/api/.env — S3 logo presign + Zoho SMTP (see .env.example)
 npm run dev                   # API :3001 + Admin :3000

@@ -34,6 +34,6 @@ export function defaultPlanLimits(): PlanLimits {
     maxSources: 3,
     maxVectors: 10000,
     maxTeamMembers: 5,
-    enabledChannels: ["web", "whatsapp"],
+    enabledChannels: ["web", "whatsapp", "messenger", "instagram"],
   };
 }

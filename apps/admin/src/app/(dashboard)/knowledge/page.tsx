@@ -20,16 +20,57 @@ export default function KnowledgePage() {
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
   const [products, setProducts] = useState<Array<{ sku: string; name: string; price: number }>>([]);
+  const [wpSiteUrl, setWpSiteUrl] = useState("https://");
+  const [wpApiKey, setWpApiKey] = useState("");
+  const [wpStatus, setWpStatus] = useState<{
+    connected: boolean;
+    siteUrl?: string;
+    lastSyncAt?: string;
+  } | null>(null);
+  const [wpConnecting, setWpConnecting] = useState(false);
+  const [wpSyncing, setWpSyncing] = useState(false);
 
   const load = () => {
     api.knowledge.listSources().then((r) => setSources(r.data.items));
     api.knowledge.listJobs().then((r) => setJobs(r.data.items));
+    api.commerce.wordpressStatus().then((r) => setWpStatus(r.data)).catch(() => setWpStatus(null));
   };
 
   useEffect(() => {
     load();
     api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
   }, []);
+
+  const connectWordPress = async () => {
+    setWpConnecting(true);
+    try {
+      await api.commerce.connectWordPress({ siteUrl: wpSiteUrl, apiKey: wpApiKey });
+      toast.success("WooCommerce connected");
+      setWpApiKey("");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Connect failed");
+    } finally {
+      setWpConnecting(false);
+    }
+  };
+
+  const syncWordPress = async () => {
+    setWpSyncing(true);
+    try {
+      const sync = await api.commerce.syncWordPress();
+      toast.success("Product sync started");
+      await pollIngestJob(sync.data.jobId, () => load());
+      toast.success("WooCommerce sync completed");
+      load();
+      api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sync failed");
+      load();
+    } finally {
+      setWpSyncing(false);
+    }
+  };
 
   const addWebsite = async () => {
     try {
@@ -59,6 +100,67 @@ export default function KnowledgePage() {
         </div>
         <Button onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add source</Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">WooCommerce store</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Install the <strong>CommerceChat Connector</strong> plugin on WordPress (Settings → CommerceChat),
+            copy the API key, then connect below to sync products into your knowledge base.
+          </p>
+          {wpStatus?.connected ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="success">Connected</Badge>
+                <span className="text-sm">{wpStatus.siteUrl}</span>
+              </div>
+              {wpStatus.lastSyncAt && (
+                <p className="text-xs text-muted-foreground">
+                  Last sync {new Date(wpStatus.lastSyncAt).toLocaleString()}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={syncWordPress} disabled={wpSyncing}>
+                  {wpSyncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  Sync products
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    await api.commerce.disconnectWordPress();
+                    toast.success("Disconnected");
+                    load();
+                  }}
+                >
+                  Disconnect
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Store URL</Label>
+                <Input value={wpSiteUrl} onChange={(e) => setWpSiteUrl(e.target.value)} placeholder="https://yourstore.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>API key (from WordPress plugin)</Label>
+                <Input
+                  type="password"
+                  value={wpApiKey}
+                  onChange={(e) => setWpApiKey(e.target.value)}
+                  placeholder="cc_wp_..."
+                />
+              </div>
+              <Button onClick={connectWordPress} disabled={wpConnecting || !wpSiteUrl.trim() || !wpApiKey.trim()}>
+                {wpConnecting ? "Connecting…" : "Connect WooCommerce"}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {showAdd && (
         <Card>

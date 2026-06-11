@@ -1,6 +1,8 @@
 import type { AuthContext, ChatIntent } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getProductBySku, searchProductCache } from "../catalog/products";
+import { lookupWordPressOrder } from "../commerce/wordpress/service";
+import { getTenantConfig } from "../tenant/service";
 import { retrieveKnowledge } from "../ingest/retrieve";
 import type { ToolDefinition } from "../llm/types";
 import { addToCart, getOrCreateCart, loadCart } from "./cart";
@@ -90,6 +92,8 @@ export interface ToolExecutionContext {
   config: CoreConfig;
   conversationId: string;
   checkoutBaseUrl?: string;
+  channel?: string;
+  externalUserId?: string;
 }
 
 export async function executeTool(
@@ -179,12 +183,34 @@ export async function executeTool(
       return { success: true, result: { checkoutUrl: url, cart } };
     }
     case "get_order_status": {
+      const tenantConfig = await getTenantConfig(ctx.auth, ctx.config);
+      const connector = tenantConfig.data!.commerceConnector;
+      const orderId = args.orderId ? String(args.orderId) : undefined;
+      const phoneFromChannel =
+        !orderId && (ctx.channel === "whatsapp" || ctx.channel === "messenger")
+          ? ctx.externalUserId
+          : undefined;
+
+      if (connector.type === "woocommerce" && connector.status === "connected") {
+        const lookup = await lookupWordPressOrder(ctx.auth.tenantId, ctx.config, {
+          orderId,
+          phone: phoneFromChannel,
+        });
+        if (lookup.found) {
+          return {
+            success: true,
+            result: "order" in lookup ? lookup.order : { orders: lookup.orders },
+          };
+        }
+        return { success: false, result: { message: lookup.message } };
+      }
+
       return {
         success: true,
         result: {
           message:
             "Order lookup is not connected yet. Please contact the store with your order ID.",
-          orderId: args.orderId,
+          orderId,
         },
       };
     }

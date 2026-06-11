@@ -74,7 +74,7 @@ export async function processMessengerInbound(
 
     console.log("[messenger] replied to", inbound.from, "tenant", tenantId);
   } catch (err) {
-    if (isPlanLimitError(err) && err.statusCode === 429) {
+    if (isPlanLimitError(err)) {
       await sendMessengerReply(
         tenantId,
         inbound.from,

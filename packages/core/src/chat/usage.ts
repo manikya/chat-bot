@@ -182,12 +182,28 @@ export async function assertChannelEnabled(tenantId: string, channel: string, co
       Key: { PK: Keys.tenantPk(tenantId), SK: Keys.limits() },
     })
   );
-  const enabled = (limitsRes.Item?.enabledChannels as string[] | undefined) ?? ["web", "whatsapp"];
-  if (!enabled.includes(channel)) {
-    throw new ApiError(
-      ErrorCodes.PLAN_LIMIT_EXCEEDED,
-      `Channel "${channel}" is not enabled on your plan`,
-      403
+  const enabled = (limitsRes.Item?.enabledChannels as string[] | undefined) ?? [
+    "web",
+    "whatsapp",
+    "messenger",
+    "instagram",
+  ];
+  if (enabled.includes(channel)) return;
+
+  // Limits row may predate a channel the merchant already connected.
+  if (channel === "whatsapp" || channel === "messenger" || channel === "instagram") {
+    const channelRes = await db.send(
+      new GetCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.channel(channel) },
+      })
     );
+    if (channelRes.Item?.status === "connected") return;
   }
+
+  throw new ApiError(
+    ErrorCodes.PLAN_LIMIT_EXCEEDED,
+    `Channel "${channel}" is not enabled on your plan`,
+    403
+  );
 }

@@ -21,6 +21,13 @@ export {
 export { refreshExpiringMetaTokens, type MetaTokenRefreshResult } from "./channels/token-refresh";
 export * from "./team/service";
 export * from "./commerce/service";
+export {
+  connectWordPressStore,
+  disconnectWordPressStore,
+  getWordPressConnectorStatus,
+  lookupWordPressOrder,
+} from "./commerce/wordpress/service";
+export type { ConnectWordPressBody } from "./commerce/wordpress/types";
 export * from "./onboarding/service";
 export * from "./knowledge/service";
 export { createVectorStore } from "./ingest/vectors";

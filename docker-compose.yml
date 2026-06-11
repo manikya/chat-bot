@@ -7,5 +7,10 @@ services:
       - SERVICES=dynamodb,s3,secretsmanager
       - S3_ASSETS_BUCKET=commercechat-assets
       - DEBUG=0
+      - PERSISTENCE=1
     volumes:
       - ./scripts/localstack-init:/etc/localstack/init/ready.d
+      - localstack-data:/var/lib/localstack
+
+volumes:
+  localstack-data:
