@@ -24,7 +24,19 @@ npm run dev
 **URL:** http://localhost:3001  
 **Widget:** http://localhost:3001/widget/v1.js
 
-Real Lambda routes use **DynamoDB (LocalStack)**. Channels and team hit mock fallback.
+Real Lambda routes use **DynamoDB (LocalStack)**.
+
+## Meta channels (WhatsApp + Messenger)
+
+See [docs/functions/02-meta-channel-integration.md](../../docs/functions/02-meta-channel-integration.md) and [docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md).
+
+**Local webhook tunnel:**
+
+```bash
+npm run dev:ngrok:ui    # :3000 — admin proxies /webhooks/* to this API
+```
+
+Meta webhook callback: `https://<ngrok>.ngrok-free.dev/webhooks/meta`
 
 ## Build Lambda bundles
 
@@ -33,16 +45,18 @@ npm run build:lambdas
 # → apps/api/dist/handlers/*.cjs
 ```
 
-## Implemented (35 routes)
+## Implemented (54 routes)
 
 See [docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md) for the full table.
 
 **Highlights:**
-- Auth, tenant, onboarding
+- Auth, tenant, onboarding, team
 - Knowledge ingest (website crawl, catalog CSV, jobs)
 - Chat orchestrator (`POST /api/v1/chat`)
-- Usage, conversations, dashboard stats
+- Usage, conversations, dashboard stats, billing
 - Widget config/chat + API key auth
+- WhatsApp + Messenger connect/disconnect/health
+- Meta webhooks (`GET`/`POST /webhooks/meta`)
 - Static widget bundle at `GET /widget/v1.js`
 
 ## Test scripts
@@ -54,14 +68,15 @@ node scripts/test-usage-widget-conversations.mjs
 node scripts/test-catalog-chat.mjs
 ```
 
-## Remaining (mock)
-
-- Channels — Meta connect/disconnect/health
-- Team — list, invite
-
 ## Environment
 
 ```
 API_PUBLIC_URL=http://localhost:3001   # widget script URL in embed snippets
 OPENAI_API_KEY=sk-...                  # chat + embeddings
+
+# Meta (see .env.example for full list)
+META_APP_ID=
+META_APP_SECRET=
+META_VERIFY_TOKEN=
+META_OAUTH_REDIRECT_URI=https://<ngrok>.ngrok-free.dev/channels/meta/callback
 ```

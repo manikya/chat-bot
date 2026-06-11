@@ -24,3 +24,27 @@ export interface WhatsAppInboundMessage {
   text: string;
   timestamp: string;
 }
+
+export interface MessengerCredentials {
+  pageId: string;
+  pageName: string;
+  pageAccessToken: string;
+  tokenExpiresAt?: string;
+  updatedAt: string;
+}
+
+export interface ConnectMessengerBody {
+  code?: string;
+  redirectUri?: string;
+  pageId?: string;
+  pageAccessToken?: string;
+  pageName?: string;
+}
+
+export interface MessengerInboundMessage {
+  messageId: string;
+  pageId: string;
+  from: string;
+  text: string;
+  timestamp: string;
+}

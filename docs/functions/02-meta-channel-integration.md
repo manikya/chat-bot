@@ -65,7 +65,8 @@ sequenceDiagram
 |------------|---------|
 | `whatsapp_business_messaging` | WhatsApp |
 | `whatsapp_business_management` | WhatsApp setup |
-| `pages_messaging` | Messenger |
+| `pages_show_list` | Messenger (list Pages during OAuth) |
+| `pages_messaging` | Messenger send/receive |
 | `pages_manage_metadata` | Webhook subscription |
 | `instagram_manage_messages` | Instagram DMs |
 | `business_management` | Embedded Signup |
@@ -294,10 +295,13 @@ interface MessagingPolicy {
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/channels/meta/connect` | Complete OAuth; store credentials |
-| GET | `/api/v1/channels/meta/status` | Connection health per channel |
-| DELETE | `/api/v1/channels/meta` | Disconnect; remove webhooks |
-| GET | `/api/v1/channels/meta/templates` | List WhatsApp templates |
+| POST | `/api/v1/channels/meta/connect` | WhatsApp OAuth; store credentials |
+| POST | `/api/v1/channels/meta/connect-messenger` | Messenger OAuth; store Page token |
+| POST | `/api/v1/channels/meta/connect-dev` | Dev WhatsApp connect (env tokens) |
+| POST | `/api/v1/channels/meta/connect-messenger-dev` | Dev Messenger connect (env Page token) |
+| GET | `/api/v1/channels/meta/health` | Connection health per channel |
+| DELETE | `/api/v1/channels/meta/{channel}` | Disconnect WhatsApp or Messenger |
+| GET | `/api/v1/channels/meta/templates` | List WhatsApp templates (planned) |
 
 ---
 
@@ -313,3 +317,43 @@ interface MessagingPolicy {
 - [ ] Outside window → template path triggered
 - [ ] Token expiry → merchant notification
 - [ ] Long message splitting per channel
+
+---
+
+## 15. Local implementation notes (2026-06-11)
+
+### Messenger connect flow (shipped)
+
+1. Admin **Channels** → **Connect Messenger** → Meta OAuth with scopes:  
+   `pages_show_list`, `pages_messaging`, `pages_manage_metadata`, `business_management`
+2. `POST /api/v1/channels/meta/connect-messenger` exchanges code, lists Pages, stores Page access token
+3. Multi-Page accounts return `needsPageSelection` for the merchant to pick a Page
+4. Credentials: local `.data/meta/{tenantId}-messenger.json`; production → Secrets Manager (planned)
+5. Routing: `PAGE#<pageId>` GSI maps inbound webhooks to tenant
+6. On connect: `POST /{pageId}/subscribed_apps` with `messages,messaging_postbacks`
+
+### Webhook (local dev)
+
+| Item | Value |
+|------|-------|
+| Public URL | `https://<ngrok>.ngrok-free.dev/webhooks/meta` |
+| ngrok target | Admin `:3000` (Next.js rewrites `/webhooks/*` → API `:3001`) |
+| Handler | `apps/api/src/handlers/webhook-meta.ts` |
+| Inbound | `parseMessengerWebhookPayload` → `processMessengerInbound` → chat orchestrator → `sendMessengerText` |
+
+**Critical:** In Meta Developer Console → Webhooks, subscribe the **Page** object to `messages` and `messaging_postbacks`. A Page callback without these fields will not deliver Messenger DMs (WhatsApp WABA fields are separate).
+
+### Health check
+
+Messenger health uses Meta `debug_token` on the stored Page access token plus the saved `pageName`. Do **not** call `GET /{pageId}` or `GET /me?fields=name` — those require `pages_read_engagement`, which is not needed for messaging.
+
+### OAuth redirect
+
+Must be HTTPS in dev. Open admin via ngrok and whitelist:  
+`https://<ngrok>.ngrok-free.dev/channels/meta/callback`
+
+Set `META_OAUTH_REDIRECT_URI` or `NEXT_PUBLIC_META_OAUTH_REDIRECT_URI` to match exactly.
+
+### Dev connect (no OAuth)
+
+Set `META_DEV_PAGE_ID`, `META_DEV_PAGE_ACCESS_TOKEN`, optional `META_DEV_PAGE_NAME` in `apps/api/.env`, then use **Connect Messenger (dev)** on the Channels page.

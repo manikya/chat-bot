@@ -153,6 +153,7 @@ export interface ChannelInfo {
   status: "connected" | "disconnected";
   displayPhone?: string;
   pageName?: string;
+  pageId?: string;
   connectedAt?: string;
   widgetEnabled?: boolean;
 }

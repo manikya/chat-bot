@@ -1,12 +1,16 @@
 import {
   connectMetaChannel,
   connectMetaChannelWithDevCredentials,
+  connectMessengerChannel,
+  connectMessengerChannelWithDevCredentials,
   disconnectMetaChannel,
   getChannelHealth,
   isMetaDevConnectConfigured,
+  isMetaMessengerDevConnectConfigured,
   listChannels,
   loadConfig,
   type ConnectMetaBody,
+  type ConnectMessengerBody,
 } from "@commercechat/core";
 import { ApiError, ErrorCodes, ok } from "@commercechat/shared";
 import { createHandler } from "../lib/handler";
@@ -21,6 +25,14 @@ export const connectHandler = createHandler(
   async (event, auth) => {
     const body = parseBody<ConnectMetaBody>(event);
     return connectMetaChannel(auth!, body, loadConfig());
+  },
+  { requireAuth: true }
+);
+
+export const connectMessengerHandler = createHandler(
+  async (event, auth) => {
+    const body = parseBody<ConnectMessengerBody>(event);
+    return connectMessengerChannel(auth!, body, loadConfig());
   },
   { requireAuth: true }
 );
@@ -46,10 +58,16 @@ export const devConnectHandler = createHandler(
   { requireAuth: true }
 );
 
+export const messengerDevConnectHandler = createHandler(
+  async (_event, auth) => connectMessengerChannelWithDevCredentials(auth!, loadConfig()),
+  { requireAuth: true }
+);
+
 export const devStatusHandler = createHandler(async () => {
   const config = loadConfig();
   return ok({
     devConnectAvailable: isMetaDevConnectConfigured(config),
+    messengerDevConnectAvailable: isMetaMessengerDevConnectConfigured(config),
     oauthRedirectUri: config.metaOAuthRedirectUri,
   });
 }, { requireAuth: true });

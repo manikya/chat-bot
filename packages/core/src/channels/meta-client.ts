@@ -104,6 +104,7 @@ export async function debugAccessToken(config: CoreConfig, accessToken: string) 
     data?: {
       is_valid: boolean;
       expires_at?: number;
+      profile_id?: string;
       granular_scopes?: Array<{ scope: string; target_ids?: string[] }>;
     };
     error?: { message: string };
@@ -292,4 +293,65 @@ export async function discoverWabaFromAccessToken(
 export function expiresAtFromSeconds(seconds?: number): string | undefined {
   if (!seconds) return undefined;
   return new Date(Date.now() + seconds * 1000).toISOString();
+}
+
+export async function listUserPages(config: CoreConfig, accessToken: string) {
+  const res = await graphGet<{
+    data: Array<{ id: string; name?: string; access_token?: string }>;
+  }>(config, "/me/accounts?fields=id,name,access_token", accessToken);
+  return res.data ?? [];
+}
+
+/** Validate a page token via debug_token (works without pages_read_engagement). */
+export async function validatePageAccessToken(
+  config: CoreConfig,
+  pageAccessToken: string,
+  expectedPageId?: string
+) {
+  const debug = await debugAccessToken(config, pageAccessToken);
+  if (expectedPageId && debug.profile_id && debug.profile_id !== expectedPageId) {
+    throw new MetaGraphError(
+      `Page token is for ${debug.profile_id}, expected ${expectedPageId}`
+    );
+  }
+  return debug;
+}
+
+export async function subscribePageToApp(
+  config: CoreConfig,
+  pageId: string,
+  pageAccessToken: string
+) {
+  return graphPost<{ success: boolean }>(
+    config,
+    `/${pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks`,
+    pageAccessToken
+  );
+}
+
+export async function sendMessengerText(
+  config: CoreConfig,
+  pageAccessToken: string,
+  recipientId: string,
+  text: string
+) {
+  const res = await fetch(`${graphBase(config)}/me/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${pageAccessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      recipient: { id: recipientId },
+      message: { text: text.slice(0, 2000) },
+    }),
+  });
+  const json = (await res.json()) as {
+    message_id?: string;
+    error?: { message: string; code?: number };
+  };
+  if (!res.ok || json.error) {
+    throw new MetaGraphError(json.error?.message ?? "Messenger send failed", json.error?.code, res.status);
+  }
+  return json;
 }

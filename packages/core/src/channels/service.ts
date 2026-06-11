@@ -9,17 +9,30 @@ import {
   saveMetaCredentials,
 } from "./credentials";
 import {
+  deleteMessengerCredentials,
+  loadMessengerCredentials,
+  saveMessengerCredentials,
+} from "./messenger-credentials";
+import {
   MetaGraphError,
   debugAccessToken,
   discoverWabaFromAccessToken,
   exchangeOAuthCode,
   expiresAtFromSeconds,
+  validatePageAccessToken,
   getPhoneNumberDetails,
+  listUserPages,
   listWabaPhoneNumbers,
   refreshLongLivedToken,
+  subscribePageToApp,
   subscribeWabaToApp,
 } from "./meta-client";
-import type { ConnectMetaBody, MetaCredentials } from "./types";
+import type {
+  ConnectMetaBody,
+  ConnectMessengerBody,
+  MessengerCredentials,
+  MetaCredentials,
+} from "./types";
 
 const META_CHANNELS = ["whatsapp", "messenger", "instagram"] as const;
 
@@ -85,6 +98,47 @@ export async function resolveTenantByPhoneNumberId(
   return (res.Item?.tenantId as string) ?? null;
 }
 
+async function putPageRouting(pageId: string, tenantId: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  const now = new Date().toISOString();
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.pageRoutingPk(pageId),
+        SK: Keys.pageRoutingSk(),
+        tenantId,
+        pageId,
+        connectedAt: now,
+      },
+    })
+  );
+}
+
+async function deletePageRouting(pageId: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  await db.send(
+    new DeleteCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.pageRoutingPk(pageId), SK: Keys.pageRoutingSk() },
+    })
+  );
+}
+
+export async function resolveTenantByPageId(
+  pageId: string,
+  config: CoreConfig
+): Promise<string | null> {
+  const db = getDocClient(config);
+  const res = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.pageRoutingPk(pageId), SK: Keys.pageRoutingSk() },
+    })
+  );
+  return (res.Item?.tenantId as string) ?? null;
+}
+
 export async function getMetaCredentialsForTenant(
   tenantId: string,
   config: CoreConfig
@@ -120,6 +174,7 @@ export async function ensureFreshMetaToken(
 
 export async function listChannels(auth: AuthContext, config: CoreConfig) {
   const whatsapp = await getChannelRecord(auth.tenantId, "whatsapp", config);
+  const messenger = await getChannelRecord(auth.tenantId, "messenger", config);
   const configRes = await getDocClient(config).send(
     new GetCommand({
       TableName: config.tableName,
@@ -135,7 +190,13 @@ export async function listChannels(auth: AuthContext, config: CoreConfig) {
       displayPhone: whatsapp?.displayPhone as string | undefined,
       connectedAt: whatsapp?.connectedAt as string | undefined,
     },
-    { channel: "messenger" as const, status: "disconnected" as const },
+    {
+      channel: "messenger" as const,
+      status:
+        messenger?.status === "connected" ? ("connected" as const) : ("disconnected" as const),
+      pageName: messenger?.pageName as string | undefined,
+      connectedAt: messenger?.connectedAt as string | undefined,
+    },
     { channel: "instagram" as const, status: "disconnected" as const },
     {
       channel: "web" as const,
@@ -189,10 +250,55 @@ async function persistWhatsAppConnection(
   }
 }
 
+async function persistMessengerConnection(
+  auth: AuthContext,
+  creds: MessengerCredentials,
+  config: CoreConfig
+) {
+  const db = getDocClient(config);
+  const now = new Date().toISOString();
+
+  const existing = await getChannelRecord(auth.tenantId, "messenger", config);
+  if (existing?.pageId && existing.pageId !== creds.pageId) {
+    await deletePageRouting(String(existing.pageId), config);
+  }
+
+  saveMessengerCredentials(auth.tenantId, creds, config);
+
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.tenantPk(auth.tenantId),
+        SK: Keys.channel("messenger"),
+        channel: "messenger",
+        status: "connected",
+        pageId: creds.pageId,
+        pageName: creds.pageName,
+        tokenExpiresAt: creds.tokenExpiresAt,
+        connectedAt: now,
+        lastHealthCheck: now,
+      },
+    })
+  );
+
+  await putPageRouting(creds.pageId, auth.tenantId, config);
+
+  try {
+    await subscribePageToApp(config, creds.pageId, creds.pageAccessToken);
+  } catch (err) {
+    console.warn("[channels] Page subscribe warning:", err instanceof Error ? err.message : err);
+  }
+}
+
 export function isMetaDevConnectConfigured(config: CoreConfig): boolean {
   return Boolean(
     config.metaDevAccessToken && config.metaDevWabaId && config.metaDevPhoneNumberId
   );
+}
+
+export function isMetaMessengerDevConnectConfigured(config: CoreConfig): boolean {
+  return Boolean(config.metaDevPageId && config.metaDevPageAccessToken);
 }
 
 export async function connectMetaChannelWithDevCredentials(
@@ -234,6 +340,138 @@ export async function connectMetaChannel(
     }
     throw err;
   }
+}
+
+export async function connectMessengerChannelWithDevCredentials(
+  auth: AuthContext,
+  config: CoreConfig
+) {
+  if (!isMetaMessengerDevConnectConfigured(config)) {
+    throw new ApiError(
+      ErrorCodes.NOT_FOUND,
+      "Dev Messenger credentials not configured (META_DEV_PAGE_ID, META_DEV_PAGE_ACCESS_TOKEN)",
+      404
+    );
+  }
+
+  return connectMessengerChannel(
+    auth,
+    {
+      pageId: config.metaDevPageId,
+      pageAccessToken: config.metaDevPageAccessToken,
+      pageName: config.metaDevPageName ?? "Dev Page",
+    },
+    config
+  );
+}
+
+export async function connectMessengerChannel(
+  auth: AuthContext,
+  body: ConnectMessengerBody,
+  config: CoreConfig
+) {
+  assertCanManageChannels(auth);
+
+  try {
+    return await connectMessengerChannelInner(auth, body, config);
+  } catch (err) {
+    if (err instanceof MetaGraphError) {
+      throw new ApiError(ErrorCodes.VALIDATION_ERROR, err.message, err.status);
+    }
+    throw err;
+  }
+}
+
+async function connectMessengerChannelInner(
+  auth: AuthContext,
+  body: ConnectMessengerBody,
+  config: CoreConfig
+) {
+  let pageId = body.pageId?.trim();
+  let pageName = body.pageName?.trim();
+  let pageAccessToken = body.pageAccessToken?.trim();
+  let tokenExpiresAt: string | undefined;
+
+  if (!pageAccessToken && body.code) {
+    const redirectUri = body.redirectUri?.trim() || config.metaOAuthRedirectUri;
+    if (!redirectUri) {
+      throw new ApiError(ErrorCodes.VALIDATION_ERROR, "redirectUri is required with OAuth code", 400);
+    }
+
+    const exchanged = await exchangeOAuthCode(config, body.code, redirectUri);
+    let userToken = exchanged.accessToken;
+    tokenExpiresAt = expiresAtFromSeconds(exchanged.expiresIn);
+
+    try {
+      const longLived = await refreshLongLivedToken(config, userToken);
+      userToken = longLived.accessToken;
+      tokenExpiresAt = expiresAtFromSeconds(longLived.expiresIn) ?? tokenExpiresAt;
+    } catch {
+      // short-lived user token may still list pages
+    }
+
+    const pages = await listUserPages(config, userToken);
+    if (!pages.length) {
+      throw new ApiError(
+        ErrorCodes.VALIDATION_ERROR,
+        "No Facebook Pages found. Ensure you manage a Page and granted pages_show_list.",
+        400
+      );
+    }
+
+    if (!pageId && pages.length > 1) {
+      return ok({
+        needsPageSelection: true,
+        pages: pages
+          .filter((p) => p.access_token)
+          .map((p) => ({
+            id: p.id,
+            name: p.name ?? p.id,
+            pageAccessToken: p.access_token!,
+          })),
+      });
+    }
+
+    const selected = pageId ? pages.find((p) => p.id === pageId) : pages[0];
+    if (!selected?.access_token) {
+      throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Could not obtain Page access token", 400);
+    }
+
+    pageId = selected.id;
+    pageName = pageName || selected.name || pageId;
+    pageAccessToken = selected.access_token;
+  }
+
+  if (!pageId || !pageAccessToken) {
+    throw new ApiError(
+      ErrorCodes.VALIDATION_ERROR,
+      "Provide OAuth code or pageId with pageAccessToken",
+      400
+    );
+  }
+
+  if (!pageName) {
+    pageName = pageId;
+  }
+
+  const creds: MessengerCredentials = {
+    pageId,
+    pageName,
+    pageAccessToken,
+    tokenExpiresAt,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await persistMessengerConnection(auth, creds, config);
+
+  return ok({
+    connected: ["messenger"],
+    messenger: {
+      pageId,
+      pageName,
+      status: "connected",
+    },
+  });
 }
 
 async function connectMetaChannelInner(
@@ -331,84 +569,122 @@ export async function disconnectMetaChannel(
   if (!META_CHANNELS.includes(channel as (typeof META_CHANNELS)[number])) {
     throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Invalid channel", 400);
   }
-  if (channel !== "whatsapp") {
-    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Only WhatsApp disconnect is supported in MVP", 400);
-  }
-
   const record = await getChannelRecord(auth.tenantId, channel, config);
   if (!record) {
     return ok({ channel, status: "disconnected" });
   }
 
-  if (record.phoneNumberId) {
-    await deletePhoneRouting(String(record.phoneNumberId), config);
-  }
-
-  deleteMetaCredentials(auth.tenantId, config);
-
   const db = getDocClient(config);
-  await db.send(
-    new UpdateCommand({
-      TableName: config.tableName,
-      Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.channel(channel) },
-      UpdateExpression: "SET #status = :disconnected, disconnectedAt = :now REMOVE phoneNumberId, wabaId, displayPhone, tokenExpiresAt",
-      ExpressionAttributeNames: { "#status": "status" },
-      ExpressionAttributeValues: {
-        ":disconnected": "disconnected",
-        ":now": new Date().toISOString(),
-      },
-    })
-  );
+  const now = new Date().toISOString();
+
+  if (channel === "whatsapp") {
+    if (record.phoneNumberId) {
+      await deletePhoneRouting(String(record.phoneNumberId), config);
+    }
+    deleteMetaCredentials(auth.tenantId, config);
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.channel(channel) },
+        UpdateExpression:
+          "SET #status = :disconnected, disconnectedAt = :now REMOVE phoneNumberId, wabaId, displayPhone, tokenExpiresAt",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":disconnected": "disconnected", ":now": now },
+      })
+    );
+  } else if (channel === "messenger") {
+    if (record.pageId) {
+      await deletePageRouting(String(record.pageId), config);
+    }
+    deleteMessengerCredentials(auth.tenantId, config);
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.channel(channel) },
+        UpdateExpression:
+          "SET #status = :disconnected, disconnectedAt = :now REMOVE pageId, pageName, tokenExpiresAt",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":disconnected": "disconnected", ":now": now },
+      })
+    );
+  } else {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Only WhatsApp and Messenger disconnect are supported", 400);
+  }
 
   return ok({ channel, status: "disconnected" });
 }
 
 export async function getChannelHealth(auth: AuthContext, config: CoreConfig) {
   const whatsapp = await getChannelRecord(auth.tenantId, "whatsapp", config);
+  const messenger = await getChannelRecord(auth.tenantId, "messenger", config);
+  const now = new Date().toISOString();
   const health: Record<string, { status: string; lastCheck: string; detail?: string }> = {
-    messenger: { status: "disconnected", lastCheck: new Date().toISOString() },
-    instagram: { status: "disconnected", lastCheck: new Date().toISOString() },
+    whatsapp: { status: "disconnected", lastCheck: now },
+    messenger: { status: "disconnected", lastCheck: now },
+    instagram: { status: "disconnected", lastCheck: now },
   };
 
-  const now = new Date().toISOString();
-
-  if (whatsapp?.status !== "connected" || !whatsapp.phoneNumberId) {
-    health.whatsapp = { status: "disconnected", lastCheck: now };
-    return ok(health);
+  if (whatsapp?.status === "connected" && whatsapp.phoneNumberId) {
+    const creds = await ensureFreshMetaToken(auth.tenantId, config);
+    if (!creds) {
+      health.whatsapp = { status: "error", lastCheck: now, detail: "Missing credentials" };
+    } else {
+      try {
+        const details = await getPhoneNumberDetails(
+          config,
+          String(whatsapp.phoneNumberId),
+          creds.accessToken
+        );
+        const apiStatus = details.status === "CONNECTED" ? "healthy" : "degraded";
+        health.whatsapp = {
+          status: apiStatus,
+          lastCheck: now,
+          detail: details.status ? `phone_status=${details.status}` : undefined,
+        };
+        const db = getDocClient(config);
+        await db.send(
+          new UpdateCommand({
+            TableName: config.tableName,
+            Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.channel("whatsapp") },
+            UpdateExpression: "SET lastHealthCheck = :now, #status = :connected",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: { ":now": now, ":connected": "connected" },
+          })
+        );
+      } catch (err) {
+        const message = err instanceof MetaGraphError ? err.message : "Health check failed";
+        health.whatsapp = { status: "error", lastCheck: now, detail: message };
+      }
+    }
   }
 
-  const creds = await ensureFreshMetaToken(auth.tenantId, config);
-  if (!creds) {
-    health.whatsapp = { status: "error", lastCheck: now, detail: "Missing credentials" };
-    return ok(health);
-  }
-
-  try {
-    const details = await getPhoneNumberDetails(
-      config,
-      String(whatsapp.phoneNumberId),
-      creds.accessToken
-    );
-    const apiStatus = details.status === "CONNECTED" ? "healthy" : "degraded";
-    health.whatsapp = {
-      status: apiStatus,
-      lastCheck: now,
-      detail: details.status ? `phone_status=${details.status}` : undefined,
-    };
-
-    const db = getDocClient(config);
-    await db.send(
-      new UpdateCommand({
-        TableName: config.tableName,
-        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.channel("whatsapp") },
-        UpdateExpression: "SET lastHealthCheck = :now, #status = :connected",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: { ":now": now, ":connected": "connected" },
-      })
-    );
-  } catch (err) {
-    const message = err instanceof MetaGraphError ? err.message : "Health check failed";
-    health.whatsapp = { status: "error", lastCheck: now, detail: message };
+  if (messenger?.status === "connected" && messenger.pageId) {
+    const creds = loadMessengerCredentials(auth.tenantId, config);
+    if (!creds) {
+      health.messenger = { status: "error", lastCheck: now, detail: "Missing credentials" };
+    } else {
+      try {
+        await validatePageAccessToken(config, creds.pageAccessToken, creds.pageId);
+        health.messenger = {
+          status: "healthy",
+          lastCheck: now,
+          detail: creds.pageName ? `page=${creds.pageName}` : `page_id=${creds.pageId}`,
+        };
+        const db = getDocClient(config);
+        await db.send(
+          new UpdateCommand({
+            TableName: config.tableName,
+            Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.channel("messenger") },
+            UpdateExpression: "SET lastHealthCheck = :now, #status = :connected",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: { ":now": now, ":connected": "connected" },
+          })
+        );
+      } catch (err) {
+        const message = err instanceof MetaGraphError ? err.message : "Health check failed";
+        health.messenger = { status: "error", lastCheck: now, detail: message };
+      }
+    }
   }
 
   return ok(health);

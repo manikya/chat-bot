@@ -22,6 +22,9 @@ export interface CoreConfig {
   metaDevWabaId?: string;
   metaDevPhoneNumberId?: string;
   metaDevDisplayPhone?: string;
+  metaDevPageId?: string;
+  metaDevPageAccessToken?: string;
+  metaDevPageName?: string;
   skipEmailVerification: boolean;
   smtpHost?: string;
   smtpPort?: number;
@@ -68,6 +71,9 @@ export function loadConfig(): CoreConfig {
     metaDevWabaId: process.env.META_DEV_WABA_ID,
     metaDevPhoneNumberId: process.env.META_DEV_PHONE_NUMBER_ID,
     metaDevDisplayPhone: process.env.META_DEV_DISPLAY_PHONE,
+    metaDevPageId: process.env.META_DEV_PAGE_ID,
+    metaDevPageAccessToken: process.env.META_DEV_PAGE_ACCESS_TOKEN,
+    metaDevPageName: process.env.META_DEV_PAGE_NAME,
     skipEmailVerification: process.env.SKIP_EMAIL_VERIFICATION === "true",
     smtpHost: process.env.SMTP_HOST,
     smtpPort: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : undefined,

@@ -1,7 +1,7 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-10  
+**Last updated:** 2026-06-11  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)
 
 ---
@@ -22,8 +22,9 @@
 | 2026-06-10 | `POST /auth/accept-invite` + `/accept-invite` UI (team join E2E) |
 | 2026-06-10 | Team remove/role APIs, S3 presigned logo via LocalStack |
 | 2026-06-10 | Billing plans + usage overview APIs, payment webhook stub (no Stripe) |
+| 2026-06-11 | Facebook Messenger OAuth connect, inbound webhook + AI reply, dev connect |
 
-**Git (local `main`):** through billing UI + gateway-ready checkout. Not pushed.
+**Git (local `main`):** through Messenger E2E (local). Not pushed.
 
 ---
 
@@ -31,7 +32,7 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **52 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **54 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
 | **Not started** (no handler, no mock) | 8+ routes |
 | **Phase 2** (billing, MFA, widget SSE) | 8 routes |
@@ -92,7 +93,9 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/dashboard/stats` | `dashboard-stats` | Yes |
 | `GET` | `/api/v1/channels` | `channels` | Yes |
 | `POST` | `/api/v1/channels/meta/connect` | `channels-meta-connect` | Yes |
+| `POST` | `/api/v1/channels/meta/connect-messenger` | `channels-meta-connect-messenger` | Yes |
 | `POST` | `/api/v1/channels/meta/connect-dev` | `channels-meta-connect-dev` | Yes |
+| `POST` | `/api/v1/channels/meta/connect-messenger-dev` | `channels-meta-connect-messenger-dev` | Yes |
 | `GET` | `/api/v1/channels/meta/dev-status` | `channels-meta-dev-status` | Yes |
 | `DELETE` | `/api/v1/channels/meta/{channel}` | `channels-meta-disconnect` | Yes |
 | `GET` | `/api/v1/channels/meta/health` | `channels-meta-health` | Yes |
@@ -107,6 +110,8 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 **Also built (not a route):**
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
 - Chat orchestrator — `packages/core/src/chat/`
+- Messenger inbound/outbound — `packages/core/src/meta/messenger-*.ts`, `process-messenger-inbound.ts`
+- Messenger credentials — `.data/meta/{tenantId}-messenger.json` (local dev)
 - Logo storage — S3 presigned upload (`POST .../logo/presign` + `complete`) via LocalStack; local filesystem fallback when `S3_BUCKET` unset
 - Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, sync chat, `formatBotText` for `**bold**` / numbered lists / `\n`, `suggestedActions` product chips)
 - Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)
@@ -138,9 +143,9 @@ MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets, full
 
 ## 5. Recommended build order
 
-1. **WhatsApp E2E** — ngrok API webhooks, inbound message + reply test
-2. **Infra** — CDK deploy, production S3/CDN, CI
-3. **Widget polish** — rich product cards, rate limiting, CDN deploy
+1. **WhatsApp E2E** — ngrok webhooks, inbound message + reply test
+2. **Instagram DMs** — OAuth + webhook (same Meta app)
+3. **Infra** — CDK deploy, production S3/CDN, CI
 4. **Phase 2** — payment gateway adapter, MFA, widget SSE
 
 ---
@@ -157,7 +162,7 @@ MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets, full
 | Usage, billing, dashboard | Usage overview, billing plans/checkout | — |
 | Conversations | List, thread, messages | — |
 | Widget / API keys | Config, regen-key, embed snippet | — |
-| Channels | Connect, health, webhooks | — |
+| Channels | WhatsApp + Messenger connect/disconnect/health, Meta webhooks | — |
 
 ---
 
@@ -176,6 +181,19 @@ npm run dev                   # API :3001 + Admin :3000
 
 **Widget demo:** Regenerate API key in Settings → API keys, then open  
 `http://localhost:3001/widget/demo.html?key=pk_live_...` while `npm run dev` is running.
+
+**Meta Messenger (local):**
+
+```bash
+npm run dev:ngrok:ui          # tunnel :3000 — admin + /webhooks/* proxy to API :3001
+```
+
+1. Meta app → **Messenger** → connect Page; **Webhooks** → callback  
+   `https://<ngrok>.ngrok-free.dev/webhooks/meta`, verify token = `META_VERIFY_TOKEN`
+2. Subscribe **Page** object fields: `messages`, `messaging_postbacks` (required — without these, DMs never reach the API)
+3. Whitelist OAuth redirect: `https://<ngrok>.ngrok-free.dev/channels/meta/callback`
+4. Admin → **Channels** → Connect Messenger; DM the Page from Facebook Messenger
+5. Confirm API log `[messenger] replied to …` and thread under **Conversations → messenger**
 
 **Test scripts:**
 ```bash

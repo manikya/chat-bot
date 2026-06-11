@@ -40,19 +40,32 @@ export { getDashboardStats } from "./dashboard/service";
 export { buildWidgetEmbedCode } from "./widget/embed";
 export { verifyMetaWebhookChallenge, verifyMetaWebhookSignature } from "./meta/webhook";
 export { parseWhatsAppWebhookPayload } from "./meta/whatsapp-inbound";
+export { parseMessengerWebhookPayload } from "./meta/messenger-inbound";
 export { processWhatsAppInbound } from "./meta/process-inbound";
+export { processMessengerInbound } from "./meta/process-messenger-inbound";
 export { sendWhatsAppReply } from "./meta/whatsapp-outbound";
+export { sendMessengerReply } from "./meta/messenger-outbound";
 export {
   listChannels,
   connectMetaChannel,
   connectMetaChannelWithDevCredentials,
+  connectMessengerChannel,
+  connectMessengerChannelWithDevCredentials,
   disconnectMetaChannel,
   getChannelHealth,
   isMetaDevConnectConfigured,
+  isMetaMessengerDevConnectConfigured,
   resolveTenantByPhoneNumberId,
+  resolveTenantByPageId,
   ensureFreshMetaToken,
   getMetaCredentialsForTenant,
 } from "./channels/service";
-export type { ConnectMetaBody, MetaCredentials, WhatsAppInboundMessage } from "./channels/types";
+export type {
+  ConnectMetaBody,
+  ConnectMessengerBody,
+  MetaCredentials,
+  MessengerInboundMessage,
+  WhatsAppInboundMessage,
+} from "./channels/types";
 export { parseCatalogCsv, type CatalogProduct } from "./ingest/parsers/catalog-csv";
 export { getDocClient } from "./db/client";
