@@ -23,6 +23,7 @@
 | 2026-06-10 | Team remove/role APIs, S3 presigned logo via LocalStack |
 | 2026-06-10 | Billing plans + usage overview APIs, payment webhook stub (no Stripe) |
 | 2026-06-11 | Facebook Messenger OAuth connect, inbound webhook + AI reply, dev connect |
+| 2026-06-11 | Meta creds → Secrets Manager (LocalStack), token refresh cron, 24h window policy |
 
 **Git (local `main`):** through Messenger E2E (local). Not pushed.
 
@@ -111,7 +112,9 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
 - Chat orchestrator — `packages/core/src/chat/`
 - Messenger inbound/outbound — `packages/core/src/meta/messenger-*.ts`, `process-messenger-inbound.ts`
-- Messenger credentials — `.data/meta/{tenantId}-messenger.json` (local dev)
+- Meta credentials — Secrets Manager `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_USE_SECRETS_MANAGER=true`; else `.data/meta/*.json`
+- Meta token refresh — `POST /internal/cron/meta-token-refresh` or `META_TOKEN_REFRESH_INTERVAL_MS`
+- 24h messaging window — enforced on WhatsApp/Messenger outbound sends
 - Logo storage — S3 presigned upload (`POST .../logo/presign` + `complete`) via LocalStack; local filesystem fallback when `S3_BUCKET` unset
 - Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, sync chat, `formatBotText` for `**bold**` / numbered lists / `\n`, `suggestedActions` product chips)
 - Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)

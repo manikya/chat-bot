@@ -146,15 +146,18 @@ export async function getMetaCredentialsForTenant(
   return loadMetaCredentials(tenantId, config);
 }
 
+const TOKEN_REFRESH_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function ensureFreshMetaToken(
   tenantId: string,
   config: CoreConfig
 ): Promise<MetaCredentials | null> {
-  const creds = loadMetaCredentials(tenantId, config);
+  const creds = await loadMetaCredentials(tenantId, config);
   if (!creds) return null;
 
   const expiresMs = creds.tokenExpiresAt ? Date.parse(creds.tokenExpiresAt) : 0;
-  const needsRefresh = expiresMs > 0 && expiresMs - Date.now() < 7 * 24 * 60 * 60 * 1000;
+  const needsRefresh =
+    expiresMs > 0 && expiresMs - Date.now() < TOKEN_REFRESH_WITHIN_MS;
   if (!needsRefresh) return creds;
 
   try {
@@ -165,7 +168,34 @@ export async function ensureFreshMetaToken(
       tokenExpiresAt: expiresAtFromSeconds(refreshed.expiresIn),
       updatedAt: new Date().toISOString(),
     };
-    saveMetaCredentials(tenantId, updated, config);
+    await saveMetaCredentials(tenantId, updated, config);
+    return updated;
+  } catch {
+    return creds;
+  }
+}
+
+export async function ensureFreshMessengerToken(
+  tenantId: string,
+  config: CoreConfig
+): Promise<MessengerCredentials | null> {
+  const creds = await loadMessengerCredentials(tenantId, config);
+  if (!creds) return null;
+
+  const expiresMs = creds.tokenExpiresAt ? Date.parse(creds.tokenExpiresAt) : 0;
+  const needsRefresh =
+    expiresMs > 0 && expiresMs - Date.now() < TOKEN_REFRESH_WITHIN_MS;
+  if (!needsRefresh) return creds;
+
+  try {
+    const refreshed = await refreshLongLivedToken(config, creds.pageAccessToken);
+    const updated: MessengerCredentials = {
+      ...creds,
+      pageAccessToken: refreshed.accessToken,
+      tokenExpiresAt: expiresAtFromSeconds(refreshed.expiresIn),
+      updatedAt: new Date().toISOString(),
+    };
+    await saveMessengerCredentials(tenantId, updated, config);
     return updated;
   } catch {
     return creds;
@@ -221,7 +251,7 @@ async function persistWhatsAppConnection(
     await deletePhoneRouting(String(existing.phoneNumberId), config);
   }
 
-  saveMetaCredentials(auth.tenantId, creds, config);
+  await saveMetaCredentials(auth.tenantId, creds, config);
 
   await db.send(
     new PutCommand({
@@ -263,7 +293,7 @@ async function persistMessengerConnection(
     await deletePageRouting(String(existing.pageId), config);
   }
 
-  saveMessengerCredentials(auth.tenantId, creds, config);
+  await saveMessengerCredentials(auth.tenantId, creds, config);
 
   await db.send(
     new PutCommand({
@@ -581,7 +611,7 @@ export async function disconnectMetaChannel(
     if (record.phoneNumberId) {
       await deletePhoneRouting(String(record.phoneNumberId), config);
     }
-    deleteMetaCredentials(auth.tenantId, config);
+    await deleteMetaCredentials(auth.tenantId, config);
     await db.send(
       new UpdateCommand({
         TableName: config.tableName,
@@ -596,7 +626,7 @@ export async function disconnectMetaChannel(
     if (record.pageId) {
       await deletePageRouting(String(record.pageId), config);
     }
-    deleteMessengerCredentials(auth.tenantId, config);
+    await deleteMessengerCredentials(auth.tenantId, config);
     await db.send(
       new UpdateCommand({
         TableName: config.tableName,
@@ -659,7 +689,7 @@ export async function getChannelHealth(auth: AuthContext, config: CoreConfig) {
   }
 
   if (messenger?.status === "connected" && messenger.pageId) {
-    const creds = loadMessengerCredentials(auth.tenantId, config);
+    const creds = await ensureFreshMessengerToken(auth.tenantId, config);
     if (!creds) {
       health.messenger = { status: "error", lastCheck: now, detail: "Missing credentials" };
     } else {

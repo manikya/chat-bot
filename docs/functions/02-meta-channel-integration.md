@@ -328,7 +328,7 @@ interface MessagingPolicy {
    `pages_show_list`, `pages_messaging`, `pages_manage_metadata`, `business_management`
 2. `POST /api/v1/channels/meta/connect-messenger` exchanges code, lists Pages, stores Page access token
 3. Multi-Page accounts return `needsPageSelection` for the merchant to pick a Page
-4. Credentials: local `.data/meta/{tenantId}-messenger.json`; production → Secrets Manager (planned)
+4. Credentials: AWS Secrets Manager `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_USE_SECRETS_MANAGER=true`; else `.data/meta/*.json` (auto-migrates on read)
 5. Routing: `PAGE#<pageId>` GSI maps inbound webhooks to tenant
 6. On connect: `POST /{pageId}/subscribed_apps` with `messages,messaging_postbacks`
 
@@ -357,3 +357,14 @@ Set `META_OAUTH_REDIRECT_URI` or `NEXT_PUBLIC_META_OAUTH_REDIRECT_URI` to match 
 ### Dev connect (no OAuth)
 
 Set `META_DEV_PAGE_ID`, `META_DEV_PAGE_ACCESS_TOKEN`, optional `META_DEV_PAGE_NAME` in `apps/api/.env`, then use **Connect Messenger (dev)** on the Channels page.
+
+### Credentials storage (Secrets Manager)
+
+| Env | Purpose |
+|-----|---------|
+| `META_SECRETS_USE_SECRETS_MANAGER=true` | Store tokens in AWS Secrets Manager |
+| `SECRETS_MANAGER_ENDPOINT=http://localhost:4566` | LocalStack (add `secretsmanager` to docker-compose `SERVICES`) |
+
+Token refresh cron: `POST /internal/cron/meta-token-refresh` or `META_TOKEN_REFRESH_INTERVAL_MS`.
+
+24h messaging window enforced on WhatsApp/Messenger outbound (free-form only inside customer session).

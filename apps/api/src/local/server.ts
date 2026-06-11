@@ -38,6 +38,8 @@ import { handler as conversationsHandler } from "../handlers/conversations";
 import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler } from "../handlers/widget";
 import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
 import { handler as webhookMetaHandler } from "../handlers/webhook-meta";
+import { handler as cronMetaTokenRefreshHandler } from "../handlers/cron-meta-token-refresh";
+import { loadConfig } from "@commercechat/core";
 import { handler as webhookPaymentHandler } from "../handlers/webhook-payment";
 import {
   plansHandler as billingPlansHandler,
@@ -116,6 +118,7 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/channels/meta/connect-messenger-dev", handler: channelsMessengerDevConnectHandler },
   { method: "GET", path: "/api/v1/channels/meta/dev-status", handler: channelsDevStatusHandler },
   { method: "GET", path: "/api/v1/channels/meta/health", handler: channelsHealthHandler },
+  { method: "POST", path: "/internal/cron/meta-token-refresh", handler: cronMetaTokenRefreshHandler },
 ];
 
 const WIDGET_JS_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../widget/public/v1.js");
@@ -310,3 +313,29 @@ console.log(`  Widget demo:       ${publicUrl}/widget/demo.html`);
 console.log(`  Mock fallback:   all other routes`);
 
 serve({ fetch: app.fetch, port });
+
+const tokenRefreshIntervalMs = Number(process.env.META_TOKEN_REFRESH_INTERVAL_MS ?? 0);
+if (tokenRefreshIntervalMs > 0) {
+  const cronConfig = loadConfig();
+  const runRefresh = () => {
+    void import("@commercechat/core")
+      .then(({ refreshExpiringMetaTokens }) => refreshExpiringMetaTokens(cronConfig))
+      .then((result) => {
+        console.log(
+          "[cron-meta-token-refresh:interval]",
+          `scanned=${result.scanned}`,
+          `refreshed=${result.refreshed}`,
+          `failed=${result.failed}`
+        );
+      })
+      .catch((err) => {
+        console.error(
+          "[cron-meta-token-refresh:interval]",
+          err instanceof Error ? err.message : err
+        );
+      });
+  };
+  runRefresh();
+  setInterval(runRefresh, tokenRefreshIntervalMs);
+  console.log(`  Meta token refresh interval: every ${tokenRefreshIntervalMs}ms`);
+}

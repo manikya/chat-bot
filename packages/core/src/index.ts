@@ -11,6 +11,14 @@ export {
   logoPublicUrl,
 } from "./tenant/logo";
 export { isS3AssetsEnabled } from "./storage/s3";
+export { isSecretsManagerEnabled } from "./secrets/client";
+export {
+  canSendFreeFormMessage,
+  assertCanSendFreeFormMessage,
+  MessagingWindowClosedError,
+  MESSAGING_SESSION_WINDOW_MS,
+} from "./channels/messaging-policy";
+export { refreshExpiringMetaTokens, type MetaTokenRefreshResult } from "./channels/token-refresh";
 export * from "./team/service";
 export * from "./commerce/service";
 export * from "./onboarding/service";
@@ -58,6 +66,7 @@ export {
   resolveTenantByPhoneNumberId,
   resolveTenantByPageId,
   ensureFreshMetaToken,
+  ensureFreshMessengerToken,
   getMetaCredentialsForTenant,
 } from "./channels/service";
 export type {

@@ -36,6 +36,12 @@ export interface CoreConfig {
   s3PublicUrl?: string;
   s3AccessKeyId?: string;
   s3SecretAccessKey?: string;
+  secretsEndpoint?: string;
+  secretsAccessKeyId?: string;
+  secretsSecretAccessKey?: string;
+  metaSecretsUseSecretsManager: boolean;
+  metaSecretsPrefix: string;
+  metaTokenRefreshCronSecret?: string;
   /** Template URL for Sri Lankan / external payment gateway redirect */
   paymentGatewayCheckoutUrl?: string;
   /** Shared secret for POST /webhooks/payment (gateway callback) */
@@ -85,6 +91,12 @@ export function loadConfig(): CoreConfig {
     s3PublicUrl: process.env.S3_PUBLIC_URL,
     s3AccessKeyId: process.env.AWS_ACCESS_KEY_ID,
     s3SecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    secretsEndpoint: process.env.SECRETS_MANAGER_ENDPOINT,
+    secretsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    metaSecretsUseSecretsManager: process.env.META_SECRETS_USE_SECRETS_MANAGER === "true",
+    metaSecretsPrefix: process.env.META_SECRETS_PREFIX ?? "commercechat",
+    metaTokenRefreshCronSecret: process.env.META_TOKEN_REFRESH_CRON_SECRET,
     paymentGatewayCheckoutUrl: process.env.PAYMENT_GATEWAY_CHECKOUT_URL,
     paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET,
     billingSkipPayment: process.env.BILLING_SKIP_PAYMENT === "true",
