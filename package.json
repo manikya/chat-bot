@@ -18,7 +18,8 @@
     "lint": "npm run lint --workspace=@commercechat/admin",
     "build:lambdas": "npm run build:lambdas --workspace=@commercechat/api",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "cost:aws": "node scripts/aws-cost-report.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

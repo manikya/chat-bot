@@ -2,6 +2,10 @@
 
 Lambda deployment map for API Gateway HTTP API.
 
+For AWS serverless deployment prep, tagging, and cost grouping, see
+[aws-serverless-deployment.md](aws-serverless-deployment.md). The machine-readable tag and
+cost-group manifest is [cost-allocation-tags.json](cost-allocation-tags.json).
+
 ## Handler bundles
 
 Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.

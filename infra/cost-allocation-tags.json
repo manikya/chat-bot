@@ -1,0 +1,77 @@
+{
+  "requiredTags": {
+    "Project": "CommerceChat",
+    "Application": "commercechat",
+    "Environment": "dev|staging|prod",
+    "ManagedBy": "cdk",
+    "Owner": "platform",
+    "Component": "api|admin|widget|chat|ingest|meta|billing|storage|observability|security",
+    "CostGroup": "core-api|admin-web|widget-cdn|chat-runtime|knowledge-ingest|meta-channels|billing|storage|observability|security",
+    "DataClass": "public|internal|customer|secret"
+  },
+  "costGroups": {
+    "core-api": [
+      "API Gateway HTTP API",
+      "auth/tenant/team/config Lambda functions",
+      "shared API access logs"
+    ],
+    "admin-web": [
+      "Admin CloudFront distribution",
+      "admin static S3 assets",
+      "ACM certificate and Route 53 records for app host"
+    ],
+    "widget-cdn": [
+      "Widget CloudFront distribution",
+      "widget bundle S3 assets",
+      "widget config/chat API routes"
+    ],
+    "chat-runtime": [
+      "chat-api Lambda",
+      "orchestrator Lambdas",
+      "conversation/cart DynamoDB access",
+      "chat CloudWatch logs"
+    ],
+    "knowledge-ingest": [
+      "knowledge source APIs",
+      "crawler/parser/embedder Lambdas",
+      "Step Functions ingest workflow",
+      "SQS ingest queues",
+      "vector store usage"
+    ],
+    "meta-channels": [
+      "Meta webhook Lambda/API route",
+      "Messenger/WhatsApp sender functions",
+      "token refresh schedule",
+      "channel credentials secrets"
+    ],
+    "billing": [
+      "billing APIs",
+      "payment webhook",
+      "payment provider secrets"
+    ],
+    "storage": [
+      "DynamoDB main table",
+      "S3 data bucket",
+      "S3 asset bucket",
+      "backup/PITR storage"
+    ],
+    "observability": [
+      "CloudWatch alarms",
+      "CloudWatch dashboards",
+      "log groups",
+      "SNS alert topics"
+    ],
+    "security": [
+      "WAF",
+      "KMS keys",
+      "Secrets Manager shared secrets",
+      "SSM parameters"
+    ]
+  },
+  "resourceNamePattern": "commercechat-{env}-{component}-{name}",
+  "notes": [
+    "Activate Project, Application, Environment, Component, CostGroup, Owner, ManagedBy, and DataClass as user-defined cost allocation tags in AWS Billing.",
+    "Do not put tenant IDs, emails, phone numbers, API keys, or customer names in AWS tags.",
+    "Use app-level usage records and metrics for per-tenant profitability, not AWS resource tags."
+  ]
+}
