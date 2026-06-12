@@ -84,16 +84,30 @@ function resourceTags(env) {
   ];
 }
 
-function latestApiEndpoint(env) {
+function readDeploymentInventory(env, kind) {
   if (!existsSync(INVENTORY_DIR)) return null;
   const files = readdirSync(INVENTORY_DIR)
-    .filter((name) => name.startsWith(`commercechat-${env}-`) && name.endsWith(".json"))
+    .filter((name) => name.startsWith(`commercechat-${env}`) && name.endsWith(".json"))
     .filter((name) => !name.includes("partial") && !name.includes("failed") && !name.includes("error"))
+    .filter((name) => (kind === "admin" ? name.includes("-admin-") : !name.includes("-admin-")))
     .sort();
   const latest = files.at(-1);
   if (!latest) return null;
-  const inventory = JSON.parse(readFileSync(join(INVENTORY_DIR, latest), "utf8"));
-  return inventory.apiEndpoint ?? null;
+  return JSON.parse(readFileSync(join(INVENTORY_DIR, latest), "utf8"));
+}
+
+function latestApiEndpoint(env) {
+  const inv = readDeploymentInventory(env, "api");
+  return inv?.apiEndpoint ?? inv?.apiUrl ?? null;
+}
+
+function latestAdminUrl(env) {
+  const inv = readDeploymentInventory(env, "admin");
+  return inv?.adminUrl ?? null;
+}
+
+function metaOAuthRedirectForAdminUrl(adminUrl) {
+  return adminUrl ? `${adminUrl.replace(/\/$/, "")}/channels/meta/callback` : "";
 }
 
 function buildTemplate(env) {
@@ -245,8 +259,12 @@ async function main() {
   const region = arg("region", "us-east-1");
   const stackName = arg("stack", `commercechat-${env}-admin`);
   const apiUrl = arg("api-url", latestApiEndpoint(env) ?? "");
+  const adminUrlHint = arg("admin-url", latestAdminUrl(env) ?? "");
   const metaAppId = arg("meta-app-id", process.env.META_APP_ID ?? process.env.NEXT_PUBLIC_META_APP_ID ?? "");
-  const metaOauthRedirect = arg("meta-oauth-redirect-uri", "");
+  const metaOauthRedirect = arg(
+    "meta-oauth-redirect-uri",
+    metaOAuthRedirectForAdminUrl(adminUrlHint)
+  );
 
   if (!existsSync(credentialsCsv)) throw new Error(`Credentials CSV not found: ${credentialsCsv}`);
   if (!apiUrl) throw new Error("Pass --api-url= or deploy the API stack first (npm run deploy:aws)");
@@ -269,6 +287,7 @@ async function main() {
     NEXT_STATIC_EXPORT: "1",
     NEXT_PUBLIC_API_URL: apiUrl,
     ...(metaAppId ? { NEXT_PUBLIC_META_APP_ID: metaAppId } : {}),
+    ...(metaOauthRedirect ? { NEXT_PUBLIC_META_OAUTH_REDIRECT_URI: metaOauthRedirect } : {}),
   };
 
   console.log("Building static admin export...");
@@ -350,10 +369,9 @@ async function main() {
     { env: awsEnv, stdio: "inherit" }
   );
 
-  if (metaOauthRedirect) {
-    console.log(`Meta OAuth redirect URI (verify in Meta app): ${metaOauthRedirect}`);
-  } else if (adminUrl) {
-    console.log(`Meta OAuth redirect URI (add to Meta app): ${adminUrl.replace(/\/$/, "")}/channels/meta/callback/`);
+  const effectiveMetaRedirect = metaOauthRedirect || metaOAuthRedirectForAdminUrl(adminUrl ?? "");
+  if (effectiveMetaRedirect) {
+    console.log(`Meta OAuth redirect URI (whitelist in Meta app): ${effectiveMetaRedirect}`);
   }
 
   const now = new Date().toISOString().replace(/[:.]/g, "-");
@@ -372,7 +390,7 @@ async function main() {
         apiUrl,
         bucket,
         distributionId,
-        metaOAuthRedirectUri: metaOauthRedirect || `${adminUrl?.replace(/\/$/, "")}/channels/meta/callback/`,
+        metaOAuthRedirectUri: effectiveMetaRedirect || null,
       },
       null,
       2

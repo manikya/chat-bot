@@ -44,6 +44,7 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 | `JWT_SECRET` | Secrets Manager ARN or value |
 | `JWT_ISSUER` | `commercechat.com` |
 | `APP_URL` | Admin app URL for email links |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | Zoho (or other) SMTP — set in `apps/api/.env`; deploy script loads them automatically |
 
 ## AWS deploy
 

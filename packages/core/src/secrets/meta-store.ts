@@ -12,10 +12,12 @@ function secretId(config: CoreConfig, tenantId: string, kind: MetaSecretKind): s
 }
 
 function filePath(config: CoreConfig, tenantId: string, kind: MetaSecretKind): string {
-  const dir = join(config.dataDir, "meta");
-  mkdirSync(dir, { recursive: true });
   const filename = kind === "messenger" ? `${tenantId}-messenger.json` : `${tenantId}.json`;
-  return join(dir, filename);
+  return join(config.dataDir, "meta", filename);
+}
+
+function ensureMetaDataDir(config: CoreConfig): void {
+  mkdirSync(join(config.dataDir, "meta"), { recursive: true });
 }
 
 function readFileJson<T>(path: string): T | null {
@@ -40,7 +42,11 @@ async function loadJson<T>(
     const fromFile = readFileJson<T>(path);
     if (fromFile) {
       await putJsonSecret(config, secretId(config, tenantId, kind), fromFile);
-      unlinkSync(path);
+      try {
+        unlinkSync(path);
+      } catch {
+        // file may be on read-only fs (e.g. Lambda)
+      }
       console.log(`[meta-secrets] migrated ${kind} credentials to Secrets Manager for`, tenantId);
       return fromFile;
     }
@@ -59,10 +65,17 @@ async function saveJson(
   if (isSecretsManagerEnabled(config)) {
     await putJsonSecret(config, secretId(config, tenantId, kind), value);
     const path = filePath(config, tenantId, kind);
-    if (existsSync(path)) unlinkSync(path);
+    if (existsSync(path)) {
+      try {
+        unlinkSync(path);
+      } catch {
+        // ignore read-only fs
+      }
+    }
     return;
   }
 
+  ensureMetaDataDir(config);
   writeFileSync(filePath(config, tenantId, kind), JSON.stringify(value, null, 2), "utf8");
 }
 

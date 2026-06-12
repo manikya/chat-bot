@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 
 const ROOT = resolve(new URL("..", import.meta.url).pathname);
 const API_DIR = join(ROOT, "apps/api");
+const LOCAL_API_ENV = join(API_DIR, ".env");
 const BUILD_DIR = join(API_DIR, "dist/handlers");
 const OUT_DIR = join(ROOT, ".aws-deploy");
 const INVENTORY_DIR = join(ROOT, "infra/deployments");
@@ -83,11 +84,86 @@ function arg(name, fallback) {
   return found ? found.slice(prefix.length) : fallback;
 }
 
+function hasArg(name) {
+  return process.argv.some((item) => item.startsWith(`--${name}=`));
+}
+
+function readDeploymentInventory(env, kind) {
+  if (!existsSync(INVENTORY_DIR)) return null;
+  const files = readdirSync(INVENTORY_DIR)
+    .filter((name) => name.startsWith(`commercechat-${env}`) && name.endsWith(".json"))
+    .filter((name) => !name.includes("partial") && !name.includes("failed") && !name.includes("error"))
+    .filter((name) => (kind === "admin" ? name.includes("-admin-") : !name.includes("-admin-")))
+    .sort();
+  const latest = files.at(-1);
+  if (!latest) return null;
+  return JSON.parse(readFileSync(join(INVENTORY_DIR, latest), "utf8"));
+}
+
+function latestApiEndpoint(env) {
+  const inv = readDeploymentInventory(env, "api");
+  return inv?.apiEndpoint ?? null;
+}
+
+function latestAdminUrl(env) {
+  const inv = readDeploymentInventory(env, "admin");
+  return inv?.adminUrl ?? null;
+}
+
+function metaOAuthRedirectForAdminUrl(adminUrl) {
+  return adminUrl ? `${adminUrl.replace(/\/$/, "")}/channels/meta/callback` : "";
+}
+
+/** Load apps/api/.env for local deploy secrets (SMTP, Meta, OpenAI) — file is gitignored. */
+function loadLocalApiEnv() {
+  if (!existsSync(LOCAL_API_ENV)) return;
+  for (const line of readFileSync(LOCAL_API_ENV, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+function readDeployedLambdaEnv(stackName, awsEnv) {
+  const list = awsCall(
+    [
+      "lambda",
+      "list-functions",
+      "--query",
+      `Functions[?starts_with(FunctionName, '${stackName}')].FunctionName | [0]`,
+      "--output",
+      "text",
+    ],
+    awsEnv
+  );
+  if (!list.ok || !list.stdout.trim()) return null;
+  const config = awsCall(
+    ["lambda", "get-function-configuration", "--function-name", list.stdout.trim(), "--query", "Environment.Variables", "--output", "json"],
+    awsEnv
+  );
+  if (!config.ok) return null;
+  try {
+    return JSON.parse(config.stdout);
+  } catch {
+    return null;
+  }
+}
+
+/** Stacks that must be deleted before a new deploy (failed create). UPDATE_ROLLBACK_COMPLETE is recoverable via normal update. */
 const FAILED_STACK_STATUSES = new Set([
   "ROLLBACK_COMPLETE",
   "ROLLBACK_FAILED",
   "CREATE_FAILED",
-  "UPDATE_ROLLBACK_COMPLETE",
   "UPDATE_ROLLBACK_FAILED",
 ]);
 
@@ -462,6 +538,7 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
                   "secretsmanager:CreateSecret",
                   "secretsmanager:UpdateSecret",
                   "secretsmanager:TagResource",
+                  "secretsmanager:DeleteSecret",
                 ],
                 Resource: { "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:commercechat/*" },
               },
@@ -559,6 +636,13 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
             META_APP_ID: { Ref: "MetaAppId" },
             META_APP_SECRET: { Ref: "MetaAppSecret" },
             META_VERIFY_TOKEN: { Ref: "MetaVerifyToken" },
+            META_OAUTH_REDIRECT_URI: { Ref: "MetaOAuthRedirectUri" },
+            SMTP_HOST: { Ref: "SmtpHost" },
+            SMTP_PORT: { Ref: "SmtpPort" },
+            SMTP_USER: { Ref: "SmtpUser" },
+            SMTP_PASS: { Ref: "SmtpPass" },
+            SMTP_FROM: { Ref: "SmtpFrom" },
+            META_SECRETS_USE_SECRETS_MANAGER: "true",
             PAYMENT_WEBHOOK_SECRET: { Ref: "PaymentWebhookSecret" },
             BILLING_SKIP_PAYMENT: { Ref: "BillingSkipPayment" },
           },
@@ -622,6 +706,12 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
       MetaAppId: { Type: "String", Default: "" },
       MetaAppSecret: { Type: "String", NoEcho: true, Default: "" },
       MetaVerifyToken: { Type: "String", NoEcho: true, Default: "" },
+      MetaOAuthRedirectUri: { Type: "String", Default: "" },
+      SmtpHost: { Type: "String", Default: "" },
+      SmtpPort: { Type: "String", Default: "587" },
+      SmtpUser: { Type: "String", Default: "" },
+      SmtpPass: { Type: "String", NoEcho: true, Default: "" },
+      SmtpFrom: { Type: "String", Default: "" },
       PaymentWebhookSecret: { Type: "String", NoEcho: true, Default: "" },
       BillingSkipPayment: { Type: "String", AllowedValues: ["true", "false"], Default: env === "prod" ? "false" : "true" },
     },
@@ -765,19 +855,12 @@ async function main() {
   const env = arg("env", "dev");
   const region = arg("region", "us-east-1");
   const stackName = arg("stack", `commercechat-${env}`);
-  const appUrl = arg("app-url", "http://localhost:3000");
-  const openaiApiKey = arg("openai-api-key", process.env.OPENAI_API_KEY ?? "");
-  const metaAppId = arg("meta-app-id", process.env.META_APP_ID ?? "");
-  const metaAppSecret = arg("meta-app-secret", process.env.META_APP_SECRET ?? "");
-  const metaVerifyToken = arg("meta-verify-token", process.env.META_VERIFY_TOKEN ?? "");
-  const paymentWebhookSecret = arg("payment-webhook-secret", process.env.PAYMENT_WEBHOOK_SECRET ?? "");
-  const billingSkipPayment = arg("billing-skip-payment", env === "prod" ? "false" : "true");
-  const jwtSecret = arg("jwt-secret", process.env.JWT_SECRET ?? randomBytes(32).toString("hex"));
   const dryRun = process.argv.includes("--dry-run");
   const preflightOnly = process.argv.includes("--preflight-only");
   const deleteFailedStack = process.argv.includes("--delete-failed-stack");
 
   if (!existsSync(credentialsCsv)) throw new Error(`Credentials CSV not found: ${credentialsCsv}`);
+  loadLocalApiEnv();
   const creds = parseCredentialsCsv(credentialsCsv);
   const awsEnv = {
     ...process.env,
@@ -791,6 +874,47 @@ async function main() {
     ? { Account: arg("account-id", "000000000000") }
     : JSON.parse(sh("aws", ["sts", "get-caller-identity"], { env: awsEnv }));
   const accountId = caller.Account;
+  const deployedEnv = readDeployedLambdaEnv(stackName, awsEnv);
+  const appUrl = arg("app-url", latestAdminUrl(env) ?? deployedEnv?.APP_URL ?? "http://localhost:3000");
+  const apiPublicUrl = arg("api-public-url", latestApiEndpoint(env) ?? deployedEnv?.API_PUBLIC_URL ?? "");
+  const openaiApiKey = hasArg("openai-api-key")
+    ? arg("openai-api-key", "")
+    : process.env.OPENAI_API_KEY ?? deployedEnv?.OPENAI_API_KEY ?? "";
+  const metaAppId = hasArg("meta-app-id")
+    ? arg("meta-app-id", "")
+    : process.env.META_APP_ID ?? deployedEnv?.META_APP_ID ?? "";
+  const metaAppSecret = hasArg("meta-app-secret")
+    ? arg("meta-app-secret", "")
+    : process.env.META_APP_SECRET ?? deployedEnv?.META_APP_SECRET ?? "";
+  const metaVerifyToken = hasArg("meta-verify-token")
+    ? arg("meta-verify-token", "")
+    : process.env.META_VERIFY_TOKEN ?? deployedEnv?.META_VERIFY_TOKEN ?? "";
+  const paymentWebhookSecret = hasArg("payment-webhook-secret")
+    ? arg("payment-webhook-secret", "")
+    : process.env.PAYMENT_WEBHOOK_SECRET ?? deployedEnv?.PAYMENT_WEBHOOK_SECRET ?? "";
+  const billingSkipPayment = arg("billing-skip-payment", env === "prod" ? "false" : "true");
+  const jwtSecret = hasArg("jwt-secret")
+    ? arg("jwt-secret", "")
+    : process.env.JWT_SECRET ?? deployedEnv?.JWT_SECRET ?? randomBytes(32).toString("hex");
+  const metaOAuthRedirectUri = arg(
+    "meta-oauth-redirect-uri",
+    metaOAuthRedirectForAdminUrl(appUrl) || deployedEnv?.META_OAUTH_REDIRECT_URI || ""
+  );
+  const smtpHost = hasArg("smtp-host")
+    ? arg("smtp-host", "")
+    : process.env.SMTP_HOST ?? deployedEnv?.SMTP_HOST ?? "";
+  const smtpPort = hasArg("smtp-port")
+    ? arg("smtp-port", "587")
+    : process.env.SMTP_PORT ?? deployedEnv?.SMTP_PORT ?? "587";
+  const smtpUser = hasArg("smtp-user")
+    ? arg("smtp-user", "")
+    : process.env.SMTP_USER ?? deployedEnv?.SMTP_USER ?? "";
+  const smtpPass = hasArg("smtp-pass")
+    ? arg("smtp-pass", "")
+    : process.env.SMTP_PASS ?? deployedEnv?.SMTP_PASS ?? "";
+  const smtpFrom = hasArg("smtp-from")
+    ? arg("smtp-from", "")
+    : process.env.SMTP_FROM ?? deployedEnv?.SMTP_FROM ?? smtpUser;
   const artifactBucket = `commercechat-${env}-${accountId}-${region}-deploy`;
   let artifactPrefix = null;
   let artifactUploaded = false;
@@ -819,6 +943,13 @@ async function main() {
 
   try {
     console.log(`Account ${accountId} | stack ${stackName} | region ${region}`);
+    console.log(`AppUrl ${appUrl} | ApiPublicUrl ${apiPublicUrl || "(empty)"}`);
+    if (metaOAuthRedirectUri) console.log(`Meta OAuth redirect ${metaOAuthRedirectUri}`);
+    if (smtpHost && smtpUser && smtpPass) {
+      console.log(`SMTP ${smtpHost}:${smtpPort} as ${smtpUser}`);
+    } else {
+      console.log("SMTP not configured — auth emails log to CloudWatch only");
+    }
     runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv });
 
     if (preflightOnly) {
@@ -897,12 +1028,18 @@ async function main() {
         "--parameter-overrides",
         `JwtSecret=${jwtSecret}`,
         `AppUrl=${appUrl}`,
-        "ApiPublicUrl=",
+        `ApiPublicUrl=${apiPublicUrl}`,
         "AssetsPublicUrl=",
         `OpenAIApiKey=${openaiApiKey}`,
         `MetaAppId=${metaAppId}`,
         `MetaAppSecret=${metaAppSecret}`,
         `MetaVerifyToken=${metaVerifyToken}`,
+        `MetaOAuthRedirectUri=${metaOAuthRedirectUri}`,
+        `SmtpHost=${smtpHost}`,
+        `SmtpPort=${smtpPort}`,
+        `SmtpUser=${smtpUser}`,
+        `SmtpPass=${smtpPass}`,
+        `SmtpFrom=${smtpFrom}`,
         `PaymentWebhookSecret=${paymentWebhookSecret}`,
         `BillingSkipPayment=${billingSkipPayment}`,
         "--tags",
@@ -942,6 +1079,7 @@ async function main() {
 
     console.log("\nDeployment complete.");
     console.log(`API endpoint: ${outputs.ApiEndpoint}`);
+    console.log(`Meta webhook URL: ${outputs.ApiEndpoint}/webhooks/meta`);
     console.log(`Resource inventory: ${inventoryPath}`);
     console.log(`Remove stack: aws cloudformation delete-stack --stack-name ${stackName} --region ${region}`);
   } catch (err) {

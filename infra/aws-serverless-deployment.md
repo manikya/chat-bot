@@ -169,6 +169,8 @@ npm run deploy:aws -- \
   --meta-verify-token="$META_VERIFY_TOKEN"
 ```
 
+**SMTP (auth emails):** set `SMTP_*` in `apps/api/.env` (gitignored). The deploy script loads that file automatically and passes Zoho/other SMTP settings to all Lambdas. Without SMTP, verify/reset links are logged to CloudWatch only.
+
 Removal is intentionally simple:
 
 ```bash
@@ -196,8 +198,9 @@ npm run deploy:admin -- \
 After deploy:
 
 1. Open the printed **Admin URL** (CloudFront).
-2. Add **Meta OAuth redirect**: `{AdminUrl}/channels/meta/callback/`
-3. Update Lambda **`AppUrl`** parameter (redeploy API or set in console) to the Admin URL for verify-email links.
+2. Add **Meta OAuth redirect** (no trailing slash): `{AdminUrl}/channels/meta/callback`
+3. Add **Meta webhook URL**: `{ApiUrl}/webhooks/meta`
+4. Redeploy API (`npm run deploy:aws`) so **`AppUrl`**, **`ApiPublicUrl`**, and **`MetaOAuthRedirectUri`** match the admin and API URLs.
 
 Stack name: `commercechat-{env}-admin` · Cost group: `admin-web`
 

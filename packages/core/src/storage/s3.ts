@@ -11,15 +11,18 @@ export function isS3AssetsEnabled(config: CoreConfig) {
 }
 
 export function getS3Client(config: CoreConfig) {
-  return new S3Client({
-    region: config.awsRegion,
-    endpoint: config.s3Endpoint,
-    forcePathStyle: true,
-    credentials:
-      config.s3AccessKeyId && config.s3SecretAccessKey
-        ? { accessKeyId: config.s3AccessKeyId, secretAccessKey: config.s3SecretAccessKey }
-        : { accessKeyId: "test", secretAccessKey: "test" },
-  });
+  if (config.s3Endpoint) {
+    return new S3Client({
+      region: config.awsRegion,
+      endpoint: config.s3Endpoint,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: config.s3AccessKeyId ?? "test",
+        secretAccessKey: config.s3SecretAccessKey ?? "test",
+      },
+    });
+  }
+  return new S3Client({ region: config.awsRegion });
 }
 
 export function s3ObjectPublicUrl(config: CoreConfig, key: string) {

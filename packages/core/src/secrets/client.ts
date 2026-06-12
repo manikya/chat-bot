@@ -12,17 +12,18 @@ export function isSecretsManagerEnabled(config: CoreConfig): boolean {
 }
 
 export function getSecretsManagerClient(config: CoreConfig) {
-  return new SecretsManagerClient({
-    region: config.awsRegion,
-    ...(config.secretsEndpoint ? { endpoint: config.secretsEndpoint } : {}),
-    credentials:
-      config.secretsAccessKeyId && config.secretsSecretAccessKey
-        ? {
-            accessKeyId: config.secretsAccessKeyId,
-            secretAccessKey: config.secretsSecretAccessKey,
-          }
-        : { accessKeyId: "test", secretAccessKey: "test" },
-  });
+  // LocalStack only — on Lambda/real AWS use the execution role (includes session token).
+  if (config.secretsEndpoint) {
+    return new SecretsManagerClient({
+      region: config.awsRegion,
+      endpoint: config.secretsEndpoint,
+      credentials: {
+        accessKeyId: config.secretsAccessKeyId ?? "test",
+        secretAccessKey: config.secretsSecretAccessKey ?? "test",
+      },
+    });
+  }
+  return new SecretsManagerClient({ region: config.awsRegion });
 }
 
 export async function getJsonSecret<T>(
