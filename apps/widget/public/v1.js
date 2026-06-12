@@ -87,7 +87,21 @@
       ".cc-typing{font-size:12px;color:#64748b;padding:4px 12px;}" +
       ".cc-msg-actions{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px 0;max-width:88%;}" +
       ".cc-action-chip{font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;text-align:left;}" +
-      ".cc-action-chip:hover{border-color:var(--cc-primary,#4F46E5);color:var(--cc-primary,#4F46E5);}"
+      ".cc-action-chip:hover{border-color:var(--cc-primary,#4F46E5);color:var(--cc-primary,#4F46E5);}" +
+      ".cc-product-list{display:grid;gap:8px;margin:-2px 0 10px 0;max-width:94%;}" +
+      ".cc-product-card{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04);}" +
+      ".cc-product-img{width:64px;height:64px;border-radius:8px;background:#e2e8f0;object-fit:cover;display:block;}" +
+      ".cc-product-img-fallback{display:flex;align-items:center;justify-content:center;color:#64748b;font-weight:700;font-size:18px;}" +
+      ".cc-product-body{min-width:0;display:flex;flex-direction:column;gap:4px;}" +
+      ".cc-product-name{font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
+      ".cc-product-meta{display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;}" +
+      ".cc-product-price{font-weight:700;color:#0f172a;}" +
+      ".cc-product-desc{font-size:12px;color:#64748b;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}" +
+      ".cc-product-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px;}" +
+      ".cc-product-btn{font-size:12px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;padding:6px 8px;cursor:pointer;text-decoration:none;color:#0f172a;}" +
+      ".cc-product-btn-primary{border-color:var(--cc-primary,#4F46E5);background:var(--cc-primary,#4F46E5);color:#fff;}" +
+      ".cc-product-btn:disabled{opacity:.5;cursor:not-allowed;}" +
+      "@media (max-width:480px){.cc-panel{inset:0;width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0}.cc-panel-br,.cc-panel-bl{bottom:auto;right:auto;left:auto}.cc-product-list{max-width:100%;}}"
     );
   }
 
@@ -157,6 +171,9 @@
           actions.appendChild(chip);
         });
         messagesEl.appendChild(actions);
+      }
+      if (m.cards && m.cards.length) {
+        messagesEl.appendChild(renderProductCards(m.cards));
       }
     });
     if (state.loading) {
@@ -236,13 +253,118 @@
     return s;
   }
 
+  function formatPrice(price, currency) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: currency || "USD",
+      }).format(Number(price || 0));
+    } catch (e) {
+      return (currency || "USD") + " " + price;
+    }
+  }
+
+  function renderProductCards(cards) {
+    var list = document.createElement("div");
+    list.className = "cc-product-list";
+    cards.forEach(function (card) {
+      var el = document.createElement("div");
+      el.className = "cc-product-card";
+
+      var imageUrl = card.imageUrl || (card.imageUrls && card.imageUrls.length ? card.imageUrls[0] : null);
+      if (imageUrl) {
+        var img = document.createElement("img");
+        img.className = "cc-product-img";
+        img.src = imageUrl;
+        img.alt = card.name || card.sku || "Product";
+        img.loading = "lazy";
+        el.appendChild(img);
+      } else {
+        var fallback = document.createElement("div");
+        fallback.className = "cc-product-img cc-product-img-fallback";
+        fallback.textContent = (card.name || card.sku || "?").slice(0, 1).toUpperCase();
+        el.appendChild(fallback);
+      }
+
+      var body = document.createElement("div");
+      body.className = "cc-product-body";
+
+      var name = document.createElement("div");
+      name.className = "cc-product-name";
+      name.textContent = card.name || card.sku || "Product";
+      body.appendChild(name);
+
+      var meta = document.createElement("div");
+      meta.className = "cc-product-meta";
+      var price = document.createElement("span");
+      price.className = "cc-product-price";
+      price.textContent = formatPrice(card.price, card.currency);
+      meta.appendChild(price);
+      var stock = document.createElement("span");
+      stock.textContent = card.inStock === false ? "Out of stock" : "In stock";
+      meta.appendChild(stock);
+      body.appendChild(meta);
+
+      if (card.description) {
+        var desc = document.createElement("div");
+        desc.className = "cc-product-desc";
+        desc.textContent = card.description;
+        body.appendChild(desc);
+      }
+
+      var buttons = document.createElement("div");
+      buttons.className = "cc-product-buttons";
+
+      var add = document.createElement("button");
+      add.type = "button";
+      add.className = "cc-product-btn cc-product-btn-primary";
+      add.textContent = "Add to cart";
+      add.disabled = card.inStock === false;
+      add.onclick = function () {
+        sendMessage("Add " + (card.sku || card.name) + " to my cart");
+      };
+      buttons.appendChild(add);
+
+      var details = document.createElement(card.url ? "a" : "button");
+      details.className = "cc-product-btn";
+      details.textContent = "Details";
+      if (card.url) {
+        details.href = card.url;
+        details.target = "_blank";
+        details.rel = "noopener noreferrer";
+      } else {
+        details.type = "button";
+        details.onclick = function () {
+          sendMessage("Tell me more about " + (card.sku || card.name));
+        };
+      }
+      buttons.appendChild(details);
+      body.appendChild(buttons);
+
+      el.appendChild(body);
+      list.appendChild(el);
+    });
+    return list;
+  }
+
   function addUserMessage(text) {
     state.messages.push({ role: "user", text: text });
     render();
   }
 
   function addBotMessage(text, actions) {
-    state.messages.push({ role: "bot", text: text, actions: actions || null });
+    state.messages.push({ role: "bot", text: text, actions: actions || null, cards: null });
+    render();
+    return state.messages.length - 1;
+  }
+
+  function updateBotMessage(index, patch) {
+    if (!state.messages[index]) return;
+    for (var key in patch) {
+      if (Object.prototype.hasOwnProperty.call(patch, key)) {
+        state.messages[index][key] = patch[key];
+      }
+    }
     render();
   }
 
@@ -251,7 +373,29 @@
     state.loading = true;
     render();
 
-    fetch(apiBase + "/api/v1/widget/chat", {
+    sendStreamingMessage(text)
+      .catch(function (err) {
+        console.warn("[CommerceChat] stream fallback", err);
+        return sendSyncMessage(text);
+      })
+      .catch(function (err) {
+        var hint =
+          window.location.protocol === "file:"
+            ? "Open this page at http://localhost:3001/widget/demo.html (not file://)."
+            : err && err.message
+              ? err.message
+              : "Network error — is the API running on port 3001?";
+        addBotMessage("Sorry, something went wrong. " + hint);
+        console.warn("[CommerceChat]", err);
+      })
+      .finally(function () {
+        state.loading = false;
+        render();
+      });
+  }
+
+  function sendSyncMessage(text) {
+    return fetch(apiBase + "/api/v1/widget/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -275,23 +419,98 @@
       .then(function (json) {
         var reply = json.data && json.data.reply && json.data.reply.content;
         var actions = json.data && json.data.suggestedActions;
-        if (reply) addBotMessage(reply, actions);
+        var cards = json.data && json.data.productCards;
+        if (reply) {
+          var idx = addBotMessage(reply, actions);
+          updateBotMessage(idx, { cards: cards || null });
+        }
         else addBotMessage("Sorry, I could not respond right now.");
-      })
-      .catch(function (err) {
-        var hint =
-          window.location.protocol === "file:"
-            ? "Open this page at http://localhost:3001/widget/demo.html (not file://)."
-            : err && err.message
-              ? err.message
-              : "Network error — is the API running on port 3001?";
-        addBotMessage("Sorry, something went wrong. " + hint);
-        console.warn("[CommerceChat]", err);
-      })
-      .finally(function () {
-        state.loading = false;
-        render();
       });
+  }
+
+  function parseSseBlock(block) {
+    var event = "message";
+    var data = "";
+    block.split(/\r?\n/).forEach(function (line) {
+      if (line.indexOf("event:") === 0) event = line.slice(6).trim();
+      if (line.indexOf("data:") === 0) data += line.slice(5).trim();
+    });
+    if (!data) return null;
+    return { event: event, data: JSON.parse(data) };
+  }
+
+  function sendStreamingMessage(text) {
+    return fetch(apiBase + "/api/v1/widget/chat/stream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify({
+        sessionId: sessionId,
+        message: text,
+        metadata: {
+          pageUrl: window.location.href,
+          userAgent: navigator.userAgent,
+        },
+      }),
+    }).then(function (res) {
+      if (!res.ok || !res.body) {
+        return res.text().then(function (body) {
+          var message = "Chat stream failed";
+          try {
+            var json = JSON.parse(body);
+            message = (json.error && json.error.message) || message;
+          } catch (e) {}
+          throw new Error(message);
+        });
+      }
+
+      var botIndex = addBotMessage("");
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = "";
+      var cards = [];
+
+      function handleEvent(evt) {
+        if (!evt) return;
+        if (evt.event === "token") {
+          var current = state.messages[botIndex] && state.messages[botIndex].text ? state.messages[botIndex].text : "";
+          updateBotMessage(botIndex, { text: current + (evt.data.text || "") });
+        } else if (evt.event === "product_card") {
+          cards.push(evt.data);
+          updateBotMessage(botIndex, { cards: cards.slice() });
+        } else if (evt.event === "done") {
+          var doneCards = evt.data.productCards && evt.data.productCards.length ? evt.data.productCards : cards;
+          updateBotMessage(botIndex, {
+            actions: evt.data.suggestedActions || null,
+            cards: doneCards && doneCards.length ? doneCards : null,
+          });
+        }
+      }
+
+      function pump() {
+        return reader.read().then(function (result) {
+          buffer += decoder.decode(result.value || new Uint8Array(), { stream: !result.done });
+          var parts = buffer.split(/\n\n/);
+          buffer = parts.pop() || "";
+          parts.forEach(function (part) {
+            handleEvent(parseSseBlock(part));
+          });
+          if (result.done) {
+            if (buffer.trim()) handleEvent(parseSseBlock(buffer));
+            if (!state.messages[botIndex] || !state.messages[botIndex].text) {
+              updateBotMessage(botIndex, { text: "Sorry, I could not respond right now." });
+            }
+            return;
+          }
+          return pump();
+        });
+      }
+
+      return pump();
+    });
   }
 
   fetch(apiBase + "/api/v1/widget/config", {

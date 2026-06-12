@@ -1,5 +1,6 @@
 import type { CoreConfig } from "../config";
 import { resolveConversation } from "../chat/conversation";
+import { stripMarkdown } from "../chat/text-format";
 import { ensureFreshMessengerToken } from "../channels/service";
 import { sendMessengerText } from "../channels/meta-client";
 import {
@@ -32,5 +33,5 @@ export async function sendMessengerReply(
   const creds = await ensureFreshMessengerToken(tenantId, config);
   if (!creds) throw new Error("Missing Messenger credentials for tenant");
 
-  return sendMessengerText(config, creds.pageAccessToken, recipientId, text);
+  return sendMessengerText(config, creds.pageAccessToken, recipientId, stripMarkdown(text));
 }

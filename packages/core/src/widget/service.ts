@@ -47,15 +47,81 @@ export interface WidgetChatBody {
   metadata?: Record<string, unknown>;
 }
 
+export interface WidgetProductCard {
+  type: "product";
+  sku: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+  url?: string;
+  inStock: boolean;
+}
+
 function buildSuggestedActions(toolResults?: Array<{ tool: string; success: boolean; [key: string]: unknown }>) {
   const search = toolResults?.find((t) => t.tool === "search_products" && t.success);
-  const products = search?.products as Array<{ sku: string; name: string; price: number }> | undefined;
+  const products = search?.products as Array<{ sku: string; name: string; price: number; currency?: string }> | undefined;
   if (!products?.length) return [];
   return products.slice(0, 3).map((p) => ({
     type: "product" as const,
     sku: p.sku,
-    label: `${p.name} — $${p.price}`,
+    label: `${p.name} — ${formatPrice(p.price, p.currency)}`,
   }));
+}
+
+function formatPrice(price: number, currency?: string) {
+  const code = currency || "USD";
+  try {
+    return new Intl.NumberFormat("en", { style: "currency", currency: code }).format(price);
+  } catch {
+    return `${code} ${price}`;
+  }
+}
+
+export function buildProductCards(toolResults?: Array<{ tool: string; success: boolean; [key: string]: unknown }>): WidgetProductCard[] {
+  const search = toolResults?.find((t) => t.tool === "search_products" && t.success);
+  const products = search?.products as
+    | Array<{
+        sku: string;
+        name: string;
+        description?: string;
+        price: number;
+        currency?: string;
+        imageUrl?: string;
+        imageUrls?: string[];
+        url?: string;
+        inStock?: boolean;
+      }>
+    | undefined;
+  if (!products?.length) return [];
+  return products.slice(0, 3).map((p) => ({
+    type: "product" as const,
+    sku: p.sku,
+    name: p.name,
+    description: p.description,
+    price: p.price,
+    currency: p.currency || "USD",
+    imageUrl: p.imageUrl,
+    imageUrls: p.imageUrls,
+    url: p.url,
+    inStock: p.inStock !== false,
+  }));
+}
+
+export function toWidgetChatResponse(body: WidgetChatBody, result: Awaited<ReturnType<typeof runChatOrchestrator>>) {
+  return {
+    sessionId: body.sessionId,
+    conversationId: result.conversationId,
+    reply: result.reply,
+    suggestedActions: buildSuggestedActions(result.toolResults),
+    productCards: buildProductCards(result.toolResults),
+  };
+}
+
+export function encodeSseEvent(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
 export async function widgetChat(tenantId: string, body: WidgetChatBody, config: CoreConfig) {
@@ -83,10 +149,5 @@ export async function widgetChat(tenantId: string, body: WidgetChatBody, config:
     config
   );
 
-  return ok({
-    sessionId: body.sessionId,
-    conversationId: result.conversationId,
-    reply: result.reply,
-    suggestedActions: buildSuggestedActions(result.toolResults),
-  });
+  return ok(toWidgetChatResponse(body, result));
 }

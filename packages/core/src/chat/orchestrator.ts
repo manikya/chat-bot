@@ -137,7 +137,7 @@ export async function runChatOrchestrator(
 
   const ragChunks = intent === "greeting" ? [] : await retrieveForIntent(auth, text, intent, config);
   const cart = await loadCart(auth.tenantId, conversation.conversationId, config);
-  const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart);
+  const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, input.channel);
 
   const llm = createLLMProvider(config);
   const tools = toolsForIntent(intent);
@@ -222,6 +222,18 @@ export async function runChatOrchestrator(
       ragChunks,
       toolResults
     );
+  }
+
+  if (
+    (intent === "product" || intent === "checkout") &&
+    !toolResults.some((t) => t.tool === "search_products" && t.success)
+  ) {
+    const { result, success } = await executeTool(
+      "search_products",
+      JSON.stringify({ query: text, limit: 5 }),
+      toolCtx
+    );
+    toolResults.push({ tool: "search_products", success, result });
   }
 
   await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {

@@ -6,9 +6,15 @@ export function buildSystemPrompt(
   storeName: string,
   config: TenantConfig,
   ragChunks: ScoredChunk[],
-  cart: CartState | null
+  cart: CartState | null,
+  channel?: string
 ): string {
   const base = config.prompts.systemPrompt.replace(/\{\{storeName\}\}/g, storeName);
+
+  const channelRules =
+    channel === "messenger"
+      ? "\n- Use plain text only — no markdown (no * or ** around product names)"
+      : "";
 
   const rules = `
 Rules:
@@ -17,7 +23,7 @@ Rules:
 - Be friendly and concise
 - When recommending products, use search_products — do not invent SKUs or prices
 - Confirm before adding to cart
-- If unsure, ask a clarifying question`;
+- If unsure, ask a clarifying question${channelRules}`;
 
   const context =
     ragChunks.length > 0

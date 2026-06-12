@@ -12,6 +12,10 @@ export function catalogProductToText(product: CatalogProduct): string {
   ];
   if (product.sizes) parts.push(`Sizes: ${product.sizes}`);
   if (product.colors) parts.push(`Colors: ${product.colors}`);
+  if (product.tags) parts.push(`Tags: ${product.tags}`);
+  if (product.url) parts.push(`URL: ${product.url}`);
+  if (product.imageUrl) parts.push(`Image: ${product.imageUrl}`);
+  if (product.imageUrls?.length) parts.push(`Images: ${product.imageUrls.join(", ")}`);
   return parts.join(" | ");
 }
 

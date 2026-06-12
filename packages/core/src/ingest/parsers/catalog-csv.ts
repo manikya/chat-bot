@@ -7,8 +7,10 @@ export interface CatalogProduct {
   price: number;
   category: string;
   imageUrl?: string;
+  imageUrls?: string[];
   sizes?: string;
   colors?: string;
+  tags?: string;
   inStock: boolean;
   url?: string;
 }

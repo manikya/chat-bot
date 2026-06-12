@@ -43,7 +43,9 @@ export async function upsertProductCache(
           category: product.category,
           inStock: product.inStock,
           imageUrl: product.imageUrl,
+          imageUrls: product.imageUrls,
           productUrl: product.url,
+          tags: product.tags,
           variants: [product.sizes, product.colors].filter(Boolean).join("; ") || undefined,
           updatedAt: now,
         },
@@ -80,7 +82,9 @@ export interface ProductRecord {
   category?: string;
   inStock: boolean;
   imageUrl?: string;
+  imageUrls?: string[];
   productUrl?: string;
+  tags?: string;
   variants?: string;
 }
 

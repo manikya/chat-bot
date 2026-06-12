@@ -31,6 +31,12 @@ export function wordPressProductToCatalog(product: WordPressProduct): CatalogPro
   const attrs = product.attributes
     .map((a) => `${a.name}: ${a.options.join(", ")}`)
     .join("; ");
+  const tags = product.tags?.join(", ");
+  const images = product.images?.length
+    ? product.images
+    : product.image
+      ? [product.image]
+      : [];
 
   return {
     sku: product.sku,
@@ -39,9 +45,11 @@ export function wordPressProductToCatalog(product: WordPressProduct): CatalogPro
     price: product.price,
     category: product.categories[0] ?? "General",
     imageUrl: product.image ?? undefined,
+    imageUrls: images.length ? images : undefined,
     inStock: product.stock_status === "instock",
     url: product.permalink,
     sizes: attrs || undefined,
+    tags: tags || undefined,
   };
 }
 

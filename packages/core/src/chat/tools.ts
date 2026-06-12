@@ -138,8 +138,12 @@ export async function executeTool(
           products: fromVectors.map((p) => ({
             sku: p.sku,
             name: p.name,
+            description: p.description,
             price: p.price,
+            currency: p.currency,
             inStock: p.inStock,
+            imageUrl: "imageUrl" in p ? p.imageUrl : undefined,
+            imageUrls: "imageUrls" in p ? p.imageUrls : undefined,
             url: p.productUrl,
           })),
           totalFound: fromVectors.length,

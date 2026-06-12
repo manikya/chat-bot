@@ -8,16 +8,27 @@ export interface WordPressProduct {
   id: number;
   sku: string;
   name: string;
+  type?: string;
   short_description: string;
   description: string;
+  short_description_html?: string;
+  description_html?: string;
   price: number;
   regular_price: number;
+  sale_price?: number;
   currency: string;
   categories: string[];
+  tags?: string[];
   attributes: Array<{ name: string; options: string[] }>;
   stock_status: string;
+  stock_quantity?: number | null;
   permalink: string;
   image?: string | null;
+  images?: string[];
+  weight?: string;
+  dimensions?: Record<string, string>;
+  average_rating?: number;
+  review_count?: number;
   updated_at: string;
   rag_text: string;
 }
