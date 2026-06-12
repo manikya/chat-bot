@@ -15,13 +15,18 @@ function apiBase(siteUrl: string): string {
   return `${normalizeSiteUrl(siteUrl)}/wp-json/commercechat/v1`;
 }
 
-async function wpFetch<T>(
+async function wpRequest<T>(
   creds: WordPressCredentials,
   path: string,
   config: CoreConfig,
-  query?: Record<string, string | number | undefined>
+  options?: {
+    method?: string;
+    query?: Record<string, string | number | undefined>;
+    body?: unknown;
+  }
 ): Promise<T> {
   const url = new URL(`${apiBase(creds.siteUrl)}${path}`);
+  const query = options?.query;
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== "") {
@@ -33,10 +38,13 @@ async function wpFetch<T>(
   let res: Response;
   try {
     res = await fetch(url.toString(), {
+      method: options?.method ?? "GET",
       headers: {
         Authorization: `Bearer ${creds.apiKey}`,
         Accept: "application/json",
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
       },
+      body: options?.body ? JSON.stringify(options.body) : undefined,
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
@@ -58,6 +66,26 @@ async function wpFetch<T>(
   }
 
   return body;
+}
+
+async function wpFetch<T>(
+  creds: WordPressCredentials,
+  path: string,
+  config: CoreConfig,
+  query?: Record<string, string | number | undefined>
+): Promise<T> {
+  return wpRequest<T>(creds, path, config, { query });
+}
+
+export async function pushWordPressCloudConfig(
+  creds: WordPressCredentials,
+  apiPublicUrl: string,
+  config: CoreConfig
+): Promise<void> {
+  await wpRequest<{ ok: boolean }>(creds, "/register-cloud", config, {
+    method: "POST",
+    body: { apiPublicUrl: apiPublicUrl.replace(/\/$/, "") },
+  });
 }
 
 export async function fetchWordPressStatus(

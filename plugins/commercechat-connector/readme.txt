@@ -3,7 +3,7 @@ Contributors: commercechat
 Requires at least: 6.0
 Requires PHP: 7.4
 WC requires at least: 7.0
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 
 Connect WooCommerce to CommerceChat: sync products for AI answers and look up orders by ID or customer phone (WhatsApp).
 
@@ -12,7 +12,14 @@ Connect WooCommerce to CommerceChat: sync products for AI answers and look up or
 1. Upload the `commercechat-connector` folder to `/wp-content/plugins/`
 2. Activate the plugin in WordPress
 3. Go to Settings → CommerceChat → Generate API key
-4. In CommerceChat Admin → Knowledge, enter your store URL and API key, then Sync
+4. In CommerceChat Admin → Knowledge, enter your store URL and API key, then Connect
+5. The web chat widget appears on your storefront automatically (toggle under Settings → CommerceChat)
+
+== Changelog ==
+
+= 0.2.0 =
+* Auto-inject web chat widget using the same API key (no theme edits)
+* CommerceChat pushes API URL to the plugin when you connect in admin
 
 == REST API (Bearer token) ==
 

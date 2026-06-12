@@ -1,6 +1,7 @@
 /**
  * CommerceChat embeddable widget v1 (vanilla JS, no dependencies).
  * Usage: <script src="https://api.example.com/widget/v1.js" data-api-key="pk_live_..." async></script>
+ * WordPress stores may use the CommerceChat Connector key: data-api-key="cc_wp_..."
  */
 (function () {
   "use strict";
@@ -12,7 +13,7 @@
   }
 
   var apiKey = script.getAttribute("data-api-key");
-  if (!apiKey || !apiKey.startsWith("pk_live_")) {
+  if (!apiKey || (!apiKey.startsWith("pk_live_") && !apiKey.startsWith("cc_wp_"))) {
     console.warn("[CommerceChat] Missing or invalid data-api-key");
     return;
   }

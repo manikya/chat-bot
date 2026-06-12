@@ -16,11 +16,14 @@ import {
   loadWordPressCredentials,
   saveWordPressCredentials,
 } from "./credentials";
+import { registerStoreApiKey, revokeStoreApiKey } from "../../auth/api-key";
+import { getWidgetConfig } from "../../widget/service";
 import {
   fetchAllWordPressProducts,
   fetchWordPressOrder,
   fetchWordPressOrdersByPhone,
   fetchWordPressStatus,
+  pushWordPressCloudConfig,
   validateConnectBody,
 } from "./client";
 import type { ConnectWordPressBody, WordPressOrder, WordPressProduct } from "./types";
@@ -145,7 +148,19 @@ export async function connectWordPressStore(
   const creds = validateConnectBody(body.siteUrl, body.apiKey);
   const status = await fetchWordPressStatus(creds, config);
 
+  const previous = await loadWordPressCredentials(auth.tenantId, config);
+  if (previous?.apiKey && previous.apiKey !== creds.apiKey) {
+    await revokeStoreApiKey(previous.apiKey, config);
+  }
+
   await saveWordPressCredentials(auth.tenantId, creds, config);
+  await registerStoreApiKey(auth.tenantId, creds.apiKey, config);
+
+  try {
+    await pushWordPressCloudConfig(creds, config.apiPublicUrl, config);
+  } catch {
+    /* Store may block outbound from CommerceChat; widget URL can be set in WP admin */
+  }
 
   const sourceId = await ensureWooCommerceSource(auth, creds.siteUrl, config);
 
@@ -175,6 +190,10 @@ export async function connectWordPressStore(
 }
 
 export async function disconnectWordPressStore(auth: AuthContext, config: CoreConfig) {
+  const creds = await loadWordPressCredentials(auth.tenantId, config);
+  if (creds?.apiKey) {
+    await revokeStoreApiKey(creds.apiKey, config);
+  }
   await deleteWordPressCredentials(auth.tenantId, config);
 
   const sourceId = await findWooCommerceSourceId(auth.tenantId, config);
@@ -204,6 +223,25 @@ export async function disconnectWordPressStore(auth: AuthContext, config: CoreCo
   );
 
   return ok({ disconnected: true });
+}
+
+/** Widget bootstrap for WordPress plugin — authenticated with the same cc_wp_ store key. */
+export async function getWordPressWidgetBootstrap(tenantId: string, config: CoreConfig) {
+  const creds = await loadWordPressCredentials(tenantId, config);
+  if (!creds) {
+    throw new ApiError(ErrorCodes.UNAUTHORIZED, "WooCommerce store is not connected", 401);
+  }
+
+  const widget = await getWidgetConfig(tenantId, config);
+  return ok({
+    apiPublicUrl: config.apiPublicUrl.replace(/\/$/, ""),
+    storeName: widget.data?.storeName,
+    greeting: widget.data?.greeting,
+    primaryColor: widget.data?.primaryColor,
+    position: widget.data?.position,
+    suggestedQuestions: widget.data?.suggestedQuestions ?? [],
+    enabled: widget.data?.enabled ?? true,
+  });
 }
 
 export type WordPressOrderLookupResult =

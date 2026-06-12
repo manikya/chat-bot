@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "crypto";
-import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiError, ErrorCodes, ok, type AuthContext } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { buildWidgetEmbedCode } from "../widget/embed";
@@ -16,20 +16,54 @@ function widgetKeyPair() {
 }
 
 export async function verifyWidgetApiKey(apiKey: string, config: CoreConfig): Promise<string> {
-  if (!apiKey?.startsWith("pk_live_")) {
+  if (!apiKey?.startsWith("pk_live_") && !apiKey?.startsWith("cc_wp_")) {
     throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid API key", 401);
   }
+  return lookupTenantByApiKeyHash(hashApiKey(apiKey), config);
+}
+
+async function lookupTenantByApiKeyHash(hash: string, config: CoreConfig): Promise<string> {
   const db = getDocClient(config);
   const res = await db.send(
     new GetCommand({
       TableName: config.tableName,
-      Key: { PK: Keys.apiKeyPk(hashApiKey(apiKey)), SK: Keys.apiKeySk() },
+      Key: { PK: Keys.apiKeyPk(hash), SK: Keys.apiKeySk() },
     })
   );
   if (!res.Item?.tenantId) {
     throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid API key", 401);
   }
   return res.Item.tenantId as string;
+}
+
+/** Register WordPress store key (cc_wp_*) for widget + connector auth — same key, one setup. */
+export async function registerStoreApiKey(tenantId: string, apiKey: string, config: CoreConfig) {
+  if (!apiKey.startsWith("cc_wp_")) return;
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.apiKeyPk(hashApiKey(apiKey)),
+        SK: Keys.apiKeySk(),
+        tenantId,
+        keyType: "wordpress",
+        createdAt: now,
+      },
+    })
+  );
+}
+
+export async function revokeStoreApiKey(apiKey: string, config: CoreConfig) {
+  if (!apiKey.startsWith("cc_wp_")) return;
+  const db = getDocClient(config);
+  await db.send(
+    new DeleteCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.apiKeyPk(hashApiKey(apiKey)), SK: Keys.apiKeySk() },
+    })
+  );
 }
 
 export async function regenerateWidgetApiKey(auth: AuthContext, config: CoreConfig) {

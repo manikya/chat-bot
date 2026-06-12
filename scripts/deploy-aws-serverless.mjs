@@ -65,6 +65,7 @@ const ROUTES = [
   ["POST", "/api/v1/commerce/wordpress/connect", "commerce-wordpress", "connectHandler"],
   ["POST", "/api/v1/commerce/wordpress/sync", "commerce-wordpress", "syncHandler"],
   ["DELETE", "/api/v1/commerce/wordpress", "commerce-wordpress", "disconnectHandler"],
+  ["GET", "/api/v1/commerce/wordpress/widget-bootstrap", "commerce-wordpress", "widgetBootstrapHandler"],
   ["GET", "/api/v1/team", "team"],
   ["DELETE", "/api/v1/team/{userId}", "team-member", "deleteHandler"],
   ["PATCH", "/api/v1/team/{userId}", "team-member", "patchHandler"],

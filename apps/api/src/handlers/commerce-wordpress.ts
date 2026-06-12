@@ -2,12 +2,13 @@ import {
   connectWordPressStore,
   disconnectWordPressStore,
   getWordPressConnectorStatus,
+  getWordPressWidgetBootstrap,
   loadConfig,
   syncKnowledgeSource,
   type ConnectWordPressBody,
 } from "@commercechat/core";
 import { ApiError, ErrorCodes } from "@commercechat/shared";
-import { createHandler } from "../lib/handler";
+import { createApiKeyHandler, createHandler } from "../lib/handler";
 import { parseBody } from "../lib/apigw";
 
 export const statusHandler = createHandler(
@@ -38,4 +39,9 @@ export const syncHandler = createHandler(
     return syncKnowledgeSource(auth!, sourceId, loadConfig());
   },
   { requireAuth: true, successStatus: 202 }
+);
+
+/** Public (store API key) — WordPress plugin fetches widget config with the same cc_wp_ key. */
+export const widgetBootstrapHandler = createApiKeyHandler(async (_event, tenantId) =>
+  getWordPressWidgetBootstrap(tenantId, loadConfig())
 );

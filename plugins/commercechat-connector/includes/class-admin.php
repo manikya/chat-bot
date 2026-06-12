@@ -82,6 +82,16 @@ class CommerceChat_Connector_Admin
             'type' => 'string',
             'sanitize_callback' => 'sanitize_text_field',
         ]);
+        register_setting('commercechat_connector', 'commercechat_cloud_api_url', [
+            'type' => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+        ]);
+        register_setting('commercechat_connector', 'commercechat_widget_enabled', [
+            'type' => 'string',
+            'sanitize_callback' => static function ($value) {
+                return $value === '1' ? '1' : '0';
+            },
+        ]);
     }
 
     private static function generate_api_key(): string
@@ -107,11 +117,13 @@ class CommerceChat_Connector_Admin
         }
 
         $api_key = get_option('commercechat_api_key', '');
+        $cloud_url = get_option('commercechat_cloud_api_url', '');
+        $widget_on = get_option('commercechat_widget_enabled', '1') === '1';
         $rest_base = rest_url(CommerceChat_Connector_REST_API::NAMESPACE);
         ?>
         <div class="wrap">
             <h1>CommerceChat Connector</h1>
-            <p>Connect this WooCommerce store to <strong>CommerceChat</strong> for product sync (RAG) and order lookups.</p>
+            <p>Connect this WooCommerce store to <strong>CommerceChat</strong> for product sync, order lookups, and the web chat widget — using <strong>one API key</strong>.</p>
 
             <?php if ($generated) : ?>
                 <div class="notice notice-success is-dismissible"><p><?php esc_html_e('New API key generated. Copy it into CommerceChat Admin → Knowledge → WooCommerce.', 'commercechat-connector'); ?></p></div>
@@ -141,7 +153,27 @@ class CommerceChat_Connector_Admin
                                     <?php esc_html_e('Copy', 'commercechat-connector'); ?>
                                 </button>
                             <?php endif; ?>
-                            <p class="description"><?php esc_html_e('Paste this key in CommerceChat Admin → Knowledge → WooCommerce.', 'commercechat-connector'); ?></p>
+                            <p class="description"><?php esc_html_e('Paste this key once in CommerceChat Admin when connecting WooCommerce. The same key powers product sync and the storefront chat widget — no separate widget key needed.', 'commercechat-connector'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Web chat widget', 'commercechat-connector'); ?></th>
+                        <td>
+                            <input type="hidden" name="commercechat_widget_enabled" value="0" />
+                            <label>
+                                <input type="checkbox" name="commercechat_widget_enabled" value="1" <?php checked($widget_on); ?> />
+                                <?php esc_html_e('Show CommerceChat widget on storefront (no theme code edits)', 'commercechat-connector'); ?>
+                            </label>
+                            <p class="description"><?php esc_html_e('When you connect this store in CommerceChat Admin, the API URL is saved automatically. Re-connect if the widget does not appear.', 'commercechat-connector'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="commercechat_cloud_api_url"><?php esc_html_e('CommerceChat API URL', 'commercechat-connector'); ?></label></th>
+                        <td>
+                            <input type="url" id="commercechat_cloud_api_url" name="commercechat_cloud_api_url"
+                                   value="<?php echo esc_attr($cloud_url); ?>" class="regular-text code"
+                                   placeholder="https://api.commercechat.com" />
+                            <p class="description"><?php esc_html_e('Usually set automatically when you connect in CommerceChat Admin.', 'commercechat-connector'); ?></p>
                         </td>
                     </tr>
                     <tr>

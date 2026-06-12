@@ -84,8 +84,8 @@ export function WooCommerceConnectCard({ defaultSiteUrl, compact, onConnected }:
       <div className="space-y-1">
         <p className="text-sm font-medium">WooCommerce / WordPress</p>
         <p className="text-xs text-muted-foreground">
-          No public website? Install our plugin on your WordPress store to sync products and power order
-          lookups — ideal for WooCommerce-only merchants.
+          Install our plugin on WordPress to sync products, enable order lookups, and show the web chat
+          widget — one API key, no theme code edits.
         </p>
       </div>
 

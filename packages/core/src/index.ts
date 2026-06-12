@@ -54,7 +54,13 @@ export {
   verifyPaymentWebhookSecret,
 } from "./billing/service";
 export { createLLMProvider } from "./llm/provider";
-export { verifyWidgetApiKey, regenerateWidgetApiKey } from "./auth/api-key";
+export {
+  verifyWidgetApiKey,
+  regenerateWidgetApiKey,
+  registerStoreApiKey,
+  revokeStoreApiKey,
+} from "./auth/api-key";
+export { getWordPressWidgetBootstrap } from "./commerce/wordpress/service";
 export * from "./conversations/service";
 export * from "./widget/service";
 export type { WidgetChatBody } from "./widget/service";

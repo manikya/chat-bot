@@ -34,6 +34,7 @@ import {
   disconnectHandler as wordpressDisconnectHandler,
   statusHandler as wordpressStatusHandler,
   syncHandler as wordpressSyncHandler,
+  widgetBootstrapHandler as wordpressWidgetBootstrapHandler,
 } from "../handlers/commerce-wordpress";
 import { handler as teamHandler } from "../handlers/team";
 import { deleteHandler as teamDeleteHandler, patchHandler as teamPatchHandler } from "../handlers/team-member";
@@ -122,6 +123,7 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/commerce/wordpress/connect", handler: wordpressConnectHandler },
   { method: "POST", path: "/api/v1/commerce/wordpress/sync", handler: wordpressSyncHandler },
   { method: "DELETE", path: "/api/v1/commerce/wordpress", handler: wordpressDisconnectHandler },
+  { method: "GET", path: "/api/v1/commerce/wordpress/widget-bootstrap", handler: wordpressWidgetBootstrapHandler },
   { method: "GET", path: "/api/v1/team", handler: teamHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },

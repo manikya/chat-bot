@@ -44,6 +44,12 @@ class CommerceChat_Connector_REST_API
             'callback' => [self::class, 'orders_by_phone'],
             'permission_callback' => [self::class, 'authorize'],
         ]);
+
+        register_rest_route(self::NAMESPACE, '/register-cloud', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'register_cloud'],
+            'permission_callback' => [self::class, 'authorize'],
+        ]);
     }
 
     public static function authorize(WP_REST_Request $request): bool
@@ -113,5 +119,20 @@ class CommerceChat_Connector_REST_API
         }
         $limit = (int) $request->get_param('limit') ?: 5;
         return new WP_REST_Response(CommerceChat_Connector_Orders::get_by_phone($phone, $limit), 200);
+    }
+
+    /** CommerceChat calls this on connect — stores API URL so the widget can load without theme edits. */
+    public static function register_cloud(WP_REST_Request $request): WP_REST_Response
+    {
+        $body = $request->get_json_params();
+        $url = isset($body['apiPublicUrl']) ? esc_url_raw((string) $body['apiPublicUrl']) : '';
+        if ($url === '') {
+            return new WP_REST_Response(['error' => 'apiPublicUrl is required'], 400);
+        }
+
+        update_option('commercechat_cloud_api_url', untrailingslashit($url));
+        update_option('commercechat_widget_enabled', '1');
+
+        return new WP_REST_Response(['ok' => true], 200);
     }
 }
