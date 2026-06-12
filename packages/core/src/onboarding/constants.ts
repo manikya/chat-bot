@@ -19,7 +19,7 @@ export const WIZARD_STEPS: OnboardingStep[] = [
   "widget",
 ];
 
-export const SKIPPABLE_STEPS: OnboardingStep[] = ["channels", "catalog"];
+export const SKIPPABLE_STEPS: OnboardingStep[] = ["channels", "knowledge", "catalog"];
 
 export const STEP_ESTIMATE_MINUTES: Record<OnboardingStep, number> = {
   profile: 2,

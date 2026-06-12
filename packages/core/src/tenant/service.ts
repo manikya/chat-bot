@@ -21,6 +21,7 @@ export async function getTenantProfile(auth: AuthContext, config: CoreConfig) {
     plan: p.plan,
     status: p.status,
     timezone: p.timezone,
+    websiteUrl: p.websiteUrl as string | undefined,
     onboardingStep: p.onboardingStep,
     logoUrl: p.logoUrl,
     createdAt: p.createdAt,
@@ -29,36 +30,52 @@ export async function getTenantProfile(auth: AuthContext, config: CoreConfig) {
 
 export async function updateTenantProfile(
   auth: AuthContext,
-  patch: { storeName?: string; timezone?: string; onboardingStep?: string },
+  patch: { storeName?: string; timezone?: string; websiteUrl?: string; onboardingStep?: string },
   config: CoreConfig
 ) {
-  const expressions: string[] = [];
+  const setExpressions: string[] = [];
+  const removeExpressions: string[] = [];
   const names: Record<string, string> = {};
   const values: Record<string, unknown> = { ":u": new Date().toISOString() };
   if (patch.storeName) {
-    expressions.push("#storeName = :s");
+    setExpressions.push("#storeName = :s");
     names["#storeName"] = "storeName";
     values[":s"] = patch.storeName;
   }
   if (patch.timezone) {
-    expressions.push("#timezone = :t");
+    setExpressions.push("#timezone = :t");
     names["#timezone"] = "timezone";
     values[":t"] = patch.timezone;
   }
+  if (patch.websiteUrl !== undefined) {
+    const trimmed = patch.websiteUrl.trim();
+    if (trimmed) {
+      setExpressions.push("#websiteUrl = :w");
+      names["#websiteUrl"] = "websiteUrl";
+      values[":w"] = trimmed;
+    } else {
+      removeExpressions.push("#websiteUrl");
+      names["#websiteUrl"] = "websiteUrl";
+    }
+  }
   if (patch.onboardingStep) {
-    expressions.push("#onboardingStep = :o");
+    setExpressions.push("#onboardingStep = :o");
     names["#onboardingStep"] = "onboardingStep";
     values[":o"] = patch.onboardingStep;
   }
-  expressions.push("#updatedAt = :u");
+  setExpressions.push("#updatedAt = :u");
   names["#updatedAt"] = "updatedAt";
+
+  const updateParts: string[] = [];
+  if (setExpressions.length) updateParts.push(`SET ${setExpressions.join(", ")}`);
+  if (removeExpressions.length) updateParts.push(`REMOVE ${removeExpressions.join(", ")}`);
 
   const db = getDocClient(config);
   await db.send(
     new UpdateCommand({
       TableName: config.tableName,
       Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.profile() },
-      UpdateExpression: `SET ${expressions.join(", ")}`,
+      UpdateExpression: updateParts.join(" "),
       ExpressionAttributeNames: names,
       ExpressionAttributeValues: values,
       ConditionExpression: "attribute_exists(PK)",

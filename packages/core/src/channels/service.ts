@@ -42,7 +42,7 @@ function assertCanManageChannels(auth: AuthContext) {
   }
 }
 
-async function getChannelRecord(tenantId: string, channel: string, config: CoreConfig) {
+export async function getChannelRecord(tenantId: string, channel: string, config: CoreConfig) {
   const db = getDocClient(config);
   const res = await db.send(
     new GetCommand({

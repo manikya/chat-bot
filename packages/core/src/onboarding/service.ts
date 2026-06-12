@@ -13,7 +13,9 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { runChatOrchestrator } from "../chat/orchestrator";
-import { countWebsiteSources } from "../knowledge/service";
+import { getChannelRecord } from "../channels/service";
+import { getWordPressConnectorStatus } from "../commerce/wordpress/service";
+import { countWebsiteSources, hasFaqKnowledge, listFaqKnowledge } from "../knowledge/service";
 import {
   ONBOARDING_STEP_ORDER,
   SKIPPABLE_STEPS,
@@ -82,6 +84,11 @@ function stepIndex(step: OnboardingStep) {
   return ONBOARDING_STEP_ORDER.indexOf(step);
 }
 
+async function isWooCommerceConnected(auth: AuthContext, config: CoreConfig) {
+  const status = await getWordPressConnectorStatus(auth, config);
+  return Boolean(status.data?.connected);
+}
+
 async function buildStepMetadata(
   step: OnboardingStep,
   auth: AuthContext,
@@ -89,12 +96,30 @@ async function buildStepMetadata(
 ): Promise<Record<string, unknown> | undefined> {
   if (step === "knowledge") {
     const websiteCount = await countWebsiteSources(auth, config);
-    if (websiteCount > 0) {
-      return { websiteSourceCount: websiteCount };
+    const wooConnected = await isWooCommerceConnected(auth, config);
+    const faqRes = await listFaqKnowledge(auth, config);
+    const faqItemCount = faqRes.data?.items.length ?? 0;
+    if (websiteCount > 0 || wooConnected || faqItemCount > 0) {
+      return {
+        websiteSourceCount: websiteCount,
+        wooCommerceConnected: wooConnected,
+        faqItemCount,
+      };
     }
   }
   if (step === "channels") {
-    return { whatsappConnected: false };
+    const whatsapp = await getChannelRecord(auth.tenantId, "whatsapp", config);
+    const messenger = await getChannelRecord(auth.tenantId, "messenger", config);
+    return {
+      whatsappConnected: whatsapp?.status === "connected",
+      messengerConnected: messenger?.status === "connected",
+      whatsappPhone: whatsapp?.displayPhone,
+      messengerPage: messenger?.pageName,
+    };
+  }
+  if (step === "catalog") {
+    const wooConnected = await isWooCommerceConnected(auth, config);
+    if (wooConnected) return { wooCommerceConnected: true };
   }
   return undefined;
 }
@@ -177,11 +202,13 @@ async function validateAdvance(
 
   if (targetStep === "catalog") {
     const hasWebsite = (await countWebsiteSources(auth, config)) > 0;
+    const wooConnected = await isWooCommerceConnected(auth, config);
+    const hasFaq = await hasFaqKnowledge(auth, config);
     const knowledgeSkipped = skipped.has("knowledge");
-    if (!hasWebsite && !knowledgeSkipped) {
+    if (!hasWebsite && !wooConnected && !hasFaq && !knowledgeSkipped) {
       throw new ApiError(
         ErrorCodes.ONBOARDING_INCOMPLETE,
-        "Add a website source or skip the knowledge step",
+        "Add store knowledge (website, WooCommerce, or FAQs) or skip this step",
         400
       );
     }
@@ -291,5 +318,10 @@ export async function onboardingTestChat(
     reply: chat.reply,
     testMessageCount,
     canAdvanceToWidget: testMessageCount >= 1,
+    intent: chat.intent,
+    toolResults: chat.toolResults?.map((t) => ({
+      tool: t.tool,
+      success: t.success,
+    })),
   });
 }

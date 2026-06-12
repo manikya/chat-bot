@@ -182,7 +182,7 @@ export function createHttpApi() {
     },
     tenant: {
       getMe: () => request("/api/v1/tenants/me"),
-      updateMe: (patch) =>
+      updateMe: (patch: { storeName?: string; timezone?: string; websiteUrl?: string }) =>
         request("/api/v1/tenants/me", { method: "PATCH", body: JSON.stringify(patch) }),
       uploadLogo: (file: File) => {
         const form = new FormData();
@@ -271,8 +271,17 @@ export function createHttpApi() {
       listJobs: () => request("/api/v1/knowledge/jobs"),
       getJob: (jobId: string) => request(`/api/v1/knowledge/jobs/${jobId}`),
       deleteSource: (sourceId) => request(`/api/v1/knowledge/sources/${sourceId}`, { method: "DELETE" }),
-      ingestFaq: (items: Array<{ question: string; answer: string }>) =>
-        request("/api/v1/knowledge/faq", { method: "POST", body: JSON.stringify({ items }) }),
+      listFaq: () => request("/api/v1/knowledge/faq"),
+      ingestFaq: (items: Array<{ question: string; answer: string }>, append = false) =>
+        request("/api/v1/knowledge/faq", {
+          method: "POST",
+          body: JSON.stringify({ items, append }),
+        }),
+      detectPlatform: (url: string) =>
+        request("/api/v1/knowledge/detect-platform", {
+          method: "POST",
+          body: JSON.stringify({ url }),
+        }),
     },
     commerce: {
       listProducts: (params?: { q?: string; limit?: number }) => {

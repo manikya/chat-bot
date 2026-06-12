@@ -69,6 +69,24 @@ export async function countWebsiteSources(auth: AuthContext, config: CoreConfig)
   return items.filter((i) => i.type === "website").length;
 }
 
+export async function hasFaqKnowledge(auth: AuthContext, config: CoreConfig) {
+  const items = await listSourceItems(auth, config);
+  const faq = items.find((i) => i.type === "faq");
+  if (!faq) return false;
+  const cfg = (faq.config as { items?: FaqItem[]; itemCount?: number }) ?? {};
+  return (cfg.items?.length ?? cfg.itemCount ?? 0) > 0;
+}
+
+export async function listFaqKnowledge(auth: AuthContext, config: CoreConfig) {
+  const items = await listSourceItems(auth, config);
+  const faq = items.find((i) => i.type === "faq");
+  const cfg = (faq?.config as { items?: FaqItem[] }) ?? {};
+  return ok({
+    sourceId: (faq?.sourceId as string | undefined) ?? null,
+    items: cfg.items ?? [],
+  });
+}
+
 export async function listKnowledgeSources(auth: AuthContext, config: CoreConfig) {
   const items = await listSourceItems(auth, config);
   return ok({ items: items.map((i) => toSource(i)) });
@@ -310,22 +328,37 @@ export async function deleteKnowledgeSource(
 
 export async function ingestFaqKnowledge(
   auth: AuthContext,
-  body: { items: FaqItem[] },
+  body: { items: FaqItem[]; append?: boolean },
   config: CoreConfig
 ) {
-  const items = (body.items ?? [])
+  const incoming = (body.items ?? [])
     .map((i) => ({ question: i.question?.trim() ?? "", answer: i.answer?.trim() ?? "" }))
     .filter((i) => i.question && i.answer);
 
-  if (!items.length) {
+  if (!incoming.length) {
     throw new ApiError(ErrorCodes.VALIDATION_ERROR, "At least one FAQ item is required", 400);
-  }
-  if (items.length > 100) {
-    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Maximum 100 FAQ items per request", 400);
   }
 
   const existingSources = await listSourceItems(auth, config);
   const existingFaq = existingSources.find((s) => s.type === "faq");
+  const existingItems =
+    ((existingFaq?.config as { items?: FaqItem[] } | undefined)?.items ?? []) as FaqItem[];
+
+  let items = incoming;
+  if (body.append && existingItems.length) {
+    const merged = [...existingItems];
+    for (const item of incoming) {
+      const key = item.question.toLowerCase();
+      const idx = merged.findIndex((m) => m.question.toLowerCase() === key);
+      if (idx >= 0) merged[idx] = item;
+      else merged.push(item);
+    }
+    items = merged;
+  }
+
+  if (items.length > 100) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Maximum 100 FAQ items per request", 400);
+  }
   const db = getDocClient(config);
   const now = new Date().toISOString();
   let sourceId = existingFaq?.sourceId as string | undefined;
@@ -376,5 +409,5 @@ export async function ingestFaqKnowledge(
   }
 
   const result = await embedFaqItems(auth.tenantId, sourceId, items, config);
-  return ok({ sourceId, itemCount: result.itemCount, status: "active" });
+  return ok({ sourceId, itemCount: result.itemCount, items, status: "active" });
 }

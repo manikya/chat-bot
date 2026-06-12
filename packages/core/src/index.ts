@@ -30,6 +30,7 @@ export {
 export type { ConnectWordPressBody } from "./commerce/wordpress/types";
 export * from "./onboarding/service";
 export * from "./knowledge/service";
+export { detectStorePlatform, type StorePlatform, type StorePlatformDetection } from "./knowledge/platform-detect";
 export { createVectorStore } from "./ingest/vectors";
 export { createEmbeddingProvider } from "./ingest/embedding";
 export { retrieveKnowledge } from "./ingest/retrieve";

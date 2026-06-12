@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Download, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  WOOCOMMERCE_PLUGIN_DOWNLOAD_URL,
+  WOOCOMMERCE_PLUGIN_INSTALL_STEPS,
+} from "@/lib/commerce-plugin";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { pollIngestJob } from "@/lib/poll-job";
@@ -107,9 +111,20 @@ export default function KnowledgePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Install the <strong>CommerceChat Connector</strong> plugin on WordPress (Settings → CommerceChat),
-            copy the API key, then connect below to sync products into your knowledge base.
+            Install the <strong>CommerceChat Connector</strong> plugin on WordPress, copy the API key from
+            Settings → CommerceChat, then connect below to sync products.
           </p>
+          <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
+            {WOOCOMMERCE_PLUGIN_INSTALL_STEPS.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <Button type="button" variant="outline" size="sm" asChild>
+            <a href={WOOCOMMERCE_PLUGIN_DOWNLOAD_URL} download>
+              <Download className="h-4 w-4" />
+              Download plugin (.zip)
+            </a>
+          </Button>
           {wpStatus?.connected ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
@@ -192,7 +207,7 @@ export default function KnowledgePage() {
           <Button
             onClick={async () => {
               try {
-                await api.knowledge.ingestFaq([{ question: faqQuestion, answer: faqAnswer }]);
+                await api.knowledge.ingestFaq([{ question: faqQuestion, answer: faqAnswer }], true);
                 toast.success("FAQ saved");
                 setFaqQuestion("");
                 setFaqAnswer("");

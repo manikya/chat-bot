@@ -91,10 +91,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div>
             {showOnboardingBanner && (
               <button
-                onClick={() => router.push("/onboarding/profile")}
+                onClick={() =>
+                  router.push(
+                    tenant?.onboardingStep && tenant.onboardingStep !== "complete"
+                      ? `/onboarding/${tenant.onboardingStep}`
+                      : "/onboarding/profile"
+                  )
+                }
                 className="text-sm text-primary hover:underline"
               >
-                Finish setup → step: {tenant?.onboardingStep}
+                Finish setup → {tenant?.onboardingStep}
               </button>
             )}
           </div>

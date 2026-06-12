@@ -189,6 +189,8 @@ export async function assertChannelEnabled(tenantId: string, channel: string, co
     "instagram",
   ];
   if (enabled.includes(channel)) return;
+  // Onboarding simulator and admin test chat — not a billable customer channel.
+  if (channel === "test") return;
 
   // Limits row may predate a channel the merchant already connected.
   if (channel === "whatsapp" || channel === "messenger" || channel === "instagram") {

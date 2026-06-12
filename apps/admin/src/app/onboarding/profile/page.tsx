@@ -19,20 +19,39 @@ export default function OnboardingProfilePage() {
   const { tenant, refreshMe } = useAuth();
   const router = useRouter();
   const [storeName, setStoreName] = useState(tenant?.storeName ?? "");
-  const [timezone, setTimezone] = useState(tenant?.timezone ?? "America/New_York");
+  const [timezone, setTimezone] = useState(tenant?.timezone ?? getBrowserTimezone());
+  const [websiteUrl, setWebsiteUrl] = useState(tenant?.websiteUrl ?? "");
   const [loading, setLoading] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(tenant?.logoUrl);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const continueNext = async () => {
+    if (!storeName.trim()) {
+      toast.error("Store name is required");
+      return;
+    }
+    const trimmedUrl = websiteUrl.trim();
+    if (trimmedUrl && !trimmedUrl.startsWith("http")) {
+      toast.error("Website must start with http:// or https:// — or leave it blank");
+      return;
+    }
     setLoading(true);
-    await api.tenant.updateMe({ storeName, timezone });
-    await api.onboarding.advanceStep("channels");
-    await refreshMe();
-    toast.success("Profile saved (real tenant API)");
-    router.push("/onboarding/channels");
-    setLoading(false);
+    try {
+      await api.tenant.updateMe({
+        storeName,
+        timezone,
+        websiteUrl: trimmedUrl || undefined,
+      });
+      await api.onboarding.advanceStep("channels");
+      await refreshMe();
+      toast.success("Profile saved");
+      router.push("/onboarding/channels");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save profile");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,10 +59,27 @@ export default function OnboardingProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Store profile</CardTitle>
-          <CardDescription>Tell us about your store</CardDescription>
+          <CardDescription>Tell us about your store — we use this in the bot and onboarding steps</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2"><Label>Store name</Label><Input value={storeName} onChange={(e) => setStoreName(e.target.value)} /></div>
+          <div className="space-y-2">
+            <Label>Store name</Label>
+            <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="website">Store website (optional)</Label>
+            <Input
+              id="website"
+              type="url"
+              value={websiteUrl}
+              onChange={(e) => setWebsiteUrl(e.target.value)}
+              placeholder="https://yourstore.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave blank if you only sell on WooCommerce, WhatsApp, or marketplaces — you can connect
+              WordPress in the next steps or add a site later.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="timezone">Timezone</Label>
             <TimezoneSelect id="timezone" value={timezone} onChange={setTimezone} />
@@ -67,7 +103,7 @@ export default function OnboardingProfilePage() {
                 } catch (err) {
                   const msg =
                     err && typeof err === "object" && "message" in err
-                      ? String(err.message)
+                      ? String((err as { message: string }).message)
                       : err instanceof Error
                         ? err.message
                         : "Logo upload failed";
@@ -94,7 +130,9 @@ export default function OnboardingProfilePage() {
               </Button>
             </div>
           </div>
-          <Button onClick={continueNext} disabled={loading || !storeName}>Continue</Button>
+          <Button onClick={continueNext} disabled={loading || !storeName.trim()}>
+            Continue
+          </Button>
         </CardContent>
       </Card>
     </OnboardingShell>

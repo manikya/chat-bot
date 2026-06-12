@@ -34,6 +34,7 @@ export interface Tenant {
   plan: string;
   status: string;
   timezone: string;
+  websiteUrl?: string;
   onboardingStep: OnboardingStep;
   logoUrl?: string;
 }

@@ -29,6 +29,7 @@ export interface TenantProfile {
   plan: TenantPlan;
   status: TenantStatus;
   timezone: string;
+  websiteUrl?: string;
   onboardingStep: OnboardingStep;
   logoUrl?: string;
   widgetApiKeyPrefix?: string;
@@ -97,6 +98,8 @@ export interface OnboardingTestChatResult {
   reply: { type: string; content: string };
   testMessageCount: number;
   canAdvanceToWidget: boolean;
+  intent?: string;
+  toolResults?: Array<{ tool: string; success: boolean }>;
 }
 
 export type ChatIntent = "faq" | "product" | "checkout" | "greeting" | "unknown";

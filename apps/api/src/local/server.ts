@@ -27,6 +27,7 @@ import { handler as knowledgeSourcesHandler } from "../handlers/knowledge-source
 import { handler as knowledgeSyncHandler } from "../handlers/knowledge-sync";
 import { handler as knowledgeJobsHandler } from "../handlers/knowledge-jobs";
 import { handler as knowledgeFaqHandler } from "../handlers/knowledge-faq";
+import { handler as knowledgeDetectPlatformHandler } from "../handlers/knowledge-detect-platform";
 import { handler as commerceProductsHandler } from "../handlers/commerce-products";
 import {
   connectHandler as wordpressConnectHandler,
@@ -113,7 +114,9 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/onboarding/test-chat", handler: onboardingTestChatHandler },
   { method: "GET", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
+  { method: "GET", path: "/api/v1/knowledge/faq", handler: knowledgeFaqHandler },
   { method: "POST", path: "/api/v1/knowledge/faq", handler: knowledgeFaqHandler },
+  { method: "POST", path: "/api/v1/knowledge/detect-platform", handler: knowledgeDetectPlatformHandler },
   { method: "GET", path: "/api/v1/commerce/products", handler: commerceProductsHandler },
   { method: "GET", path: "/api/v1/commerce/wordpress/status", handler: wordpressStatusHandler },
   { method: "POST", path: "/api/v1/commerce/wordpress/connect", handler: wordpressConnectHandler },

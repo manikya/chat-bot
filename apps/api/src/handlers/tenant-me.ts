@@ -9,7 +9,7 @@ export const handler = createHandler(
     if (event.requestContext.http.method === "GET") {
       return getTenantProfile(auth!, config);
     }
-    const patch = parseBody<{ storeName?: string; timezone?: string; onboardingStep?: string }>(event);
+    const patch = parseBody<{ storeName?: string; timezone?: string; websiteUrl?: string; onboardingStep?: string }>(event);
     return updateTenantProfile(auth!, patch, config);
   },
   { requireAuth: true }

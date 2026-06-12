@@ -30,7 +30,7 @@ Applies to all post-login admin pages except onboarding wizard (minimal chrome).
 | **Top bar — store name** | Read-only display |
 | **Top bar — user menu** | Open profile menu; log out |
 | **Notification bell** | View alerts (ingest failed, token expired, quota); mark read (P2) |
-| **Setup banner** | Shown when `onboardingStep !== complete` → click **Finish setup** → resume wizard |
+| **Setup banner** | Shown when `onboardingStep !== complete` → **Finish setup** deep-links to `/onboarding/{onboardingStep}` |
 | **Quota warning bar** | Shown at 80%+ usage (P2) → click **Upgrade** |
 
 ### Sidebar visibility by role
@@ -192,9 +192,9 @@ Shared chrome across all steps:
 
 | UI element | User actions |
 |------------|--------------|
-| Progress stepper (1–6) | View current step; click completed steps to go back |
-| **Back** button | Return to previous step |
-| **Skip** button | Skip optional steps (channels, catalog) |
+| Progress bar + step labels | View current step; click completed steps to go back; `~N min remaining` estimate |
+| **Complete later** link | Exit wizard to dashboard |
+| **Skip** button | Skip optional steps (channels in dev, knowledge, catalog) |
 | **Continue** button | Validate step → `PATCH /api/v1/onboarding/step` |
 
 ---
@@ -204,10 +204,10 @@ Shared chrome across all steps:
 | UI element | User actions |
 |------------|--------------|
 | Store name input | Edit store name |
-| Timezone select (`TimezoneSelect`) | Change timezone (native grouped dropdown) |
-| Logo upload dropzone | Upload PNG/JPG (max 2 MB); preview; remove → `POST /tenants/me/logo` *(mock)* |
-| Default language select | Select language (optional) |
-| **Continue** | `PATCH /tenants/me` + `PATCH /onboarding/step` → Channels |
+| Website URL input | Store URL; prefills knowledge crawl |
+| Timezone select (`TimezoneSelect`) | Change timezone; defaults to browser timezone |
+| Logo upload dropzone | Upload PNG/JPG (max 2 MB); preview → `POST /tenants/me/logo` |
+| **Continue** | `PATCH /tenants/me` (incl. `websiteUrl`) + `PATCH /onboarding/step` → Channels |
 
 ---
 
@@ -215,14 +215,13 @@ Shared chrome across all steps:
 
 | UI element | User actions |
 |------------|--------------|
-| WhatsApp card | Click **Connect WhatsApp** → Meta OAuth popup → `POST /channels/meta/connect` |
-| WhatsApp status | View connected phone number or error |
-| Messenger card (P2) | Connect Messenger (greyed in MVP) |
-| Instagram card (P2) | Connect Instagram (greyed in MVP) |
+| WhatsApp card | **Connect WhatsApp** → Meta OAuth → `POST /channels/meta/connect` |
+| Messenger card | **Connect Messenger** → same OAuth flow |
+| Channel health panel | Connected phones, webhook/OAuth checklist |
+| Dev connect buttons | Local dev: manual WABA/token connect |
 | Web widget card | View "Auto-enabled" status |
-| **Send test message** (optional) | Send test WA to own number |
-| **Skip for now** | Advance without WhatsApp |
-| **Continue** | Advance to Knowledge |
+| **Skip for now** | Local dev only; hidden on AWS production |
+| **Continue** | Advance to Knowledge (requires channel on prod) |
 
 ---
 
@@ -230,8 +229,9 @@ Shared chrome across all steps:
 
 | UI element | User actions |
 |------------|--------------|
-| Website URL input | Enter store URL |
-| **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` *(real crawl + embed locally)* |
+| Website URL input | Prefilled from profile `websiteUrl` |
+| WooCommerce connect card | Connect store + sync products/FAQs |
+| **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` |
 | Progress bar | Poll `GET /knowledge/jobs/{jobId}` until complete |
 | Error panel | View crawl errors; **Retry** |
 | FAQ quick-add (optional) | Add Q&A pairs inline → `POST /knowledge/faq` |
@@ -244,8 +244,10 @@ Shared chrome across all steps:
 
 | UI element | User actions |
 |------------|--------------|
-| CSV/JSON dropzone | Upload file → catalog source + sync |
-| Template download link | Download sample CSV |
+| WooCommerce hint | When connected, skip CSV and continue |
+| WooCommerce connect card | Sync catalog from store |
+| CSV dropzone | Upload `products.csv` → catalog source + sync |
+| Template download link | `/sample-products.csv` |
 | Upload progress | View ingest job status |
 | **Skip** | Advance without catalog |
 | **Continue** | Advance to Test |
@@ -259,10 +261,10 @@ Shared chrome across all steps:
 | Chat window | View bot greeting |
 | Suggested question chips | Click to send preset question |
 | Message input | Type test message |
-| **Send** button | `POST /onboarding/test-chat` *(real API; echo reply until chat orchestrator)* |
+| **Send** button | `POST /onboarding/test-chat` (chat orchestrator + RAG) |
 | Bot reply area | Read AI response |
-| Debug panel (collapsible) | View RAG chunks + tool calls (owner only) |
-| **Continue** | Enabled after ≥1 successful exchange |
+| Debug panel (collapsible) | Intent + tool call results |
+| **Continue** | Disabled until ≥1 test message (`canAdvanceToWidget`) |
 
 ---
 
@@ -270,10 +272,10 @@ Shared chrome across all steps:
 
 | UI element | User actions |
 |------------|--------------|
-| Embed code block | **Copy to clipboard** |
-| Live preview iframe | Open/close widget preview |
-| Primary color preview | Read-only (edit later in Widget settings) |
-| Install instructions | Expand setup steps per platform (Shopify, WordPress, HTML) |
+| Embed code block | **Copy to clipboard**; shows API public base URL |
+| Widget demo link | Open `{API}/widget/demo.html` |
+| Email to developer | `mailto:` with embed snippet |
+| Install instructions | Accordion: HTML, WordPress/WooCommerce, Shopify |
 | **Go to dashboard** | `PATCH /onboarding/step { complete }` → Dashboard |
 
 ---

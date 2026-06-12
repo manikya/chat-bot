@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
 import { pollIngestJob } from "@/lib/poll-job";
+import { WooCommerceConnectCard } from "@/components/onboarding/woocommerce-connect-card";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,12 +15,20 @@ import { Progress } from "@/components/ui/progress";
 
 export default function OnboardingCatalogPage() {
   const router = useRouter();
-  const { refreshMe } = useAuth();
+  const { tenant, refreshMe } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [uploadDone, setUploadDone] = useState(false);
   const [productCount, setProductCount] = useState<number | null>(null);
+  const [wooConnected, setWooConnected] = useState(false);
+
+  useEffect(() => {
+    api.commerce
+      .wordpressStatus()
+      .then((r) => setWooConnected(Boolean(r.data.connected)))
+      .catch(() => setWooConnected(false));
+  }, []);
 
   const upload = async (file: File) => {
     setUploading(true);
@@ -46,8 +55,13 @@ export default function OnboardingCatalogPage() {
 
   const onFile = (file: File | undefined) => {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      toast.error("Please upload a CSV file");
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith(".csv") && !lower.endsWith(".json")) {
+      toast.error("Upload a CSV or JSON catalog file");
+      return;
+    }
+    if (lower.endsWith(".json")) {
+      toast.message("JSON catalogs are imported as CSV — use the sample format or WooCommerce sync");
       return;
     }
     void upload(file);
@@ -61,70 +75,83 @@ export default function OnboardingCatalogPage() {
 
   return (
     <OnboardingShell currentStep="catalog">
-      <Card>
-        <CardHeader>
-          <CardTitle>Product catalog</CardTitle>
-          <CardDescription>Upload a CSV of products (optional)</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => onFile(e.target.files?.[0])}
-          />
-          <div
-            className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 text-center cursor-pointer hover:bg-muted/40 transition-colors"
-            onClick={() => !uploading && inputRef.current?.click()}
-            onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-          >
-            <Upload className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">
-              Drag & drop products.csv or click to browse
-            </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              disabled={uploading}
-              onClick={(e) => {
-                e.stopPropagation();
-                inputRef.current?.click();
-              }}
+      <div className="space-y-4">
+        {wooConnected && (
+          <Card className="border-emerald-200 bg-emerald-50/40">
+            <CardContent className="pt-6">
+              <p className="text-sm">
+                WooCommerce is connected — your catalog is already syncing. You can skip CSV upload and continue to
+                test chat.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Product catalog</CardTitle>
+            <CardDescription>
+              Upload a CSV of products, or use WooCommerce above. Website crawl may also index product pages.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <WooCommerceConnectCard onConnected={() => setWooConnected(true)} />
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => onFile(e.target.files?.[0])}
+            />
+            <div
+              className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 text-center cursor-pointer hover:bg-muted/40 transition-colors"
+              onClick={() => !uploading && inputRef.current?.click()}
+              onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+              role="button"
+              tabIndex={0}
             >
-              {uploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Importing...
-                </>
-              ) : (
-                "Upload CSV"
-              )}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Required columns: sku, name, description, price, category.{" "}
-            <a href="/sample-products.csv" className="underline" download>
-              Download sample CSV
-            </a>
-          </p>
-          {uploading && <Progress value={progress} />}
-          <div className="flex gap-2">
-            <Button onClick={() => next()} disabled={uploading}>
-              Continue
-            </Button>
-            <Button variant="outline" onClick={() => next(true)} disabled={uploading}>
-              Skip
-            </Button>
-          </div>
-          {uploadDone && productCount != null && (
-            <p className="text-sm text-muted-foreground">
-              {productCount} products indexed. Continue to test chat.
+              <Upload className="h-10 w-10 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground">Drag & drop products.csv or click to browse</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                disabled={uploading}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  inputRef.current?.click();
+                }}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Importing...
+                  </>
+                ) : (
+                  "Upload CSV"
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Required columns: sku, name, description, price, category.{" "}
+              <a href="/sample-products.csv" className="underline" download>
+                Download sample CSV
+              </a>
             </p>
-          )}
-        </CardContent>
-      </Card>
+            {uploading && <Progress value={progress} />}
+            {uploadDone && productCount != null && (
+              <p className="text-sm text-muted-foreground">{productCount} products indexed.</p>
+            )}
+            <div className="flex gap-2">
+              <Button onClick={() => next()} disabled={uploading}>
+                Continue
+              </Button>
+              <Button variant="outline" onClick={() => next(true)} disabled={uploading}>
+                Skip
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </OnboardingShell>
   );
 }

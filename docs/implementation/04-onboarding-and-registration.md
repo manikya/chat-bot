@@ -2,7 +2,7 @@
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
 **Related:** [02-api-specification.md](02-api-specification.md) · [01-database-design.md](01-database-design.md) · [13-custom-auth.md](../functions/13-custom-auth.md) · [08-admin-dashboard.md](../functions/08-admin-dashboard.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
-**Implementation status (2026-06-07):** Onboarding APIs are **live** (`GET /onboarding`, `PATCH /onboarding/step`, `POST /onboarding/test-chat`). Wizard state persisted in DynamoDB (`PROFILE.onboardingStep` + `ONBOARDING#STATE`). **Channels step** still uses mock Meta connect.
+**Implementation status (2026-06-08):** Onboarding APIs are **live** (`GET /onboarding`, `PATCH /onboarding/step`, `POST /onboarding/test-chat`). Wizard state persisted in DynamoDB (`PROFILE.onboardingStep` + `ONBOARDING#STATE`). **Channels step** uses live Meta OAuth (WhatsApp + Messenger) on AWS; skip hidden when `NEXT_PUBLIC_API_URL` points at API Gateway. **Knowledge** accepts website crawl or WooCommerce sync. **Profile** stores `websiteUrl` on tenant PROFILE.
 
 ---
 
@@ -204,7 +204,7 @@ Only users with `role: owner` see the full wizard. `admin` users who join later 
 
 | Step | `onboardingStep` value | UI screen | APIs used |
 |------|------------------------|-----------|-----------|
-| 1 | `profile` | Store name, timezone, logo | `PATCH /tenants/me`, `POST /tenants/me/logo` |
+| 1 | `profile` | Store name, timezone, website URL, logo | `PATCH /tenants/me`, `POST /tenants/me/logo` |
 | 2 | `channels` | Connect WhatsApp (Meta OAuth) | `POST /channels/meta/connect`, `GET /channels` |
 | 3 | `knowledge` | Add website URL | `POST /knowledge/sources`, `POST /knowledge/sources/{id}/sync` |
 | 4 | `catalog` | Upload product CSV (skippable) | `POST /knowledge/sources` (multipart) |
@@ -214,8 +214,9 @@ Only users with `role: owner` see the full wizard. `admin` users who join later 
 
 **Skip rules:**
 
-- Step 2 (WhatsApp): skippable in dev; encouraged in prod
-- Step 4 (catalog): always skippable — website ingest may already index products
+- Step 2 (channels): skippable in local dev; **required** on AWS production admin
+- Step 3 (knowledge): skippable — WooCommerce sync or website crawl satisfies advance
+- Step 4 (catalog): always skippable — WooCommerce or website ingest may already index products
 - Steps can be revisited from Settings after onboarding completes
 
 ---
@@ -244,8 +245,8 @@ stateDiagram-v2
 | From → To | Requirement |
 |-----------|-------------|
 | `profile` → `channels` | `storeName` and `timezone` set |
-| `channels` → `knowledge` | None (WhatsApp optional MVP) |
-| `knowledge` → `catalog` | At least one source created OR explicit skip |
+| `channels` → `knowledge` | WhatsApp or Messenger connected (prod AWS) OR skip (local dev) |
+| `knowledge` → `catalog` | Website source synced, WooCommerce connected, OR explicit skip |
 | `catalog` → `test` | None (CSV optional) |
 | `test` → `widget` | At least one test message sent |
 | `widget` → `complete` | None (embed code shown) |
@@ -257,8 +258,8 @@ stateDiagram-v2
 | Step | API status (local) | Notes |
 |------|-------------------|-------|
 | 1 Profile | **Real** | `PATCH /tenants/me` + `PATCH /onboarding/step`; timezone via `TimezoneSelect` |
-| 2 Channels | **Mock** | Meta connect not built; skip advances with `skipped: true` |
-| 3 Knowledge | **Real** | Source CRUD + website crawl + embed (`FileVectorStore`); `GET /jobs/{jobId}` live |
+| 2 Channels | **Real** | Meta OAuth connect (WhatsApp + Messenger); health + webhook checklist in UI |
+| 3 Knowledge | **Real** | Website crawl, FAQ quick-add, WooCommerce connect card; `GET /jobs/{jobId}` live |
 | 4 Catalog | **Real** | Catalog CSV upload + sync via knowledge APIs |
 | 5 Test chat | **Real** | `POST /onboarding/test-chat` uses chat orchestrator + RAG |
 | 6 Widget | **Real** | `GET /widget/config`, embed snippet from `API_PUBLIC_URL` + `/widget/v1.js` |
@@ -270,7 +271,8 @@ stateDiagram-v2
 | Field | Required | Stored in |
 |-------|----------|-----------|
 | Store name | Yes | `PROFILE.storeName` |
-| Timezone | Yes | `PROFILE.timezone` — native grouped `<select>` (`TimezoneSelect`, ~32 IANA zones) |
+| Timezone | Yes | `PROFILE.timezone` — native grouped `<select>` (`TimezoneSelect`, ~32 IANA zones); defaults to browser timezone |
+| Website URL | No | `PROFILE.websiteUrl` — prefills knowledge step crawl |
 | Logo | No | S3 `assets/<tenantId>/logo.png` → `PROFILE.logoUrl` |
 | Default language | No | `CONFIG.profile.defaultLanguage` |
 
