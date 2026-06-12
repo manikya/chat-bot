@@ -254,6 +254,7 @@ All Lambdas use JSON logs:
 - [ ] JWT signing key in Secrets Manager / KMS
 - [ ] Auth signup/login flow tested
 - [ ] ACM certificates validated
+- [x] CloudFront distribution serving admin (dev: `commercechat-dev-admin` stack)
 - [ ] CloudFront distributions serving widget
 - [ ] Secrets Manager secrets created (manual first time)
 - [ ] WAF rules attached

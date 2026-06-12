@@ -115,11 +115,44 @@ uploads versioned artifacts to a tagged deployment bucket, deploys a CloudFormat
 resource inventory under `infra/deployments/`.
 
 The IAM user/access key needs the permissions in [aws-deploy-iam-policy.json](aws-deploy-iam-policy.json).
+Attach that JSON as a **customer-managed IAM policy** on the deploy user before running deploy.
+Inline user policies are limited to 2,048 bytes; this file is ~3 KB, so use:
+
+```bash
+aws iam create-policy --policy-name CommerceChatDeploy \
+  --policy-document file://infra/aws-deploy-iam-policy.json
+aws iam attach-user-policy --user-name YOUR_USER \
+  --policy-arn arn:aws:iam::ACCOUNT_ID:policy/CommerceChatDeploy
+```
+The script runs IAM **preflight checks first** (before building Lambda bundles) so missing permissions fail fast.
+
 If deployment fails before the CloudFormation stack is created, the script may still have created the
-deployment artifact bucket; record or remove it using the generated partial inventory file.
+deployment artifact bucket; record or remove it using the generated partial inventory file under
+`infra/deployments/`.
+
+### Known dev deploy failures (account `960884446408`)
+
+| When | Status | Root cause |
+|------|--------|------------|
+| 2026-06-12 03:41 UTC | `partial-failed-before-cloudformation` | IAM user had **no policy attached** — missing `cloudformation:CreateChangeSet` |
+| 2026-06-12 05:26 UTC | `ROLLBACK_COMPLETE` | Same user still lacked **`dynamodb:DescribeTable`** when CloudFormation created `MainTable`; all other resources rolled back |
+
+Fix: attach [aws-deploy-iam-policy.json](aws-deploy-iam-policy.json), delete the failed stack (or use `--delete-failed-stack`), then redeploy.
 
 ```bash
 npm run deploy:aws -- --credentials-csv="/Users/manikya/Downloads/manikya_accessKeys (1).csv" --env=dev --region=us-east-1
+```
+
+Preflight only (no build/upload):
+
+```bash
+npm run deploy:aws -- --preflight-only --credentials-csv="/Users/manikya/Downloads/manikya_accessKeys (1).csv" --env=dev
+```
+
+Retry after a failed stack without manual delete:
+
+```bash
+npm run deploy:aws -- --delete-failed-stack --credentials-csv="..." --env=dev --region=us-east-1
 ```
 
 Optional parameters:
@@ -145,6 +178,28 @@ aws cloudformation wait stack-delete-complete --stack-name commercechat-dev --re
 
 The deployment artifact bucket is outside the stack so CloudFormation can read Lambda code from it.
 The generated inventory file includes the exact `aws s3 rm` and `aws s3 rb` commands for that bucket.
+
+## Deploy Admin UI (S3 + CloudFront static export)
+
+The merchant dashboard is a **static Next.js export** (`NEXT_STATIC_EXPORT=1`) synced to S3 and served via CloudFront.
+
+```bash
+npm run deploy:admin -- \
+  --credentials-csv="/Users/manikya/Downloads/manikya_accessKeys (1).csv" \
+  --env=dev \
+  --region=us-east-1 \
+  --api-url=https://YOUR_API_GATEWAY_URL
+```
+
+`--api-url` defaults to the latest successful API inventory under `infra/deployments/` if omitted.
+
+After deploy:
+
+1. Open the printed **Admin URL** (CloudFront).
+2. Add **Meta OAuth redirect**: `{AdminUrl}/channels/meta/callback/`
+3. Update Lambda **`AppUrl`** parameter (redeploy API or set in console) to the Admin URL for verify-email links.
+
+Stack name: `commercechat-{env}-admin` · Cost group: `admin-web`
 
 ## Cost Drivers To Watch
 

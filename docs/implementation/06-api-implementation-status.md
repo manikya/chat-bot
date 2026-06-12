@@ -1,8 +1,10 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-11  
-**Local API:** `http://localhost:3001` (real Lambdas + mock fallback)
+**Last updated:** 2026-06-12  
+**Local API:** `http://localhost:3001` (real Lambdas + mock fallback)  
+**AWS dev API:** `https://fimfx57xwl.execute-api.us-east-1.amazonaws.com`  
+**AWS dev admin:** `https://d3g8dfkodwqrza.cloudfront.net`
 
 ---
 
@@ -25,8 +27,12 @@
 | 2026-06-11 | Facebook Messenger OAuth connect, inbound webhook + AI reply, dev connect |
 | 2026-06-11 | Meta creds → Secrets Manager (LocalStack), token refresh cron, 24h window policy |
 | 2026-06-11 | Hard message quota: atomic `reserveMessageQuota`, channel plan limits, Meta quota auto-reply |
+| 2026-06-12 | WooCommerce WordPress connector (plugin + sync + Knowledge UI) |
+| 2026-06-12 | AWS serverless deploy: `npm run deploy:aws` → API Gateway + 39 Lambdas + DynamoDB (stack `commercechat-dev`) |
+| 2026-06-12 | Admin static deploy: `npm run deploy:admin` → S3 + CloudFront (stack `commercechat-dev-admin`) |
+| 2026-06-12 | Deploy IAM preflight, failed-stack cleanup, managed-policy attach docs |
 
-**Git (local `main`):** through Messenger E2E (local). Not pushed.
+**Git (local `main`):** includes AWS dev API + admin CloudFront deploy.
 
 ---
 
@@ -170,7 +176,27 @@ MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets, full
 
 ---
 
-## 7. Local dev checklist
+## 7. AWS dev deploy
+
+```bash
+# Attach infra/aws-deploy-iam-policy.json to deploy IAM user (customer-managed policy)
+npm run deploy:aws -- --credentials-csv="..." --env=dev --region=us-east-1 \
+  --openai-api-key="$OPENAI_API_KEY" --meta-app-id="$META_APP_ID" \
+  --meta-app-secret="$META_APP_SECRET" --meta-verify-token="$META_VERIFY_TOKEN" \
+  --app-url=https://d3g8dfkodwqrza.cloudfront.net
+
+npm run deploy:admin -- --credentials-csv="..." --env=dev \
+  --api-url=https://fimfx57xwl.execute-api.us-east-1.amazonaws.com
+```
+
+Preflight only: `npm run deploy:aws -- --preflight-only --credentials-csv="..."`  
+Retry after failed stack: add `--delete-failed-stack`.
+
+Inventories: `infra/deployments/`. Guide: [infra/aws-serverless-deployment.md](../../infra/aws-serverless-deployment.md).
+
+---
+
+## 8. Local dev checklist
 
 ```bash
 docker compose up -d          # LocalStack: DynamoDB + S3 (commercechat-assets)

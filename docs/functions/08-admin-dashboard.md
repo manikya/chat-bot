@@ -16,7 +16,7 @@ Web application for merchants to onboard, connect channels, manage knowledge sou
 | Layer | Choice |
 |-------|--------|
 | Frontend | Next.js 14 (App Router) |
-| Hosting | AWS Amplify Hosting or S3 + CloudFront |
+| Hosting | S3 + CloudFront static export (`npm run deploy:admin`) — Amplify optional |
 | Auth | Custom JWT login (Jetwing `app/login` pattern) — [13-custom-auth.md](13-custom-auth.md) |
 | API | API Gateway `/api/v1/admin/*` |
 | Styling | Tailwind CSS |

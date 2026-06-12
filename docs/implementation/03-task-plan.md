@@ -17,7 +17,7 @@
 | **Sprint 3 — Chat** | ~90% | Orchestrator, LLM, tools, cart persistence, usage metering, `POST /chat`, test simulator |
 | **Sprint 4 — Meta** | 0% | Channels UI uses mock; conversations API live |
 | **Sprint 5 — Widget** | ~85% | API key auth, widget config/chat, `v1.js` embed (shadow DOM, formatting, action chips), dashboard stats, embed snippet in admin; **not done:** SSE stream, rich product cards, rate limits, CDN deploy |
-| **Infra (Week 0)** | ~30% | LocalStack DynamoDB, local Lambda server; **not done:** CDK, CI, Resend email |
+| **Infra (Week 0)** | ~55% | LocalStack + persist volume; `deploy:aws` (API CFN), `deploy:admin` (S3+CloudFront); **not done:** CDK, CI, custom domain |
 
 **35 real API routes** · **6 mock routes** remaining for MVP UI · See [06-api-implementation-status.md](06-api-implementation-status.md).
 

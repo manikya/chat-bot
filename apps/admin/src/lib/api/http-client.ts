@@ -1,4 +1,4 @@
-import type { ApiResponse, MockApi } from "@commercechat/mock-api";
+import type { ApiResponse } from "@commercechat/mock-api";
 import type { TenantConfig } from "@commercechat/mock-api";
 import { notifySessionExpired } from "@/lib/auth/session-expired";
 
@@ -133,7 +133,7 @@ export async function request<T>(
   return body as ApiResponse<T>;
 }
 
-export function createHttpApi(): MockApi {
+export function createHttpApi() {
   return {
     auth: {
       signup: (body) => request("/auth/signup", { method: "POST", body: JSON.stringify(body) }),
@@ -319,3 +319,5 @@ export function createHttpApi(): MockApi {
     },
   };
 }
+
+export type AdminApi = ReturnType<typeof createHttpApi>;

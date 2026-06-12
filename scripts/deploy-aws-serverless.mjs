@@ -83,6 +83,14 @@ function arg(name, fallback) {
   return found ? found.slice(prefix.length) : fallback;
 }
 
+const FAILED_STACK_STATUSES = new Set([
+  "ROLLBACK_COMPLETE",
+  "ROLLBACK_FAILED",
+  "CREATE_FAILED",
+  "UPDATE_ROLLBACK_COMPLETE",
+  "UPDATE_ROLLBACK_FAILED",
+]);
+
 function sh(cmd, args, options = {}) {
   try {
     return execFileSync(cmd, args, {
@@ -93,8 +101,191 @@ function sh(cmd, args, options = {}) {
     });
   } catch (err) {
     const status = typeof err === "object" && err && "status" in err ? err.status : "unknown";
-    throw new Error(`${cmd} failed with exit code ${status}`);
+    const detail =
+      typeof err === "object" && err && "stderr" in err && err.stderr
+        ? String(err.stderr).trim().split("\n")[0]
+        : "";
+    throw new Error(detail ? `${cmd} failed (${status}): ${detail}` : `${cmd} failed with exit code ${status}`);
   }
+}
+
+function awsCall(args, awsEnv) {
+  try {
+    const stdout = execFileSync("aws", args, {
+      env: awsEnv,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    return { ok: true, stdout };
+  } catch (err) {
+    const stderr =
+      typeof err === "object" && err && "stderr" in err ? String(err.stderr).trim() : String(err);
+    return { ok: false, stderr };
+  }
+}
+
+function isNotFoundError(stderr) {
+  return /ResourceNotFoundException|NoSuchEntity|does not exist|Stack with id|Not Found|404/.test(stderr);
+}
+
+function isAccessDenied(stderr) {
+  return /AccessDenied|not authorized|not allowed to perform/i.test(stderr);
+}
+
+function runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv }) {
+  const tableName = `commercechat-${env}-storage-main`;
+  const roleName = `commercechat-${env}-api-lambda-role-${region}`;
+  const checks = [
+    {
+      permission: "cloudformation:DescribeStacks",
+      run: () =>
+        awsCall(
+          ["cloudformation", "describe-stacks", "--stack-name", stackName, "--region", region],
+          awsEnv
+        ),
+      allowNotFound: true,
+    },
+    {
+      permission: "dynamodb:DescribeTable",
+      run: () => awsCall(["dynamodb", "describe-table", "--table-name", tableName, "--region", region], awsEnv),
+      allowNotFound: true,
+    },
+    {
+      permission: "s3:HeadBucket",
+      run: () => awsCall(["s3api", "head-bucket", "--bucket", artifactBucket], awsEnv),
+      allowNotFound: true,
+    },
+    {
+      permission: "iam:GetRole",
+      run: () => awsCall(["iam", "get-role", "--role-name", roleName], awsEnv),
+      allowNotFound: true,
+    },
+    {
+      permission: "lambda:ListFunctions",
+      run: () => awsCall(["lambda", "list-functions", "--max-items", "1", "--region", region], awsEnv),
+    },
+    {
+      permission: "logs:DescribeLogGroups",
+      run: () =>
+        awsCall(
+          [
+            "logs",
+            "describe-log-groups",
+            "--log-group-name-prefix",
+            `/aws/lambda/commercechat-${env}`,
+            "--region",
+            region,
+            "--limit",
+            "1",
+          ],
+          awsEnv
+        ),
+    },
+    {
+      permission: "apigateway:GET",
+      run: () => awsCall(["apigatewayv2", "get-apis", "--region", region, "--max-items", "1"], awsEnv),
+    },
+  ];
+
+  const missing = [];
+  for (const check of checks) {
+    const result = check.run();
+    if (result.ok) continue;
+    if (check.allowNotFound && isNotFoundError(result.stderr)) continue;
+    if (isAccessDenied(result.stderr)) {
+      missing.push({ permission: check.permission, detail: result.stderr.split("\n")[0] });
+      continue;
+    }
+    if (!check.allowNotFound) {
+      missing.push({ permission: check.permission, detail: result.stderr.split("\n")[0] });
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        "Deploy IAM preflight failed. Attach infra/aws-deploy-iam-policy.json to this IAM user, then retry.",
+        ...missing.map((item) => `  - missing ${item.permission}: ${item.detail}`),
+      ].join("\n")
+    );
+  }
+
+  console.log("IAM preflight checks passed.");
+}
+
+function getStackStatus(stackName, region, awsEnv) {
+  const result = awsCall(
+    ["cloudformation", "describe-stacks", "--stack-name", stackName, "--region", region],
+    awsEnv
+  );
+  if (!result.ok) {
+    if (isNotFoundError(result.stderr)) return "NOT_FOUND";
+    throw new Error(`Could not describe stack ${stackName}: ${result.stderr.split("\n")[0]}`);
+  }
+  const stack = JSON.parse(result.stdout).Stacks?.[0];
+  return stack?.StackStatus ?? "NOT_FOUND";
+}
+
+function ensureStackDeployable(stackName, region, awsEnv, deleteFailedStack) {
+  const status = getStackStatus(stackName, region, awsEnv);
+  if (status === "NOT_FOUND" || !FAILED_STACK_STATUSES.has(status)) return status;
+
+  if (!deleteFailedStack) {
+    throw new Error(
+      [
+        `CloudFormation stack ${stackName} is ${status} and cannot be updated.`,
+        "Delete it first:",
+        `  aws cloudformation delete-stack --stack-name ${stackName} --region ${region}`,
+        `  aws cloudformation wait stack-delete-complete --stack-name ${stackName} --region ${region}`,
+        "Or rerun deploy with --delete-failed-stack",
+      ].join("\n")
+    );
+  }
+
+  console.log(`Deleting failed stack ${stackName} (${status})...`);
+  sh(
+    "aws",
+    ["cloudformation", "delete-stack", "--stack-name", stackName, "--region", region],
+    { env: awsEnv }
+  );
+  sh(
+    "aws",
+    ["cloudformation", "wait", "stack-delete-complete", "--stack-name", stackName, "--region", region],
+    { env: awsEnv, stdio: "inherit" }
+  );
+  return "NOT_FOUND";
+}
+
+function getRootStackFailure(stackName, region, awsEnv) {
+  const result = awsCall(
+    [
+      "cloudformation",
+      "describe-stack-events",
+      "--stack-name",
+      stackName,
+      "--region",
+      region,
+      "--max-items",
+      "100",
+    ],
+    awsEnv
+  );
+  if (!result.ok) return null;
+
+  for (const event of JSON.parse(result.stdout).StackEvents ?? []) {
+    const reason = event.ResourceStatusReason ?? "";
+    if (
+      (event.ResourceStatus ?? "").endsWith("_FAILED") &&
+      !/Resource creation cancelled/i.test(reason)
+    ) {
+      return {
+        logicalId: event.LogicalResourceId,
+        status: event.ResourceStatus,
+        reason,
+      };
+    }
+  }
+  return null;
 }
 
 function parseCredentialsCsv(path) {
@@ -483,6 +674,7 @@ function writeInventory({ stackName, env, region, artifactBucket, artifactPrefix
   const inventoryPath = join(INVENTORY_DIR, `${stackName}-${now}.json`);
   const inventory = {
     createdAt: new Date().toISOString(),
+    status: "success",
     stackName,
     environment: env,
     region,
@@ -496,14 +688,73 @@ function writeInventory({ stackName, env, region, artifactBucket, artifactPrefix
       type: r.ResourceType,
       status: r.ResourceStatus,
     })),
-    removal: {
-      deleteStack: `aws cloudformation delete-stack --stack-name ${stackName} --region ${region}`,
-      emptyAndDeleteArtifactBucket: [
-        `aws s3 rm s3://${artifactBucket}/${artifactPrefix} --recursive --region ${region}`,
-        `aws s3 rb s3://${artifactBucket} --force --region ${region}`,
-      ],
-      verifyDeletion: `aws cloudformation wait stack-delete-complete --stack-name ${stackName} --region ${region}`,
-    },
+    removal: removalCommands({ stackName, region, artifactBucket, artifactPrefix }),
+  };
+  writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
+  return inventoryPath;
+}
+
+function removalCommands({ stackName, region, artifactBucket, artifactPrefix }) {
+  return {
+    deleteStack: `aws cloudformation delete-stack --stack-name ${stackName} --region ${region}`,
+    waitForDelete: `aws cloudformation wait stack-delete-complete --stack-name ${stackName} --region ${region}`,
+    emptyArtifacts: `aws s3 rm s3://${artifactBucket}/${artifactPrefix} --recursive --region ${region}`,
+    deleteArtifactBucket: `aws s3 rb s3://${artifactBucket} --force --region ${region}`,
+  };
+}
+
+function writeFailureInventory({
+  stackName,
+  env,
+  region,
+  accountId,
+  artifactBucket,
+  artifactPrefix,
+  status,
+  reason,
+  stackStatus,
+  rootFailure,
+  artifactUploaded = false,
+}) {
+  mkdirSync(INVENTORY_DIR, { recursive: true });
+  const suffix =
+    status === "partial-failed-before-cloudformation"
+      ? "partial"
+      : status === "failed-rollback-complete"
+        ? "failed"
+        : "error";
+  const now = new Date().toISOString().replace(/[:.]/g, "-");
+  const inventoryPath = join(INVENTORY_DIR, `${stackName}-${suffix}-${now}.json`);
+  const inventory = {
+    createdAt: new Date().toISOString(),
+    status,
+    reason,
+    accountId,
+    region,
+    stackName,
+    stackStatus: stackStatus ?? null,
+    rootFailure: rootFailure ?? null,
+    artifactBucket: artifactBucket ?? null,
+    artifactPrefix: artifactPrefix ?? null,
+    artifactUploaded,
+    resources: artifactBucket
+      ? [
+          {
+            type: "AWS::S3::Bucket",
+            physicalId: artifactBucket,
+            purpose: "Lambda/template deployment artifacts",
+          },
+        ]
+      : [],
+    removal: artifactBucket
+      ? removalCommands({ stackName, region, artifactBucket, artifactPrefix: artifactPrefix ?? "serverless/" })
+      : null,
+    requiredNextPermission:
+      /preflight failed|not authorized|AccessDenied/i.test(reason)
+        ? "Attach infra/aws-deploy-iam-policy.json to the deploy IAM user"
+        : FAILED_STACK_STATUSES.has(stackStatus ?? "")
+          ? `Delete stack ${stackName} or rerun with --delete-failed-stack`
+          : null,
   };
   writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
   return inventoryPath;
@@ -523,6 +774,8 @@ async function main() {
   const billingSkipPayment = arg("billing-skip-payment", env === "prod" ? "false" : "true");
   const jwtSecret = arg("jwt-secret", process.env.JWT_SECRET ?? randomBytes(32).toString("hex"));
   const dryRun = process.argv.includes("--dry-run");
+  const preflightOnly = process.argv.includes("--preflight-only");
+  const deleteFailedStack = process.argv.includes("--delete-failed-stack");
 
   if (!existsSync(credentialsCsv)) throw new Error(`Credentials CSV not found: ${credentialsCsv}`);
   const creds = parseCredentialsCsv(credentialsCsv);
@@ -534,106 +787,175 @@ async function main() {
     AWS_REGION: region,
   };
 
-  console.log(`Building Lambda bundles for ${env}...`);
-  sh("npm", ["run", "build:lambdas"], { cwd: ROOT, stdio: "inherit" });
-
   const caller = dryRun
     ? { Account: arg("account-id", "000000000000") }
     : JSON.parse(sh("aws", ["sts", "get-caller-identity"], { env: awsEnv }));
   const accountId = caller.Account;
   const artifactBucket = `commercechat-${env}-${accountId}-${region}-deploy`;
-  const artifactPrefix = `serverless/${Date.now()}`;
-  const artifactDir = join(OUT_DIR, "artifacts", artifactPrefix);
-  const templatePath = join(OUT_DIR, `template-${env}.json`);
-  const handlerFiles = readdirSync(BUILD_DIR)
-    .filter((name) => name.endsWith(".cjs"))
-    .map((name) => basename(name, ".cjs"))
-    .filter((name) => name !== "jwt-authorizer");
+  let artifactPrefix = null;
+  let artifactUploaded = false;
 
-  mkdirSync(OUT_DIR, { recursive: true });
-  zipHandlers(handlerFiles, artifactDir);
-  const template = buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFiles });
-  writeFileSync(templatePath, `${JSON.stringify(template, null, 2)}\n`);
+  const fail = (status, reason, extra = {}) => {
+    const stackStatus = extra.stackStatus ?? getStackStatus(stackName, region, awsEnv);
+    const rootFailure =
+      extra.rootFailure ??
+      (stackStatus !== "NOT_FOUND" ? getRootStackFailure(stackName, region, awsEnv) : null);
+    const inventoryPath = writeFailureInventory({
+      stackName,
+      env,
+      region,
+      accountId,
+      artifactBucket,
+      artifactPrefix,
+      status,
+      reason,
+      stackStatus: stackStatus === "NOT_FOUND" ? null : stackStatus,
+      rootFailure,
+      artifactUploaded,
+    });
+    const error = new Error(`${reason}\nFailure inventory: ${inventoryPath}`);
+    throw error;
+  };
 
-  if (dryRun) {
-    console.log(`Dry run complete. Template: ${templatePath}`);
-    return;
-  }
-
-  console.log(`Ensuring artifact bucket s3://${artifactBucket}...`);
   try {
-    sh("aws", ["s3api", "create-bucket", "--bucket", artifactBucket, "--region", region], { env: awsEnv });
-  } catch {
-    // Bucket may already exist in this account/region.
+    console.log(`Account ${accountId} | stack ${stackName} | region ${region}`);
+    runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv });
+
+    if (preflightOnly) {
+      const stackStatus = getStackStatus(stackName, region, awsEnv);
+      if (FAILED_STACK_STATUSES.has(stackStatus)) {
+        console.log(`Warning: stack ${stackName} is ${stackStatus}. Use --delete-failed-stack on deploy.`);
+      }
+      console.log("Preflight checks passed.");
+      return;
+    }
+
+    const stackStatus = ensureStackDeployable(stackName, region, awsEnv, deleteFailedStack);
+    if (stackStatus !== "NOT_FOUND") {
+      console.log(`Existing stack status: ${stackStatus}`);
+    }
+
+    console.log(`Building Lambda bundles for ${env}...`);
+    sh("npm", ["run", "build:lambdas"], { cwd: ROOT, stdio: "inherit" });
+
+    artifactPrefix = `serverless/${Date.now()}`;
+    const artifactDir = join(OUT_DIR, "artifacts", artifactPrefix);
+    const templatePath = join(OUT_DIR, `template-${env}.json`);
+    const handlerFiles = readdirSync(BUILD_DIR)
+      .filter((name) => name.endsWith(".cjs"))
+      .map((name) => basename(name, ".cjs"))
+      .filter((name) => name !== "jwt-authorizer");
+
+    mkdirSync(OUT_DIR, { recursive: true });
+    zipHandlers(handlerFiles, artifactDir);
+    const template = buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFiles });
+    writeFileSync(templatePath, `${JSON.stringify(template, null, 2)}\n`);
+
+    if (dryRun) {
+      console.log(`Dry run complete. Template: ${templatePath}`);
+      return;
+    }
+
+    console.log(`Ensuring artifact bucket s3://${artifactBucket}...`);
+    try {
+      sh("aws", ["s3api", "create-bucket", "--bucket", artifactBucket, "--region", region], { env: awsEnv });
+    } catch {
+      // Bucket may already exist in this account/region.
+    }
+    sh("aws", [
+      "s3api",
+      "put-bucket-tagging",
+      "--bucket",
+      artifactBucket,
+      "--tagging",
+      JSON.stringify({
+        TagSet: resourceTags(env, "api", "core-api", "internal").map((t) => ({ Key: t.Key, Value: t.Value })),
+      }),
+    ], { env: awsEnv });
+
+    console.log("Uploading Lambda artifacts...");
+    uploadArtifacts(handlerFiles, artifactDir, artifactBucket, artifactPrefix, awsEnv);
+    artifactUploaded = true;
+
+    console.log(`Deploying CloudFormation stack ${stackName}...`);
+    try {
+      sh("aws", [
+        "cloudformation",
+        "deploy",
+        "--template-file",
+        templatePath,
+        "--s3-bucket",
+        artifactBucket,
+        "--s3-prefix",
+        `${artifactPrefix}/templates`,
+        "--stack-name",
+        stackName,
+        "--capabilities",
+        "CAPABILITY_NAMED_IAM",
+        "--region",
+        region,
+        "--parameter-overrides",
+        `JwtSecret=${jwtSecret}`,
+        `AppUrl=${appUrl}`,
+        "ApiPublicUrl=",
+        "AssetsPublicUrl=",
+        `OpenAIApiKey=${openaiApiKey}`,
+        `MetaAppId=${metaAppId}`,
+        `MetaAppSecret=${metaAppSecret}`,
+        `MetaVerifyToken=${metaVerifyToken}`,
+        `PaymentWebhookSecret=${paymentWebhookSecret}`,
+        `BillingSkipPayment=${billingSkipPayment}`,
+        "--tags",
+        "Project=CommerceChat",
+        "Application=commercechat",
+        `Environment=${env}`,
+        "ManagedBy=cloudformation",
+        "Owner=platform",
+      ], { env: awsEnv, stdio: "inherit" });
+    } catch (deployErr) {
+      const stackStatusAfter = getStackStatus(stackName, region, awsEnv);
+      const rootFailure = getRootStackFailure(stackName, region, awsEnv);
+      const reason =
+        rootFailure?.reason ??
+        (deployErr instanceof Error ? deployErr.message : String(deployErr));
+      fail(
+        FAILED_STACK_STATUSES.has(stackStatusAfter) ? "failed-rollback-complete" : "deploy-failed",
+        reason,
+        { stackStatus: stackStatusAfter, rootFailure }
+      );
+    }
+
+    const outputsRaw = sh("aws", ["cloudformation", "describe-stacks", "--stack-name", stackName], { env: awsEnv });
+    const stack = JSON.parse(outputsRaw).Stacks?.[0];
+    const outputs = Object.fromEntries((stack?.Outputs ?? []).map((o) => [o.OutputKey, o.OutputValue]));
+    const resources = stackResources(stackName, awsEnv);
+    const inventoryPath = writeInventory({
+      stackName,
+      env,
+      region,
+      artifactBucket,
+      artifactPrefix,
+      accountId,
+      apiEndpoint: outputs.ApiEndpoint,
+      resources,
+    });
+
+    console.log("\nDeployment complete.");
+    console.log(`API endpoint: ${outputs.ApiEndpoint}`);
+    console.log(`Resource inventory: ${inventoryPath}`);
+    console.log(`Remove stack: aws cloudformation delete-stack --stack-name ${stackName} --region ${region}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!message.includes("Failure inventory:")) {
+      const stackStatus = getStackStatus(stackName, region, awsEnv);
+      fail(
+        artifactUploaded ? "deploy-failed" : "partial-failed-before-cloudformation",
+        message,
+        { stackStatus: stackStatus === "NOT_FOUND" ? null : stackStatus }
+      );
+    }
+    throw err;
   }
-  sh("aws", [
-    "s3api",
-    "put-bucket-tagging",
-    "--bucket",
-    artifactBucket,
-    "--tagging",
-    JSON.stringify({
-      TagSet: resourceTags(env, "api", "core-api", "internal").map((t) => ({ Key: t.Key, Value: t.Value })),
-    }),
-  ], { env: awsEnv });
-
-  console.log("Uploading Lambda artifacts...");
-  uploadArtifacts(handlerFiles, artifactDir, artifactBucket, artifactPrefix, awsEnv);
-
-  console.log(`Deploying CloudFormation stack ${stackName}...`);
-  sh("aws", [
-    "cloudformation",
-    "deploy",
-    "--template-file",
-    templatePath,
-    "--s3-bucket",
-    artifactBucket,
-    "--s3-prefix",
-    `${artifactPrefix}/templates`,
-    "--stack-name",
-    stackName,
-    "--capabilities",
-    "CAPABILITY_NAMED_IAM",
-    "--region",
-    region,
-    "--parameter-overrides",
-    `JwtSecret=${jwtSecret}`,
-    `AppUrl=${appUrl}`,
-    "ApiPublicUrl=",
-    "AssetsPublicUrl=",
-    `OpenAIApiKey=${openaiApiKey}`,
-    `MetaAppId=${metaAppId}`,
-    `MetaAppSecret=${metaAppSecret}`,
-    `MetaVerifyToken=${metaVerifyToken}`,
-    `PaymentWebhookSecret=${paymentWebhookSecret}`,
-    `BillingSkipPayment=${billingSkipPayment}`,
-    "--tags",
-    "Project=CommerceChat",
-    "Application=commercechat",
-    `Environment=${env}`,
-    "ManagedBy=cloudformation",
-    "Owner=platform",
-  ], { env: awsEnv, stdio: "inherit" });
-
-  const outputsRaw = sh("aws", ["cloudformation", "describe-stacks", "--stack-name", stackName], { env: awsEnv });
-  const stack = JSON.parse(outputsRaw).Stacks?.[0];
-  const outputs = Object.fromEntries((stack?.Outputs ?? []).map((o) => [o.OutputKey, o.OutputValue]));
-  const resources = stackResources(stackName, awsEnv);
-  const inventoryPath = writeInventory({
-    stackName,
-    env,
-    region,
-    artifactBucket,
-    artifactPrefix,
-    accountId,
-    apiEndpoint: outputs.ApiEndpoint,
-    resources,
-  });
-
-  console.log("\nDeployment complete.");
-  console.log(`API endpoint: ${outputs.ApiEndpoint}`);
-  console.log(`Resource inventory: ${inventoryPath}`);
-  console.log(`Remove stack: aws cloudformation delete-stack --stack-name ${stackName} --region ${region}`);
 }
 
 main().catch((err) => {

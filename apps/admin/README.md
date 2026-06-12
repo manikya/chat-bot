@@ -31,13 +31,37 @@ Demo credentials (`owner@store.com`) only work when using mock auth — not with
 
 ## Environment
 
-`apps/admin/.env.local`:
+`apps/admin/.env.local` (local dev):
 
 ```
 NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
+Production static build (`npm run build:static`) bakes `NEXT_PUBLIC_API_URL` at build time.
+
 All requests go through the API server. Implemented routes hit Lambdas; others use mock fallback.
+
+## Deploy to AWS (S3 + CloudFront)
+
+Static export — no Node server in production. From repo root:
+
+```bash
+npm run deploy:admin -- \
+  --credentials-csv="/path/to/accessKeys.csv" \
+  --env=dev \
+  --region=us-east-1 \
+  --api-url=https://YOUR_API_GATEWAY_URL
+```
+
+`--api-url` defaults to the latest API deploy inventory in `infra/deployments/` if omitted.
+
+After deploy:
+
+1. Open the printed **Admin URL** (CloudFront).
+2. Add Meta OAuth redirect: `{AdminUrl}/channels/meta/callback/`
+3. Redeploy API with `--app-url={AdminUrl}` so auth emails link correctly.
+
+See [infra/aws-serverless-deployment.md](../../infra/aws-serverless-deployment.md).
 
 ## Architecture
 

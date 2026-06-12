@@ -9,6 +9,9 @@ out/
 build/
 dist/
 .aws-deploy/
+infra/deployments/*-partial-*
+infra/deployments/*-failed-*
+infra/deployments/*-error-*
 *.tsbuildinfo
 
 # Local ingest / vector data

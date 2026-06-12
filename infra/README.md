@@ -32,7 +32,7 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 | `knowledge-jobs` | `knowledge-jobs.cjs` | `GET /api/v1/knowledge/jobs`, `GET /api/v1/knowledge/jobs/{jobId}` |
 | `jwt-authorizer` | `jwt-authorizer.cjs` | API Gateway authorizer |
 
-**Status (2026-06-07):** 19 handler bundles built locally. CDK stacks and API Gateway wiring are not yet in this repo — deploy map above is the target layout.
+**Status (2026-06-12):** 39 handler bundles. Deploy to AWS via `npm run deploy:aws` (API + DynamoDB + S3 + API Gateway). Admin UI via `npm run deploy:admin` (static Next export → S3 + CloudFront). Inventories under `infra/deployments/`.
 
 **Remaining Lambdas:** see [docs/implementation/06-api-implementation-status.md](../docs/implementation/06-api-implementation-status.md).
 
@@ -44,6 +44,19 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 | `JWT_SECRET` | Secrets Manager ARN or value |
 | `JWT_ISSUER` | `commercechat.com` |
 | `APP_URL` | Admin app URL for email links |
+
+## AWS deploy
+
+```bash
+# API (CloudFormation stack commercechat-{env})
+npm run deploy:aws -- --credentials-csv="/path/to/accessKeys.csv" --env=dev --region=us-east-1
+
+# Admin UI (stack commercechat-{env}-admin)
+npm run deploy:admin -- --credentials-csv="/path/to/accessKeys.csv" --env=dev \
+  --api-url=https://YOUR_API_GATEWAY_URL
+```
+
+IAM: attach [aws-deploy-iam-policy.json](aws-deploy-iam-policy.json) as a **customer-managed policy** (inline limit is 2 KB). Full guide: [aws-serverless-deployment.md](aws-serverless-deployment.md).
 
 ## Local dev
 

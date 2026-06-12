@@ -20,7 +20,8 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "cost:aws": "node scripts/aws-cost-report.mjs",
-    "deploy:aws": "node scripts/deploy-aws-serverless.mjs"
+    "deploy:aws": "node scripts/deploy-aws-serverless.mjs",
+    "deploy:admin": "node scripts/deploy-admin-static.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
