@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-06-12T03:41:43.039Z",
+  "status": "partial-failed-before-cloudformation",
+  "reason": "IAM user lacks cloudformation:CreateChangeSet",
+  "accountId": "960884446408",
+  "region": "us-east-1",
+  "stackName": "commercechat-dev",
+  "artifactBucket": "commercechat-dev-960884446408-us-east-1-deploy",
+  "artifactPrefix": "serverless/",
+  "artifactObjectCount": 77,
+  "artifactTotalBytes": 51467316,
+  "resources": [
+    {
+      "type": "AWS::S3::Bucket",
+      "physicalId": "commercechat-dev-960884446408-us-east-1-deploy",
+      "purpose": "Lambda/template deployment artifacts"
+    }
+  ],
+  "removal": {
+    "emptyArtifacts": "aws s3 rm s3://commercechat-dev-960884446408-us-east-1-deploy/serverless/ --recursive --region us-east-1",
+    "deleteArtifactBucket": "aws s3 rb s3://commercechat-dev-960884446408-us-east-1-deploy --force --region us-east-1"
+  },
+  "requiredNextPermission": "cloudformation:CreateChangeSet plus the deploy permissions documented in infra/aws-deploy-iam-policy.json"
+}

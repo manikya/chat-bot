@@ -108,6 +108,44 @@ npm run cost:aws -- --start=2026-06-01 --end=2026-07-01 --env=staging
 
 The report prints costs grouped by `CostGroup` and by AWS service.
 
+## Deploy From Local Credentials CSV
+
+Use the checked-in deployment script instead of creating resources manually. It builds Lambda bundles,
+uploads versioned artifacts to a tagged deployment bucket, deploys a CloudFormation stack, and writes a
+resource inventory under `infra/deployments/`.
+
+The IAM user/access key needs the permissions in [aws-deploy-iam-policy.json](aws-deploy-iam-policy.json).
+If deployment fails before the CloudFormation stack is created, the script may still have created the
+deployment artifact bucket; record or remove it using the generated partial inventory file.
+
+```bash
+npm run deploy:aws -- --credentials-csv="/Users/manikya/Downloads/manikya_accessKeys (1).csv" --env=dev --region=us-east-1
+```
+
+Optional parameters:
+
+```bash
+npm run deploy:aws -- \
+  --credentials-csv="/Users/manikya/Downloads/manikya_accessKeys (1).csv" \
+  --env=dev \
+  --region=us-east-1 \
+  --app-url=https://your-admin-url.example.com \
+  --openai-api-key="$OPENAI_API_KEY" \
+  --meta-app-id="$META_APP_ID" \
+  --meta-app-secret="$META_APP_SECRET" \
+  --meta-verify-token="$META_VERIFY_TOKEN"
+```
+
+Removal is intentionally simple:
+
+```bash
+aws cloudformation delete-stack --stack-name commercechat-dev --region us-east-1
+aws cloudformation wait stack-delete-complete --stack-name commercechat-dev --region us-east-1
+```
+
+The deployment artifact bucket is outside the stack so CloudFormation can read Lambda code from it.
+The generated inventory file includes the exact `aws s3 rm` and `aws s3 rb` commands for that bucket.
+
 ## Cost Drivers To Watch
 
 | Area | Main Driver | Control |

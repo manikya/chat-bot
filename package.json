@@ -19,7 +19,8 @@
     "build:lambdas": "npm run build:lambdas --workspace=@commercechat/api",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "cost:aws": "node scripts/aws-cost-report.mjs"
+    "cost:aws": "node scripts/aws-cost-report.mjs",
+    "deploy:aws": "node scripts/deploy-aws-serverless.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

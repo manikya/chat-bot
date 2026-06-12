@@ -8,6 +8,7 @@ out/
 # Build / cache
 build/
 dist/
+.aws-deploy/
 *.tsbuildinfo
 
 # Local ingest / vector data
