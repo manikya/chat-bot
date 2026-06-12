@@ -9,6 +9,7 @@ import {
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import type { WhatsAppInboundMessage } from "../channels/types";
+import { formatProductCardsForChannel } from "./product-cards";
 import { sendWhatsAppReply } from "./whatsapp-outbound";
 
 async function claimIdempotency(
@@ -83,7 +84,7 @@ export async function processWhatsAppInbound(
       tenantId,
       inbound.phoneNumberId,
       inbound.from,
-      result.reply.content,
+      formatProductCardsForChannel(result, "whatsapp"),
       config
     );
 

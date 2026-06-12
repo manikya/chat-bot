@@ -48,6 +48,45 @@ class CommerceChat_Connector_Products
         return self::format_product($product);
     }
 
+    private static function absolute_url(string $url): string
+    {
+        if (preg_match('/^https?:\/\//i', $url)) {
+            return $url;
+        }
+        if (strpos($url, '//') === 0) {
+            return is_ssl() ? 'https:' . $url : 'http:' . $url;
+        }
+        return home_url($url);
+    }
+
+    private static function image_urls_from_html(string $html): array
+    {
+        if (trim($html) === '') {
+            return [];
+        }
+
+        $urls = [];
+        if (preg_match_all('/<img[^>]+(?:src|data-src|data-lazy-src)=["\']([^"\']+)["\']/i', $html, $matches)) {
+            foreach ($matches[1] as $url) {
+                if ($url && strpos($url, 'data:image/') !== 0) {
+                    $urls[] = self::absolute_url(html_entity_decode($url));
+                }
+            }
+        }
+        if (preg_match_all('/<img[^>]+srcset=["\']([^"\']+)["\']/i', $html, $srcset_matches)) {
+            foreach ($srcset_matches[1] as $srcset) {
+                foreach (explode(',', $srcset) as $candidate) {
+                    $parts = preg_split('/\s+/', trim($candidate));
+                    if (!empty($parts[0]) && strpos($parts[0], 'data:image/') !== 0) {
+                        $urls[] = self::absolute_url(html_entity_decode($parts[0]));
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($urls));
+    }
+
     private static function format_product(WC_Product $product): array
     {
         $categories = [];
@@ -91,12 +130,20 @@ class CommerceChat_Connector_Products
                 $images[] = $gallery_url;
             }
         }
-        $images = array_values(array_unique($images));
 
         $short = wp_strip_all_tags($product->get_short_description());
         $desc = wp_strip_all_tags($product->get_description());
         $raw_short = wp_kses_post($product->get_short_description());
         $raw_desc = wp_kses_post($product->get_description());
+        $images = array_merge(
+            $images,
+            self::image_urls_from_html($raw_short),
+            self::image_urls_from_html($raw_desc)
+        );
+        $images = array_values(array_unique($images));
+        if (!$image && !empty($images[0])) {
+            $image = $images[0];
+        }
         $name = $product->get_name();
         $sku = $product->get_sku() ?: 'wc-' . $product->get_id();
         $price = (float) $product->get_price();

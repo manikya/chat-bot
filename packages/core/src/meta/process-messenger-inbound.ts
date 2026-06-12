@@ -4,9 +4,15 @@ import { runChatOrchestrator } from "../chat/orchestrator";
 import { isPlanLimitError, QUOTA_EXCEEDED_USER_MESSAGE } from "../chat/usage";
 import { resolveTenantByPageId } from "../channels/service";
 import type { MessengerInboundMessage } from "../channels/types";
+import { ensureFreshMessengerToken } from "../channels/service";
+import { sendMessengerGenericTemplate } from "../channels/meta-client";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { sendMessengerReply } from "./messenger-outbound";
+import {
+  buildMessengerProductElements,
+  formatProductCardsForChannel,
+} from "./product-cards";
 
 async function claimIdempotency(
   tenantId: string,
@@ -70,7 +76,30 @@ export async function processMessengerInbound(
       config
     );
 
-    await sendMessengerReply(tenantId, inbound.from, result.reply.content, config);
+    const productElements = buildMessengerProductElements(result);
+    if (productElements.length) {
+      await sendMessengerReply(tenantId, inbound.from, result.reply.content, config);
+      const creds = await ensureFreshMessengerToken(tenantId, config);
+      if (!creds) throw new Error("Missing Messenger credentials for tenant");
+      try {
+        await sendMessengerGenericTemplate(
+          config,
+          creds.pageAccessToken,
+          inbound.from,
+          productElements
+        );
+      } catch (sendErr) {
+        console.warn("[messenger] product cards failed; sending text fallback", sendErr);
+        await sendMessengerReply(
+          tenantId,
+          inbound.from,
+          formatProductCardsForChannel(result, "messenger"),
+          config
+        );
+      }
+    } else {
+      await sendMessengerReply(tenantId, inbound.from, result.reply.content, config);
+    }
 
     console.log("[messenger] replied to", inbound.from, "tenant", tenantId);
   } catch (err) {

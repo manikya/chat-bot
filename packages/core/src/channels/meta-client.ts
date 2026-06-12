@@ -355,3 +355,75 @@ export async function sendMessengerText(
   }
   return json;
 }
+
+export interface MessengerGenericElement {
+  title: string;
+  subtitle?: string;
+  imageUrl?: string;
+  defaultActionUrl?: string;
+  buttons?: Array<
+    | { type: "web_url"; title: string; url: string }
+    | { type: "postback"; title: string; payload: string }
+  >;
+}
+
+export async function sendMessengerGenericTemplate(
+  config: CoreConfig,
+  pageAccessToken: string,
+  recipientId: string,
+  elements: MessengerGenericElement[]
+) {
+  const templateElements = elements.slice(0, 10).map((element) => ({
+    title: element.title.slice(0, 80),
+    ...(element.subtitle ? { subtitle: element.subtitle.slice(0, 80) } : {}),
+    ...(element.imageUrl ? { image_url: element.imageUrl } : {}),
+    ...(element.defaultActionUrl
+      ? { default_action: { type: "web_url", url: element.defaultActionUrl } }
+      : {}),
+    ...(element.buttons?.length
+      ? {
+          buttons: element.buttons.slice(0, 3).map((button) =>
+            button.type === "web_url"
+              ? { type: "web_url", title: button.title.slice(0, 20), url: button.url }
+              : {
+                  type: "postback",
+                  title: button.title.slice(0, 20),
+                  payload: button.payload.slice(0, 1000),
+                }
+          ),
+        }
+      : {}),
+  }));
+
+  const res = await fetch(`${graphBase(config)}/me/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${pageAccessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      recipient: { id: recipientId },
+      message: {
+        attachment: {
+          type: "template",
+          payload: {
+            template_type: "generic",
+            elements: templateElements,
+          },
+        },
+      },
+    }),
+  });
+  const json = (await res.json()) as {
+    message_id?: string;
+    error?: { message: string; code?: number };
+  };
+  if (!res.ok || json.error) {
+    throw new MetaGraphError(
+      json.error?.message ?? "Messenger template send failed",
+      json.error?.code,
+      res.status
+    );
+  }
+  return json;
+}

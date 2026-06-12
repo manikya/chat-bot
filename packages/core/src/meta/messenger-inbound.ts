@@ -35,7 +35,7 @@ export function parseMessengerWebhookPayload(payload: unknown): MessengerInbound
       const from = event.sender?.id;
       if (!from) continue;
 
-      const text = event.message?.text ?? event.postback?.title ?? event.postback?.payload;
+      const text = event.message?.text ?? event.postback?.payload ?? event.postback?.title;
       const messageId = event.message?.mid ?? event.postback?.mid;
       if (!text || !messageId) continue;
 
