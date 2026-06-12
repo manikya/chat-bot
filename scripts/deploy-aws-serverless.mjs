@@ -331,7 +331,7 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
     resources[logId] = {
       Type: "AWS::Logs::LogGroup",
       Properties: {
-        LogGroupName: { "Fn::Sub": `/aws/lambda/commercechat-${env}-${handlerName}` },
+        LogGroupName: { "Fn::Sub": `/aws/lambda/commercechat-${env}-${suffix}` },
         RetentionInDays: env === "prod" ? 30 : 14,
         Tags: resourceTags(env, cls.component, cls.costGroup, cls.dataClass),
       },

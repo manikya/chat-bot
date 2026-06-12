@@ -1,0 +1,26 @@
+{
+  "createdAt": "2026-06-12T05:37:15.257Z",
+  "status": "failed-rollback-complete",
+  "reason": "IAM user lacks dynamodb:DescribeTable on commercechat-dev-storage-main",
+  "accountId": "960884446408",
+  "region": "us-east-1",
+  "stackName": "commercechat-dev",
+  "stackStatus": "ROLLBACK_COMPLETE",
+  "artifactBucket": "commercechat-dev-960884446408-us-east-1-deploy",
+  "artifactPrefix": "serverless/",
+  "artifactObjectCount": 155,
+  "artifactTotalBytes": 103216315,
+  "resources": [
+    {
+      "type": "AWS::S3::Bucket",
+      "physicalId": "commercechat-dev-960884446408-us-east-1-deploy",
+      "purpose": "Lambda/template deployment artifacts"
+    }
+  ],
+  "removal": {
+    "deleteStackRecord": "aws cloudformation delete-stack --stack-name commercechat-dev --region us-east-1",
+    "emptyArtifacts": "aws s3 rm s3://commercechat-dev-960884446408-us-east-1-deploy/serverless/ --recursive --region us-east-1",
+    "deleteArtifactBucket": "aws s3 rb s3://commercechat-dev-960884446408-us-east-1-deploy --force --region us-east-1"
+  },
+  "requiredNextPermission": "Attach the full infra/aws-deploy-iam-policy.json; latest failure was missing dynamodb:DescribeTable"
+}
