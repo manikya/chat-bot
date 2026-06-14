@@ -234,8 +234,10 @@ export async function getWordPressWidgetBootstrap(tenantId: string, config: Core
   }
 
   const widget = await getWidgetConfig(tenantId, config);
+  const scriptBase = (config.widgetCdnUrl ?? config.apiPublicUrl).replace(/\/$/, "");
   return ok({
     apiPublicUrl: config.apiPublicUrl.replace(/\/$/, ""),
+    widgetScriptUrl: `${scriptBase}/widget/v1.js`,
     storeName: widget.data?.storeName,
     greeting: widget.data?.greeting,
     primaryColor: widget.data?.primaryColor,

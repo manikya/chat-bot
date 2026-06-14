@@ -12,6 +12,18 @@ async function processPayload(body: IngestPayload, config: ReturnType<typeof loa
     console.warn("[ingest-worker] invalid payload", body);
     return;
   }
+  if (!config.s3VectorsBucketName) {
+    console.warn("[ingest-worker] S3_VECTORS_BUCKET unset — vector indexing will fail");
+  } else {
+    console.log(
+      "[ingest-worker]",
+      body.kind,
+      body.tenantId,
+      body.jobId,
+      "→",
+      config.s3VectorsBucketName
+    );
+  }
   await runIngestJobByKind(body.kind, body.tenantId, body.jobId, config);
 }
 

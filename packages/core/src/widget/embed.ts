@@ -1,7 +1,11 @@
 import type { CoreConfig } from "../config";
 
+function widgetScriptBase(config: CoreConfig): string {
+  return (config.widgetCdnUrl ?? config.apiPublicUrl).replace(/\/$/, "");
+}
+
 export function buildWidgetEmbedCode(apiKey: string, config: CoreConfig) {
-  const scriptUrl = `${config.apiPublicUrl.replace(/\/$/, "")}/widget/v1.js`;
+  const scriptUrl = `${widgetScriptBase(config)}/widget/v1.js`;
   return `<script
   src="${scriptUrl}"
   data-api-key="${apiKey}"
@@ -10,7 +14,7 @@ export function buildWidgetEmbedCode(apiKey: string, config: CoreConfig) {
 }
 
 export function buildWidgetEmbedPlaceholder(prefix: string, config: CoreConfig) {
-  const scriptUrl = `${config.apiPublicUrl.replace(/\/$/, "")}/widget/v1.js`;
+  const scriptUrl = `${widgetScriptBase(config)}/widget/v1.js`;
   return `<script
   src="${scriptUrl}"
   data-api-key="${prefix}…"

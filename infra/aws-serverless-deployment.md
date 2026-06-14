@@ -216,7 +216,19 @@ Override at deploy: `--billing-lifecycle-cron-secret=...` / `--meta-token-refres
 
 Both are enabled by `npm run deploy:aws:full`. S3 Vectors bucket is created via `scripts/create-s3-vectors-bucket.mjs` when the ingest pipeline is on.
 
-**Dev (2026-06):** `commercechat-dev-ingest` state machine + ingest queue deployed; `INGEST_STATE_MACHINE_ARN` set on API Lambdas.
+### Widget CDN (optional)
+
+```bash
+npm run deploy:widget -- --credentials-csv="..." --env=dev --region=us-east-1
+```
+
+Creates S3 + CloudFront stack `commercechat-{env}-widget`, uploads `apps/widget/public/v1.js` to `/widget/v1.js`, and sets `WIDGET_CDN_URL` on API Lambdas when you redeploy with `--widget-cdn-url=...` or `--with-widget-cdn` (included in `deploy:aws:full`). The API Gateway `/widget/v1.js` route is omitted when a CDN URL is configured.
+
+**Verify S3 Vectors ingest on dev:**
+
+```bash
+node apps/api/scripts/test-s3-vectors-ingest.mjs
+```
 
 Removal is intentionally simple:
 

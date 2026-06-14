@@ -12,7 +12,7 @@ const BUILD_DIR = join(API_DIR, "dist/handlers");
 const OUT_DIR = join(ROOT, ".aws-deploy");
 const INVENTORY_DIR = join(ROOT, "infra/deployments");
 
-const ROUTES = [
+const BASE_ROUTES = [
   ["GET", "/health", "health"],
   ["GET", "/widget/v1.js", "widget-bundle"],
   ["GET", "/webhooks/meta", "webhook-meta"],
@@ -92,6 +92,11 @@ const ROUTES = [
   ["POST", "/internal/cron/billing-lifecycle", "cron-billing-lifecycle"],
 ];
 
+function getDeployRoutes(widgetCdnUrl) {
+  if (!widgetCdnUrl) return BASE_ROUTES;
+  return BASE_ROUTES.filter(([, path, file]) => !(path === "/widget/v1.js" && file === "widget-bundle"));
+}
+
 function arg(name, fallback) {
   const prefix = `--${name}=`;
   const found = process.argv.find((item) => item.startsWith(prefix));
@@ -122,6 +127,17 @@ function latestApiEndpoint(env) {
 function latestAdminUrl(env) {
   const inv = readDeploymentInventory(env, "admin");
   return inv?.adminUrl ?? null;
+}
+
+function latestWidgetCdnUrl(env) {
+  if (!existsSync(INVENTORY_DIR)) return null;
+  const files = readdirSync(INVENTORY_DIR)
+    .filter((name) => name.startsWith(`commercechat-${env}-widget-`) && name.endsWith(".json"))
+    .sort();
+  const latest = files.at(-1);
+  if (!latest) return null;
+  const inv = JSON.parse(readFileSync(join(INVENTORY_DIR, latest), "utf8"));
+  return inv.widgetCdnUrl ?? null;
 }
 
 function metaOAuthRedirectForAdminUrl(adminUrl) {
@@ -510,6 +526,8 @@ function buildTemplate({
   artifactBucket,
   artifactPrefix,
   handlerFiles,
+  deployRoutes,
+  widgetCdnUrl = "",
   withIngestPipeline = false,
   withIngestStepFunctions = false,
   withCronSchedules = true,
@@ -774,7 +792,7 @@ function buildTemplate({
   };
 
   const functionDefs = new Map();
-  for (const [, , file, exportName = "handler"] of ROUTES) {
+  for (const [, , file, exportName = "handler"] of deployRoutes) {
     functionDefs.set(`${file}:${exportName}`, { file, exportName });
   }
   functionDefs.set("ingest-worker:handler", { file: "ingest-worker", exportName: "handler" });
@@ -836,10 +854,12 @@ function buildTemplate({
             JWT_ISSUER: "commercechat.com",
             APP_URL: { Ref: "AppUrl" },
             API_PUBLIC_URL: { Ref: "ApiPublicUrl" },
+            WIDGET_CDN_URL: { Ref: "WidgetCdnUrl" },
             AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1",
             AWS_REGION_NAME: region,
             S3_BUCKET: { Ref: "AssetsBucket" },
             S3_ASSETS_BUCKET: { Ref: "AssetsBucket" },
+            S3_DATA_BUCKET: { Ref: "DataBucket" },
             S3_PUBLIC_URL: { Ref: "AssetsPublicUrl" },
             OPENAI_API_KEY: { Ref: "OpenAIApiKey" },
             META_APP_ID: { Ref: "MetaAppId" },
@@ -935,7 +955,7 @@ function buildTemplate({
   }
 
   const routeIndex = new Map();
-  for (const [method, path, file, exportName = "handler"] of ROUTES) {
+  for (const [method, path, file, exportName = "handler"] of deployRoutes) {
     const routeId = logicalId("Route", `${method}-${path}-${exportName}`);
     const integrationId = logicalId("Integration", `${file}-${exportName}`);
     const permissionId = logicalId("Permission", `${file}-${exportName}`);
@@ -987,6 +1007,7 @@ function buildTemplate({
       JwtSecret: { Type: "String", NoEcho: true, MinLength: 16 },
       AppUrl: { Type: "String", Default: "http://localhost:3000" },
       ApiPublicUrl: { Type: "String", Default: "" },
+      WidgetCdnUrl: { Type: "String", Default: "" },
       AssetsPublicUrl: { Type: "String", Default: "" },
       OpenAIApiKey: { Type: "String", NoEcho: true, Default: "" },
       MetaAppId: { Type: "String", Default: "" },
@@ -1007,6 +1028,7 @@ function buildTemplate({
     Resources: resources,
     Outputs: {
       ApiEndpoint: { Value: { "Fn::GetAtt": ["HttpApi", "ApiEndpoint"] } },
+      WidgetCdnUrl: { Value: { Ref: "WidgetCdnUrl" } },
       TableName: { Value: { Ref: "MainTable" } },
       AssetsBucketName: { Value: { Ref: "AssetsBucket" } },
       DataBucketName: { Value: { Ref: "DataBucket" } },
@@ -1152,6 +1174,7 @@ async function main() {
   const withIngestStepFunctions = process.argv.includes("--with-ingest-step-functions");
   const withCronSchedules = !process.argv.includes("--no-cron-schedules");
   const ensureIam = process.argv.includes("--ensure-iam");
+  const withWidgetCdn = process.argv.includes("--with-widget-cdn");
 
   if (!existsSync(credentialsCsv)) throw new Error(`Credentials CSV not found: ${credentialsCsv}`);
   loadLocalApiEnv();
@@ -1219,6 +1242,9 @@ async function main() {
   const billingLifecycleCronSecret = hasArg("billing-lifecycle-cron-secret")
     ? arg("billing-lifecycle-cron-secret", "")
     : process.env.BILLING_LIFECYCLE_CRON_SECRET ?? deployedEnv?.BILLING_LIFECYCLE_CRON_SECRET ?? randomBytes(32).toString("hex");
+  let widgetCdnUrl = hasArg("widget-cdn-url")
+    ? arg("widget-cdn-url", "")
+    : latestWidgetCdnUrl(env) ?? deployedEnv?.WIDGET_CDN_URL ?? "";
   const artifactBucket = `commercechat-${env}-${accountId}-${region}-deploy`;
   let artifactPrefix = null;
   let artifactUploaded = false;
@@ -1262,6 +1288,9 @@ async function main() {
         stdio: "inherit",
       });
     }
+    if (widgetCdnUrl) {
+      console.log(`Widget CDN ${widgetCdnUrl} — API Gateway /widget/v1.js route omitted`);
+    }
     runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv, withIngestStepFunctions });
 
     if (preflightOnly) {
@@ -1271,6 +1300,19 @@ async function main() {
       }
       console.log("Preflight checks passed.");
       return;
+    }
+
+    if (withWidgetCdn) {
+      console.log("Deploying widget CDN (S3 + CloudFront)...");
+      sh(
+        "node",
+        ["scripts/deploy-widget-static.mjs", `--credentials-csv=${credentialsCsv}`, `--env=${env}`, `--region=${region}`],
+        { cwd: ROOT, stdio: "inherit" }
+      );
+      widgetCdnUrl = latestWidgetCdnUrl(env) ?? widgetCdnUrl;
+      if (widgetCdnUrl) {
+        console.log(`Widget CDN ${widgetCdnUrl} — API Gateway /widget/v1.js route omitted`);
+      }
     }
 
     const stackStatus = ensureStackDeployable(stackName, region, awsEnv, deleteFailedStack);
@@ -1315,12 +1357,15 @@ async function main() {
 
     mkdirSync(OUT_DIR, { recursive: true });
     zipHandlers(handlerFiles, artifactDir);
+    const deployRoutes = getDeployRoutes(widgetCdnUrl);
     const template = buildTemplate({
       env,
       region,
       artifactBucket,
       artifactPrefix,
       handlerFiles,
+      deployRoutes,
+      widgetCdnUrl,
       withIngestPipeline,
       withIngestStepFunctions,
       withCronSchedules,
@@ -1374,6 +1419,7 @@ async function main() {
         `JwtSecret=${jwtSecret}`,
         `AppUrl=${appUrl}`,
         `ApiPublicUrl=${apiPublicUrl}`,
+        `WidgetCdnUrl=${widgetCdnUrl}`,
         "AssetsPublicUrl=",
         `OpenAIApiKey=${openaiApiKey}`,
         `MetaAppId=${metaAppId}`,
@@ -1427,6 +1473,9 @@ async function main() {
 
     console.log("\nDeployment complete.");
     console.log(`API endpoint: ${outputs.ApiEndpoint}`);
+    if (outputs.WidgetCdnUrl) {
+      console.log(`Widget CDN: ${outputs.WidgetCdnUrl}/widget/v1.js`);
+    }
     console.log(`Meta webhook URL: ${outputs.ApiEndpoint}/webhooks/meta`);
     console.log(`Resource inventory: ${inventoryPath}`);
     console.log(`Remove stack: aws cloudformation delete-stack --stack-name ${stackName} --region ${region}`);

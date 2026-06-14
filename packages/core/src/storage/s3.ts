@@ -1,4 +1,5 @@
 import {
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -80,4 +81,40 @@ export async function s3ObjectExists(config: CoreConfig, key: string) {
   } catch {
     return false;
   }
+}
+
+function dataBucket(config: CoreConfig) {
+  return config.s3DataBucket ?? config.s3Bucket;
+}
+
+export async function putS3DataObject(
+  config: CoreConfig,
+  key: string,
+  body: Buffer | string,
+  contentType: string
+) {
+  const bucket = dataBucket(config);
+  if (!bucket) throw new Error("S3_DATA_BUCKET is required for catalog storage");
+  const client = getS3Client(config);
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
+}
+
+export async function getS3DataObjectText(config: CoreConfig, key: string) {
+  const bucket = dataBucket(config);
+  if (!bucket) throw new Error("S3_DATA_BUCKET is required for catalog storage");
+  const client = getS3Client(config);
+  const res = await client.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    })
+  );
+  return (await res.Body?.transformToString()) ?? "";
 }

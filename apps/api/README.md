@@ -76,6 +76,7 @@ node scripts/test-chat.mjs
 node scripts/test-usage-widget-conversations.mjs
 node scripts/test-catalog-chat.mjs
 node scripts/test-billing-limits.mjs
+node scripts/test-s3-vectors-ingest.mjs
 ```
 
 ## Environment

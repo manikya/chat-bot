@@ -38,7 +38,8 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 |------------|--------------|
 | `ensure:deploy-iam` | Create/update `CommerceChatDeploy` policy from `aws-deploy-iam-policy.json` |
 | `deploy:aws` | API CloudFormation stack |
-| `deploy:aws:full` | `--ensure-iam --with-ingest-pipeline --with-ingest-step-functions` |
+| `deploy:widget` | Widget `v1.js` → S3 + CloudFront (`widget-cdn`) |
+| `deploy:aws:full` | `--ensure-iam --with-ingest-pipeline --with-ingest-step-functions --with-widget-cdn` |
 | `deploy:admin` | Static admin → S3 + CloudFront |
 
 **Remaining Lambdas:** see [docs/implementation/06-api-implementation-status.md](../docs/implementation/06-api-implementation-status.md).

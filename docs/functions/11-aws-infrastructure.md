@@ -255,7 +255,7 @@ All Lambdas use JSON logs:
 - [ ] Auth signup/login flow tested
 - [ ] ACM certificates validated
 - [x] CloudFront distribution serving admin (dev: `commercechat-dev-admin` stack)
-- [ ] CloudFront distributions serving widget (`widget-cdn`)
+- [x] CloudFront distribution serving widget (`commercechat-{env}-widget` stack, `widget-cdn`)
 - [x] API + DynamoDB + 40+ Lambdas on dev (`npm run deploy:aws:full`)
 - [x] Deploy IAM policy bootstrap (`npm run ensure:deploy-iam`)
 - [x] Step Functions ingest pipeline on dev (`commercechat-dev-ingest`)

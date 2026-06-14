@@ -93,7 +93,24 @@ export function ensureDeployIam(options = {}) {
   if (existing.ok) {
     console.log("Updating existing managed policy version...");
     if (!dryRun) {
-      const update = awsCall(
+      const pruneOldestPolicyVersion = () => {
+        const list = awsCall(
+          ["iam", "list-policy-versions", "--policy-arn", policyArn, "--output", "json"],
+          awsEnv
+        );
+        if (!list.ok) return;
+        const versions = JSON.parse(list.stdout).Versions ?? [];
+        const oldest = versions
+          .filter((v) => !v.IsDefaultVersion)
+          .sort((a, b) => String(a.CreateDate).localeCompare(String(b.CreateDate)))[0];
+        if (!oldest) return;
+        awsCall(
+          ["iam", "delete-policy-version", "--policy-arn", policyArn, "--version-id", oldest.VersionId],
+          awsEnv
+        );
+      };
+
+      let update = awsCall(
         [
           "iam",
           "create-policy-version",
@@ -105,6 +122,22 @@ export function ensureDeployIam(options = {}) {
         ],
         awsEnv
       );
+      if (!update.ok && /LimitExceeded/i.test(update.stderr)) {
+        console.log("Policy version limit reached — pruning oldest non-default version...");
+        pruneOldestPolicyVersion();
+        update = awsCall(
+          [
+            "iam",
+            "create-policy-version",
+            "--policy-arn",
+            policyArn,
+            "--policy-document",
+            `file://${POLICY_PATH}`,
+            "--set-as-default",
+          ],
+          awsEnv
+        );
+      }
       if (!update.ok) throw new Error(`create-policy-version failed: ${update.stderr}`);
     }
   } else if (/NoSuchEntity|not found/i.test(existing.stderr)) {

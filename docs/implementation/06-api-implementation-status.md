@@ -178,8 +178,8 @@ MFA (TOTP + email OTP), production widget CDN (CloudFront for `v1.js`), full pay
 | 1 | **Payment gateway** | Checkout stub exists; wire Sri Lankan provider + `POST /webhooks/payment` for paid plans |
 | 2 | **Meta production** | Custom domain for webhooks/OAuth; submit App Review for WhatsApp live |
 | 3 | **Instagram DM E2E** | Handler + OAuth shipped; validate on AWS dev with real IG test account |
-| 4 | **Widget CDN** | Serve `v1.js` from CloudFront (`widget-cdn` cost group), not API Gateway |
-| 5 | **S3 Vectors on AWS** | Confirm ingest Step Functions write to prod vector index (not file-backed) |
+| 4 | **Widget CDN** | `npm run deploy:widget` or `--with-widget-cdn` on full deploy |
+| 5 | **S3 Vectors on AWS** | Ingest worker uses `S3_VECTORS_BUCKET`; verify with `test-s3-vectors-ingest.mjs` |
 
 ### Medium term
 
@@ -198,6 +198,8 @@ MFA (TOTP + email OTP), production widget CDN (CloudFront for `v1.js`), full pay
 - Billing lifecycle cron + suspend enforcement
 - Step Functions ingest deploy automation
 - Conversation ingest admin UI (page-voice)
+- Widget CDN (`commercechat-dev-widget` CloudFront + `WIDGET_CDN_URL`)
+- S3 Vectors on AWS (`commercechat-dev-vectors`, catalog → S3 data bucket → ingest worker)
 
 ---
 

@@ -17,6 +17,7 @@ export interface CoreConfig {
   llmModel: string;
   ingestMaxPages: number;
   apiPublicUrl: string;
+  widgetCdnUrl?: string;
   metaAppId?: string;
   metaAppSecret?: string;
   metaVerifyToken?: string;
@@ -37,6 +38,7 @@ export interface CoreConfig {
   smtpFrom?: string;
   s3Endpoint?: string;
   s3Bucket?: string;
+  s3DataBucket?: string;
   s3PublicUrl?: string;
   s3AccessKeyId?: string;
   s3SecretAccessKey?: string;
@@ -82,6 +84,7 @@ export function loadConfig(): CoreConfig {
     llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
     apiPublicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",
+    widgetCdnUrl: process.env.WIDGET_CDN_URL,
     metaAppId: process.env.META_APP_ID,
     metaAppSecret: process.env.META_APP_SECRET,
     metaVerifyToken: process.env.META_VERIFY_TOKEN,
@@ -104,6 +107,7 @@ export function loadConfig(): CoreConfig {
     smtpFrom: process.env.SMTP_FROM,
     s3Endpoint: process.env.S3_ENDPOINT ?? process.env.AWS_ENDPOINT_URL,
     s3Bucket: process.env.S3_BUCKET ?? process.env.S3_ASSETS_BUCKET,
+    s3DataBucket: process.env.S3_DATA_BUCKET,
     s3PublicUrl: process.env.S3_PUBLIC_URL,
     s3AccessKeyId: process.env.AWS_ACCESS_KEY_ID,
     s3SecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
