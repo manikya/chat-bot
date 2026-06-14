@@ -3,12 +3,38 @@ import { ApiError, ErrorCodes, ok, type AuthContext } from "@commercechat/shared
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
+import { createVectorStore } from "../ingest/vectors";
+import { getTenantLimits } from "../tenant/service";
 
 export const QUOTA_EXCEEDED_USER_MESSAGE =
   "Sorry, this store has reached its monthly message limit. Please try again later or contact the store directly.";
 
 export function isPlanLimitError(err: unknown): err is ApiError {
   return err instanceof ApiError && err.code === ErrorCodes.PLAN_LIMIT_EXCEEDED;
+}
+
+export async function assertVectorQuota(tenantId: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  const [limitsRes, vectorCount] = await Promise.all([
+    db.send(
+      new GetCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.limits() },
+      })
+    ),
+    createVectorStore(config).countByTenant(tenantId),
+  ]);
+
+  const maxVectors = Number(limitsRes.Item?.maxVectors ?? 10_000);
+  if (vectorCount >= maxVectors) {
+    throw new ApiError(
+      ErrorCodes.PLAN_LIMIT_EXCEEDED,
+      `Vector limit reached (${vectorCount.toLocaleString()} / ${maxVectors.toLocaleString()}). Delete knowledge sources or upgrade your plan before syncing.`,
+      403
+    );
+  }
+
+  return { vectorCount, maxVectors };
 }
 
 function currentPeriod(): string {

@@ -67,6 +67,7 @@ const ROUTES = [
   ["PATCH", "/api/v1/knowledge/page-voice", "knowledge-page-voice"],
   ["POST", "/api/v1/knowledge/page-voice/sync", "knowledge-page-voice"],
   ["POST", "/api/v1/knowledge/page-voice/upload", "knowledge-page-voice"],
+  ["GET", "/api/v1/knowledge/page-voice/export", "knowledge-page-voice"],
   ["POST", "/api/v1/knowledge/detect-platform", "knowledge-detect-platform"],
   ["GET", "/api/v1/commerce/products", "commerce-products"],
   ["GET", "/api/v1/commerce/wordpress/status", "commerce-wordpress", "statusHandler"],
@@ -88,6 +89,7 @@ const ROUTES = [
   ["GET", "/api/v1/channels/meta/health", "channels", "healthHandler"],
   ["DELETE", "/api/v1/channels/meta/{channel}", "channels", "disconnectHandler"],
   ["POST", "/internal/cron/meta-token-refresh", "cron-meta-token-refresh"],
+  ["POST", "/internal/cron/billing-lifecycle", "cron-billing-lifecycle"],
 ];
 
 function arg(name, fallback) {

@@ -1,4 +1,5 @@
 import {
+  exportPageVoiceHistory,
   getPageVoiceStatus,
   loadConfig,
   syncPageVoice,
@@ -15,6 +16,10 @@ export const handler = createHandler(
     const config = loadConfig();
     const method = event.requestContext.http.method;
     const path = event.rawPath ?? "";
+
+    if (method === "GET" && path.endsWith("/page-voice/export")) {
+      return exportPageVoiceHistory(auth!, config);
+    }
 
     if (method === "GET" && path.endsWith("/page-voice")) {
       return getPageVoiceStatus(auth!, config);

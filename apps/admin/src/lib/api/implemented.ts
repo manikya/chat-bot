@@ -35,6 +35,8 @@ export const IMPLEMENTED_ROUTES = [
   "PATCH /api/v1/knowledge/page-voice",
   "POST /api/v1/knowledge/page-voice/sync",
   "POST /api/v1/knowledge/page-voice/upload",
+  "GET /api/v1/knowledge/page-voice/export",
+  "POST /internal/cron/billing-lifecycle",
   "POST /api/v1/knowledge/detect-platform",
   "GET /api/v1/commerce/products",
   "GET /api/v1/commerce/wordpress/status",

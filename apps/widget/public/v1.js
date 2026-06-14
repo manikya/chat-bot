@@ -89,10 +89,14 @@
       ".cc-msg-actions{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px 0;max-width:88%;}" +
       ".cc-action-chip{font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;text-align:left;}" +
       ".cc-action-chip:hover{border-color:var(--cc-primary,#4F46E5);color:var(--cc-primary,#4F46E5);}" +
-      ".cc-product-list{display:grid;gap:8px;margin:-2px 0 10px 0;max-width:94%;}" +
-      ".cc-product-card{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04);}" +
-      ".cc-product-img{width:64px;height:64px;border-radius:8px;background:#e2e8f0;object-fit:cover;display:block;}" +
-      ".cc-product-img-fallback{display:flex;align-items:center;justify-content:center;color:#64748b;font-weight:700;font-size:18px;}" +
+      ".cc-product-list{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px;margin:-2px 0 10px 0;max-width:94%;-webkit-overflow-scrolling:touch;}" +
+      ".cc-product-card{flex:0 0 240px;scroll-snap-align:start;display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.04);}" +
+      ".cc-product-media{position:relative;}" +
+      ".cc-product-img{width:100%;height:140px;border-radius:8px;background:#e2e8f0;object-fit:cover;display:block;}" +
+      ".cc-product-img-fallback{display:flex;align-items:center;justify-content:center;color:#64748b;font-weight:700;font-size:28px;height:140px;}" +
+      ".cc-product-dots{display:flex;justify-content:center;gap:4px;margin-top:4px;}" +
+      ".cc-product-dot{width:6px;height:6px;border-radius:50%;background:#cbd5e1;border:none;padding:0;}" +
+      ".cc-product-dot-active{background:var(--cc-primary,#4F46E5);}" +
       ".cc-product-body{min-width:0;display:flex;flex-direction:column;gap:4px;}" +
       ".cc-product-name{font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       ".cc-product-meta{display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;}" +
@@ -274,20 +278,48 @@
       var el = document.createElement("div");
       el.className = "cc-product-card";
 
-      var imageUrl = card.imageUrl || (card.imageUrls && card.imageUrls.length ? card.imageUrls[0] : null);
-      if (imageUrl) {
-        var img = document.createElement("img");
-        img.className = "cc-product-img";
-        img.src = imageUrl;
-        img.alt = card.name || card.sku || "Product";
-        img.loading = "lazy";
-        el.appendChild(img);
-      } else {
-        var fallback = document.createElement("div");
-        fallback.className = "cc-product-img cc-product-img-fallback";
-        fallback.textContent = (card.name || card.sku || "?").slice(0, 1).toUpperCase();
-        el.appendChild(fallback);
+      var media = document.createElement("div");
+      media.className = "cc-product-media";
+      var urls = [];
+      if (card.imageUrls && card.imageUrls.length) urls = card.imageUrls.slice(0, 5);
+      else if (card.imageUrl) urls = [card.imageUrl];
+
+      var imageIndex = 0;
+      function renderImage() {
+        media.innerHTML = "";
+        if (urls.length) {
+          var img = document.createElement("img");
+          img.className = "cc-product-img";
+          img.src = urls[imageIndex];
+          img.alt = card.name || card.sku || "Product";
+          img.loading = "lazy";
+          media.appendChild(img);
+          if (urls.length > 1) {
+            var dots = document.createElement("div");
+            dots.className = "cc-product-dots";
+            urls.forEach(function (_url, idx) {
+              var dot = document.createElement("button");
+              dot.type = "button";
+              dot.className = "cc-product-dot" + (idx === imageIndex ? " cc-product-dot-active" : "");
+              dot.setAttribute("aria-label", "Image " + (idx + 1));
+              dot.onclick = function (e) {
+                e.stopPropagation();
+                imageIndex = idx;
+                renderImage();
+              };
+              dots.appendChild(dot);
+            });
+            media.appendChild(dots);
+          }
+        } else {
+          var fallback = document.createElement("div");
+          fallback.className = "cc-product-img cc-product-img-fallback";
+          fallback.textContent = (card.name || card.sku || "?").slice(0, 1).toUpperCase();
+          media.appendChild(fallback);
+        }
       }
+      renderImage();
+      el.appendChild(media);
 
       var body = document.createElement("div");
       body.className = "cc-product-body";
@@ -481,6 +513,8 @@
         if (evt.event === "token") {
           var current = state.messages[botIndex] && state.messages[botIndex].text ? state.messages[botIndex].text : "";
           updateBotMessage(botIndex, { text: current + (evt.data.text || "") });
+        } else if (evt.event === "typing") {
+          updateBotMessage(botIndex, { text: "…" });
         } else if (evt.event === "product_card") {
           cards.push(evt.data);
           updateBotMessage(botIndex, { cards: cards.slice() });

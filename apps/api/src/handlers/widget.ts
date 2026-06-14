@@ -1,4 +1,6 @@
 import {
+  assertWidgetChatRateLimit,
+  assertTenantOperational,
   encodeSseEvent,
   getWidgetConfig,
   loadConfig,
@@ -39,11 +41,15 @@ export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) =>
       throw new ApiError(ErrorCodes.VALIDATION_ERROR, "message is required", 400);
     }
 
+    const sessionId = body.sessionId.trim();
+    await assertWidgetChatRateLimit(tenantId, sessionId, config);
+    await assertTenantOperational(tenantId, config);
+
     const result = await runChatOrchestrator(
       { tenantId, userId: "widget", role: "viewer", email: "" },
       {
         channel: "web",
-        externalUserId: body.sessionId.trim(),
+        externalUserId: sessionId,
         message: body.message.trim(),
       },
       config
@@ -56,6 +62,7 @@ export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) =>
         sessionId: payload.sessionId,
         conversationId: payload.conversationId,
       }) +
+      encodeSseEvent("typing", { active: true }) +
       chunks.map((chunk) => encodeSseEvent("token", { text: chunk })).join("") +
       payload.productCards.map((card) => encodeSseEvent("product_card", card)).join("") +
       encodeSseEvent("done", {

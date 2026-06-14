@@ -2,6 +2,7 @@ import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoreConfig } from "../config";
 import { runChatOrchestrator } from "../chat/orchestrator";
 import { isPlanLimitError, QUOTA_EXCEEDED_USER_MESSAGE } from "../chat/usage";
+import { isTenantInactiveError, TENANT_SUSPENDED_MESSAGE } from "../tenant/status";
 import { resolveTenantByPageId } from "../channels/service";
 import type { MessengerInboundMessage } from "../channels/types";
 import { ensureFreshMessengerToken } from "../channels/service";
@@ -106,11 +107,11 @@ export async function processMessengerInbound(
 
     console.log("[messenger] replied to", inbound.from, "tenant", tenantId);
   } catch (err) {
-    if (isPlanLimitError(err)) {
+    if (isPlanLimitError(err) || isTenantInactiveError(err)) {
       await sendMessengerReply(
         tenantId,
         inbound.from,
-        QUOTA_EXCEEDED_USER_MESSAGE,
+        isTenantInactiveError(err) ? TENANT_SUSPENDED_MESSAGE : QUOTA_EXCEEDED_USER_MESSAGE,
         config,
         { bypassMessagingWindow: true }
       ).catch((sendErr) => console.warn("[messenger] quota notice failed", sendErr));

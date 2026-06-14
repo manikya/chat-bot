@@ -1,12 +1,13 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiError, ErrorCodes } from "@commercechat/shared";
+import type { TenantPlan } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
+import { WIDGET_CHAT_RATE_LIMITS, WIDGET_CONFIG_RATE_LIMITS } from "../billing/plans";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
+import { resolveTenantProfile } from "../tenant/status";
 
 const WINDOW_SEC = 60;
-const MAX_CHAT_REQUESTS = 30;
-const MAX_CONFIG_REQUESTS = 120;
 
 async function bumpCounter(
   key: string,
@@ -43,14 +44,28 @@ async function bumpCounter(
   }
 }
 
+async function widgetChatLimit(tenantId: string, config: CoreConfig) {
+  const profile = await resolveTenantProfile(tenantId, config);
+  const plan = (profile.plan as TenantPlan) ?? "trial";
+  return WIDGET_CHAT_RATE_LIMITS[plan] ?? WIDGET_CHAT_RATE_LIMITS.trial;
+}
+
+async function widgetConfigLimit(tenantId: string, config: CoreConfig) {
+  const profile = await resolveTenantProfile(tenantId, config);
+  const plan = (profile.plan as TenantPlan) ?? "trial";
+  return WIDGET_CONFIG_RATE_LIMITS[plan] ?? WIDGET_CONFIG_RATE_LIMITS.trial;
+}
+
 export async function assertWidgetChatRateLimit(
   tenantId: string,
   sessionId: string,
   config: CoreConfig
 ) {
-  await bumpCounter(`widget_chat_${tenantId}_${sessionId}`, MAX_CHAT_REQUESTS, config);
+  const limit = await widgetChatLimit(tenantId, config);
+  await bumpCounter(`widget_chat_${tenantId}_${sessionId}`, limit, config);
 }
 
 export async function assertWidgetConfigRateLimit(tenantId: string, config: CoreConfig) {
-  await bumpCounter(`widget_config_${tenantId}`, MAX_CONFIG_REQUESTS, config);
+  const limit = await widgetConfigLimit(tenantId, config);
+  await bumpCounter(`widget_config_${tenantId}`, limit, config);
 }

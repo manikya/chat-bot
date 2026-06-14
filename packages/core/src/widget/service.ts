@@ -6,39 +6,34 @@ import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { buildWidgetEmbedPlaceholder } from "./embed";
 import { assertWidgetChatRateLimit, assertWidgetConfigRateLimit } from "./rate-limit";
+import { assertTenantOperational, resolveTenantProfile, tenantIsOperational } from "../tenant/status";
 
 export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
   await assertWidgetConfigRateLimit(tenantId, config);
+  const profile = await resolveTenantProfile(tenantId, config);
   const db = getDocClient(config);
-  const [profileRes, configRes] = await Promise.all([
-    db.send(
-      new GetCommand({
-        TableName: config.tableName,
-        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.profile() },
-      })
-    ),
-    db.send(
-      new GetCommand({
-        TableName: config.tableName,
-        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.config() },
-      })
-    ),
-  ]);
+  const configRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.config() },
+    })
+  );
 
-  if (!profileRes.Item || !configRes.Item) {
+  if (!configRes.Item) {
     throw new ApiError(ErrorCodes.NOT_FOUND, "Tenant not found", 404);
   }
 
   const tenantConfig = configRes.Item;
-  const prefix = (profileRes.Item.widgetApiKeyPrefix as string) ?? "pk_live_";
+  const prefix = (profile.widgetApiKeyPrefix as string) ?? "pk_live_";
+  const status = profile.status as string;
 
   return ok({
-    storeName: profileRes.Item.storeName,
+    storeName: profile.storeName,
     greeting: tenantConfig.prompts?.greeting ?? "Hi! How can I help you shop today?",
     primaryColor: tenantConfig.widgetConfig?.primaryColor ?? "#4F46E5",
     position: tenantConfig.widgetConfig?.position ?? "bottom-right",
     suggestedQuestions: tenantConfig.widgetConfig?.suggestedQuestions ?? [],
-    enabled: profileRes.Item.status === "active" || profileRes.Item.status === "trial",
+    enabled: tenantIsOperational(status),
     embedCode: buildWidgetEmbedPlaceholder(prefix, config),
   });
 }
@@ -100,7 +95,7 @@ export function buildProductCards(toolResults?: Array<{ tool: string; success: b
       }>
     | undefined;
   if (!products?.length) return [];
-  return products.slice(0, 3).map((p) => ({
+  return products.slice(0, 5).map((p) => ({
     type: "product" as const,
     sku: p.sku,
     name: p.name,
@@ -137,6 +132,7 @@ export async function widgetChat(tenantId: string, body: WidgetChatBody, config:
   }
 
   await assertWidgetChatRateLimit(tenantId, body.sessionId.trim(), config);
+  await assertTenantOperational(tenantId, config);
 
   const auth = {
     tenantId,

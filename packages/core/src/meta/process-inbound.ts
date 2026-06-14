@@ -2,6 +2,7 @@ import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoreConfig } from "../config";
 import { runChatOrchestrator } from "../chat/orchestrator";
 import { isPlanLimitError, QUOTA_EXCEEDED_USER_MESSAGE } from "../chat/usage";
+import { isTenantInactiveError, TENANT_SUSPENDED_MESSAGE } from "../tenant/status";
 import {
   ensureFreshMetaToken,
   resolveTenantByPhoneNumberId,
@@ -90,12 +91,12 @@ export async function processWhatsAppInbound(
 
     console.log("[whatsapp] replied to", inbound.from, "tenant", tenantId);
   } catch (err) {
-    if (isPlanLimitError(err)) {
+    if (isPlanLimitError(err) || isTenantInactiveError(err)) {
       await sendWhatsAppReply(
         tenantId,
         inbound.phoneNumberId,
         inbound.from,
-        QUOTA_EXCEEDED_USER_MESSAGE,
+        isTenantInactiveError(err) ? TENANT_SUSPENDED_MESSAGE : QUOTA_EXCEEDED_USER_MESSAGE,
         config,
         { bypassMessagingWindow: true }
       ).catch((sendErr) => console.warn("[whatsapp] quota notice failed", sendErr));

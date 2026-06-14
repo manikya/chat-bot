@@ -41,6 +41,7 @@ export {
   updatePageVoiceSettings,
   uploadPageVoiceHistory,
   syncPageVoice,
+  exportPageVoiceHistory,
 } from "./page-voice/service";
 export { createVectorStore } from "./ingest/vectors";
 export { createEmbeddingProvider } from "./ingest/embedding";
@@ -54,9 +55,19 @@ export {
   getTenantUsage,
   reserveMessageQuota,
   assertChannelEnabled,
+  assertVectorQuota,
   QUOTA_EXCEEDED_USER_MESSAGE,
   isPlanLimitError,
 } from "./chat/usage";
+export { runBillingLifecycle, type BillingLifecycleResult } from "./billing/lifecycle";
+export {
+  assertTenantOperational,
+  resolveTenantProfile,
+  TENANT_SUSPENDED_MESSAGE,
+  isTenantInactiveError,
+  tenantIsOperational,
+} from "./tenant/status";
+export { assertWidgetChatRateLimit, assertWidgetConfigRateLimit } from "./widget/rate-limit";
 export { BILLING_PLANS, type BillingPlan } from "./billing/plans";
 export {
   listBillingPlans,

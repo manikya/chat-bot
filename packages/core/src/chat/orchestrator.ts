@@ -19,6 +19,7 @@ import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
+import { assertTenantOperational } from "../tenant/status";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -29,28 +30,23 @@ export interface OrchestratorInput {
 }
 
 async function loadTenantContext(auth: AuthContext, config: CoreConfig) {
+  await assertTenantOperational(auth.tenantId, config);
   const db = getDocClient(config);
-  const [profileRes, configRes] = await Promise.all([
-    db.send(
-      new GetCommand({
-        TableName: config.tableName,
-        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.profile() },
-      })
-    ),
-    db.send(
-      new GetCommand({
-        TableName: config.tableName,
-        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.config() },
-      })
-    ),
-  ]);
-  if (!profileRes.Item) throw new ApiError(ErrorCodes.NOT_FOUND, "Tenant not found", 404);
+  const configRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.config() },
+    })
+  );
   if (!configRes.Item) throw new ApiError(ErrorCodes.NOT_FOUND, "Config not found", 404);
 
-  const status = profileRes.Item.status as string;
-  if (status !== "active" && status !== "trial") {
-    throw new ApiError(ErrorCodes.FORBIDDEN, "Tenant account is not active", 403);
-  }
+  const profileRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.profile() },
+    })
+  );
+  if (!profileRes.Item) throw new ApiError(ErrorCodes.NOT_FOUND, "Tenant not found", 404);
 
   const { PK: _pk, SK: _sk, ...tenantConfig } = configRes.Item;
   return {

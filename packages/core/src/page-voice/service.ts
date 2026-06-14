@@ -18,13 +18,25 @@ import { Keys } from "../db/keys";
 import type { MessengerInboundMessage } from "../channels/types";
 import { createQueuedJob, hasActiveJobForSource } from "../ingest/jobs";
 import { runConversationIngestJob } from "../ingest/orchestrator";
-import { getTenantLimits } from "../tenant/service";
+import { getTenantLimits, getTenantConfig } from "../tenant/service";
 import { parseConversationFile, type ParsedConversationPair } from "./parser";
 import { scrubPii } from "./pii";
 import type { ConversationPair, PageVoiceMeta, PendingCustomerMessage } from "./types";
 
 const PREVIEW_LIMIT = 5;
 const MAX_PAIRS = 5000;
+const EXPORT_LIMIT = 5000;
+
+async function assertConversationIngestEnabled(auth: AuthContext, config: CoreConfig) {
+  const tenantConfig = await getTenantConfig(auth, config);
+  if (!tenantConfig.data?.featureFlags?.conversationIngest) {
+    throw new ApiError(
+      ErrorCodes.FORBIDDEN,
+      "Conversation ingest requires a Pro plan or higher. Upgrade in Billing.",
+      403
+    );
+  }
+}
 
 function defaultMeta(): PageVoiceMeta {
   const now = new Date().toISOString();
@@ -381,10 +393,55 @@ export async function listPreviewPairs(
   }));
 }
 
+export async function listAllConversationPairs(
+  tenantId: string,
+  config: CoreConfig,
+  limit = EXPORT_LIMIT
+): Promise<ConversationPair[]> {
+  const db = getDocClient(config);
+  const res = await db.send(
+    new QueryCommand({
+      TableName: config.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": Keys.tenantPk(tenantId),
+        ":sk": "PAGE_VOICE#PAIR#",
+      },
+      ScanIndexForward: false,
+      Limit: limit,
+    })
+  );
+  return (res.Items ?? []).map((item) => ({
+    pairId: item.pairId as string,
+    customerText: item.customerText as string,
+    ownerText: item.ownerText as string,
+    platform: item.platform as ConversationPair["platform"],
+    capturedAt: item.capturedAt as string,
+  }));
+}
+
+export async function exportPageVoiceHistory(auth: AuthContext, config: CoreConfig) {
+  await assertConversationIngestEnabled(auth, config);
+  const pairs = await listAllConversationPairs(auth.tenantId, config);
+  return ok({
+    format: "commercechat-page-voice-v1",
+    pairCount: pairs.length,
+    pairs: pairs.map((p) => ({
+      customerText: p.customerText,
+      ownerText: p.ownerText,
+      platform: p.platform,
+      capturedAt: p.capturedAt,
+    })),
+  });
+}
+
 export async function getPageVoiceStatus(auth: AuthContext, config: CoreConfig) {
+  const tenantConfig = await getTenantConfig(auth, config);
+  const conversationIngestEnabled = Boolean(tenantConfig.data?.featureFlags?.conversationIngest);
   const meta = await getPageVoiceMeta(auth.tenantId, config);
   const preview = await listPreviewPairs(auth.tenantId, config);
   return ok({
+    conversationIngestEnabled,
     sourceId: meta.sourceId ?? null,
     learningPaused: meta.learningPaused,
     pairCount: meta.pairCount,
@@ -405,6 +462,7 @@ export async function updatePageVoiceSettings(
   body: { learningPaused?: boolean },
   config: CoreConfig
 ) {
+  await assertConversationIngestEnabled(auth, config);
   const patch: Partial<PageVoiceMeta> = {};
   if (typeof body.learningPaused === "boolean") {
     patch.learningPaused = body.learningPaused;
@@ -422,6 +480,7 @@ export async function uploadPageVoiceHistory(
   fileContent: string,
   config: CoreConfig
 ) {
+  await assertConversationIngestEnabled(auth, config);
   const pairs = parseConversationFile(filename, fileContent);
   const result = await appendConversationPairs(auth.tenantId, pairs, "upload", config);
   const sourceId = await ensureConversationSource(auth.tenantId, config);
@@ -435,6 +494,7 @@ export async function uploadPageVoiceHistory(
 }
 
 export async function syncPageVoice(auth: AuthContext, config: CoreConfig) {
+  await assertConversationIngestEnabled(auth, config);
   const meta = await getPageVoiceMeta(auth.tenantId, config);
   if (!meta.pairCount) {
     throw new ApiError(ErrorCodes.VALIDATION_ERROR, "No conversation pairs to sync", 400);

@@ -140,3 +140,19 @@ export function planTierIndex(plan: TenantPlan): number {
 export function isPlanUpgrade(from: TenantPlan, to: TenantPlan): boolean {
   return planTierIndex(to) > planTierIndex(from);
 }
+
+export const WIDGET_CHAT_RATE_LIMITS: Record<TenantPlan, number> = {
+  trial: 30,
+  starter: 20,
+  pro: 60,
+  business: 120,
+  enterprise: 200,
+};
+
+export const WIDGET_CONFIG_RATE_LIMITS: Record<TenantPlan, number> = {
+  trial: 120,
+  starter: 60,
+  pro: 180,
+  business: 300,
+  enterprise: 600,
+};

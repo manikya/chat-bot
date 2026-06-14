@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Download, MessageSquare, Pause, Play, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
   WOOCOMMERCE_PLUGIN_DOWNLOAD_URL,
@@ -28,6 +29,7 @@ function formatProductPrice(price: number, currency = "USD") {
 }
 
 type PageVoiceStatus = {
+  conversationIngestEnabled?: boolean;
   sourceId: string | null;
   learningPaused: boolean;
   pairCount: number;
@@ -208,15 +210,27 @@ export default function KnowledgePage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
-            Page voice
+            Conversation ingest (Page voice)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Learns your Messenger reply style from owner echoes (paired with the customer message before each
-            reply). Upload a JSON or CSV export for older history — no Meta API backfill.
+            reply). Upload a JSON or CSV export for older history — no Meta API backfill. Available on Pro and
+            above.
           </p>
 
+          {pageVoice && pageVoice.conversationIngestEnabled === false && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Upgrade to Pro to enable conversation ingest and page voice learning.{" "}
+              <Link href="/billing" className="font-medium underline">
+                View plans
+              </Link>
+            </div>
+          )}
+
+          {pageVoice?.conversationIngestEnabled !== false && (
+            <>
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <Badge variant={pageVoice?.learningPaused ? "secondary" : "success"}>
@@ -334,7 +348,32 @@ export default function KnowledgePage() {
               )}
               Re-sync
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!(pageVoice?.pairCount ?? 0)}
+              onClick={async () => {
+                try {
+                  const res = await api.knowledge.exportPageVoice();
+                  const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "page-voice-export.json";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success(`Exported ${res.data.pairCount} pairs`);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Export failed");
+                }
+              }}
+            >
+              <Download className="h-3 w-3" />
+              Export JSON
+            </Button>
           </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -401,7 +440,7 @@ export default function KnowledgePage() {
       )}
 
       <div className="grid gap-4">
-        {sources.filter((s) => s.type !== "conversation").map((s) => (
+        {sources.map((s) => (
           <Card key={s.sourceId}>
             <CardContent className="flex items-center justify-between p-6">
               <div>

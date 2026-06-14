@@ -15,6 +15,7 @@ import {
   type KnowledgeSource,
 } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
+import { assertVectorQuota } from "../chat/usage";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import {
@@ -31,6 +32,7 @@ import { scheduleCatalogIngestJob, scheduleConversationIngestJob, scheduleFaqIng
 import { saveCatalogFile } from "../ingest/storage/catalog-file";
 import { createVectorStore } from "../ingest/vectors";
 import { getTenantLimits } from "../tenant/service";
+import { assertTenantOperational } from "../tenant/status";
 
 function toSource(item: Record<string, unknown>): KnowledgeSource {
   return {
@@ -103,6 +105,8 @@ export async function createKnowledgeSource(
   if (body.type === "website" && !body.config?.url) {
     throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Website URL is required", 400);
   }
+
+  await assertTenantOperational(auth.tenantId, config);
 
   const limits = await getTenantLimits(auth, config);
   const existing = await listSourceItems(auth, config);
@@ -196,6 +200,9 @@ export async function syncKnowledgeSource(
   sourceId: string,
   config: CoreConfig
 ) {
+  await assertTenantOperational(auth.tenantId, config);
+  await assertVectorQuota(auth.tenantId, config);
+
   const source = await getKnowledgeSource(auth, sourceId, config);
 
   if (await hasActiveJobForSource(auth.tenantId, sourceId, config)) {

@@ -13,6 +13,7 @@ import { getMonthlyUsage, incrementIngestJobs } from "../chat/usage";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { createVectorStore } from "../ingest/vectors";
+import { resolveTenantProfile } from "../tenant/status";
 import { getTenantLimits } from "../tenant/service";
 import { BILLING_PLANS, getBillingPlan, isPlanUpgrade } from "./plans";
 
@@ -163,30 +164,8 @@ export async function provisionTrialTenant(tenantId: string, config: CoreConfig)
   );
 }
 
-async function expireTrialIfNeeded(tenantId: string, profile: Record<string, unknown>, config: CoreConfig) {
-  if (profile.plan !== "trial" || profile.status !== "trial") return profile;
-
-  const periodEnd = profile.billingPeriodEnd as string | undefined;
-  if (!periodEnd || new Date(periodEnd).getTime() > Date.now()) return profile;
-
-  const now = new Date().toISOString();
-  const db = getDocClient(config);
-  await db.send(
-    new UpdateCommand({
-      TableName: config.tableName,
-      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.profile() },
-      UpdateExpression: "SET #status = :s, updatedAt = :u",
-      ExpressionAttributeNames: { "#status": "status" },
-      ExpressionAttributeValues: { ":s": "suspended", ":u": now },
-    })
-  );
-
-  return { ...profile, status: "suspended" };
-}
-
 export async function getBillingSubscription(auth: AuthContext, config: CoreConfig) {
-  let profile = await getProfile(auth.tenantId, config);
-  profile = await expireTrialIfNeeded(auth.tenantId, profile, config);
+  const profile = await resolveTenantProfile(auth.tenantId, config);
 
   const periodEnd = (profile.billingPeriodEnd as string | undefined) ?? null;
   const plan = profile.plan as TenantPlan;

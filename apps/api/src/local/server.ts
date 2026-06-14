@@ -48,6 +48,7 @@ import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler,
 import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
 import { handler as webhookMetaHandler } from "../handlers/webhook-meta";
 import { handler as cronMetaTokenRefreshHandler } from "../handlers/cron-meta-token-refresh";
+import { handler as cronBillingLifecycleHandler } from "../handlers/cron-billing-lifecycle";
 import { loadConfig } from "@commercechat/core";
 import { handler as webhookPaymentHandler } from "../handlers/webhook-payment";
 import {
@@ -123,6 +124,7 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/knowledge/sources", handler: knowledgeSourcesHandler },
   { method: "GET", path: "/api/v1/knowledge/faq", handler: knowledgeFaqHandler },
   { method: "POST", path: "/api/v1/knowledge/faq", handler: knowledgeFaqHandler },
+  { method: "GET", path: "/api/v1/knowledge/page-voice/export", handler: knowledgePageVoiceHandler },
   { method: "GET", path: "/api/v1/knowledge/page-voice", handler: knowledgePageVoiceHandler },
   { method: "PATCH", path: "/api/v1/knowledge/page-voice", handler: knowledgePageVoiceHandler },
   { method: "POST", path: "/api/v1/knowledge/page-voice/sync", handler: knowledgePageVoiceHandler },
@@ -146,6 +148,7 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/channels/meta/dev-status", handler: channelsDevStatusHandler },
   { method: "GET", path: "/api/v1/channels/meta/health", handler: channelsHealthHandler },
   { method: "POST", path: "/internal/cron/meta-token-refresh", handler: cronMetaTokenRefreshHandler },
+  { method: "POST", path: "/internal/cron/billing-lifecycle", handler: cronBillingLifecycleHandler },
 ];
 
 const WIDGET_JS_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../widget/public/v1.js");

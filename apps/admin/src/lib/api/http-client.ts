@@ -366,6 +366,7 @@ export function createHttpApi() {
         }),
       getPageVoice: () =>
         request<{
+          conversationIngestEnabled?: boolean;
           sourceId: string | null;
           learningPaused: boolean;
           pairCount: number;
@@ -375,6 +376,17 @@ export function createHttpApi() {
           platform: string;
           preview: Array<{ customerText: string; ownerText: string; capturedAt: string }>;
         }>("/api/v1/knowledge/page-voice"),
+      exportPageVoice: () =>
+        request<{
+          format: string;
+          pairCount: number;
+          pairs: Array<{
+            customerText: string;
+            ownerText: string;
+            platform: string;
+            capturedAt: string;
+          }>;
+        }>("/api/v1/knowledge/page-voice/export"),
       updatePageVoice: (body: { learningPaused?: boolean }) =>
         request("/api/v1/knowledge/page-voice", {
           method: "PATCH",
