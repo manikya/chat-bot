@@ -36,6 +36,7 @@ export { createEmbeddingProvider } from "./ingest/embedding";
 export { retrieveKnowledge } from "./ingest/retrieve";
 export { processChat, type ChatRequestBody } from "./chat/service";
 export { runChatOrchestrator } from "./chat/orchestrator";
+export { marketFromTimezone, LK_SUGGESTED_QUESTIONS } from "./chat/locale";
 export {
   getTenantUsage,
   reserveMessageQuota,

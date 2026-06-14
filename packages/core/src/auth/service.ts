@@ -102,7 +102,7 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
             Item: {
               PK: Keys.tenantPk(tenantId),
               SK: Keys.config(),
-              ...defaultTenantConfig(input.storeName),
+              ...defaultTenantConfig(input.storeName, { timezone: input.timezone }),
             },
           },
         },

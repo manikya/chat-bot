@@ -54,6 +54,7 @@ async function loadTenantContext(auth: AuthContext, config: CoreConfig) {
   const { PK: _pk, SK: _sk, ...tenantConfig } = configRes.Item;
   return {
     storeName: profileRes.Item.storeName as string,
+    timezone: profileRes.Item.timezone as string | undefined,
     config: tenantConfig as TenantConfig,
   };
 }
@@ -121,7 +122,7 @@ export async function runChatOrchestrator(
   await assertChannelEnabled(auth.tenantId, input.channel, config);
   await reserveMessageQuota(auth.tenantId, config);
 
-  const { storeName, config: tenantConfig } = await loadTenantContext(auth, config);
+  const { storeName, timezone, config: tenantConfig } = await loadTenantContext(auth, config);
   const conversation = await resolveConversation(
     auth.tenantId,
     input.channel,
@@ -137,7 +138,10 @@ export async function runChatOrchestrator(
 
   const ragChunks = intent === "greeting" ? [] : await retrieveForIntent(auth, text, intent, config);
   const cart = await loadCart(auth.tenantId, conversation.conversationId, config);
-  const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, input.channel);
+  const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
+    channel: input.channel,
+    timezone,
+  });
 
   const llm = createLLMProvider(config);
   const tools = toolsForIntent(intent);

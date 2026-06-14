@@ -52,6 +52,10 @@ export default function BotConfigPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Prompts</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Customers may write in English, Sinhala, Tamil, or Singlish. The system prompt should tell the bot to
+              reply in their language. New stores with timezone Asia/Colombo get Sri Lanka defaults at signup.
+            </p>
             <div className="space-y-2">
               <Label>System prompt</Label>
               <Textarea

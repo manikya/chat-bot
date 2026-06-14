@@ -4,22 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
+import { onboardingTestGreeting, suggestedQuestionsForTimezone } from "@/lib/chat-locale";
 import { ChatSimulator } from "@/components/chat/chat-simulator";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-const SUGGESTED = [
-  "What are your best sellers?",
-  "Do you ship internationally?",
-  "Show me running shoes under $100",
-  "What is your return policy?",
-  "Track my order",
-];
-
 export default function OnboardingTestPage() {
   const router = useRouter();
-  const { refreshMe } = useAuth();
+  const { tenant, refreshMe } = useAuth();
+  const suggested = suggestedQuestionsForTimezone(tenant?.timezone);
   const [testCount, setTestCount] = useState(0);
   const [canAdvance, setCanAdvance] = useState(false);
   const [debug, setDebug] = useState<{ intent?: string; tools?: string } | null>(null);
@@ -38,13 +32,13 @@ export default function OnboardingTestPage() {
         <CardHeader>
           <CardTitle>Test your bot</CardTitle>
           <CardDescription>
-            Send at least one message to verify knowledge and product search. Try shipping, products, and orders.
+            Send at least one message in English, Sinhala, Tamil, or Singlish to verify the bot.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <ChatSimulator
-            greeting="Hi! I'm your store assistant. Ask about products, shipping, or orders."
-            suggestedQuestions={SUGGESTED}
+            greeting={onboardingTestGreeting(tenant?.storeName, tenant?.timezone)}
+            suggestedQuestions={suggested}
             onSend={async (msg) => {
               const res = await api.onboarding.testChat(msg);
               setTestCount(res.data.testMessageCount);

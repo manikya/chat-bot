@@ -335,9 +335,8 @@ export default function OnboardingKnowledgePage() {
                 {mode === "no-website" ? "Your FAQs" : "FAQs (optional)"}
               </CardTitle>
               <CardDescription>
-                {mode === "no-website"
-                  ? "Add questions and answers — your bot will use these when customers ask."
-                  : "Add extra Q&A pairs alongside your store data."}
+                Add questions and answers in English, Sinhala, and/or Tamil — your bot will use these when
+                customers ask in any of those languages.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
