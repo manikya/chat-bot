@@ -59,6 +59,10 @@ const ROUTES = [
   ["GET", "/api/v1/knowledge/jobs/{jobId}", "knowledge-jobs"],
   ["GET", "/api/v1/knowledge/faq", "knowledge-faq"],
   ["POST", "/api/v1/knowledge/faq", "knowledge-faq"],
+  ["GET", "/api/v1/knowledge/page-voice", "knowledge-page-voice"],
+  ["PATCH", "/api/v1/knowledge/page-voice", "knowledge-page-voice"],
+  ["POST", "/api/v1/knowledge/page-voice/sync", "knowledge-page-voice"],
+  ["POST", "/api/v1/knowledge/page-voice/upload", "knowledge-page-voice"],
   ["POST", "/api/v1/knowledge/detect-platform", "knowledge-detect-platform"],
   ["GET", "/api/v1/commerce/products", "commerce-products"],
   ["GET", "/api/v1/commerce/wordpress/status", "commerce-wordpress", "statusHandler"],
@@ -648,6 +652,8 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
             META_SECRETS_USE_SECRETS_MANAGER: "true",
             PAYMENT_WEBHOOK_SECRET: { Ref: "PaymentWebhookSecret" },
             BILLING_SKIP_PAYMENT: { Ref: "BillingSkipPayment" },
+            SKIP_EMAIL_VERIFICATION: { Ref: "SkipEmailVerification" },
+            DATA_DIR: "/tmp/commercechat",
           },
         },
         Tags: resourceTags(env, cls.component, cls.costGroup, cls.dataClass),
@@ -717,6 +723,7 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
       SmtpFrom: { Type: "String", Default: "" },
       PaymentWebhookSecret: { Type: "String", NoEcho: true, Default: "" },
       BillingSkipPayment: { Type: "String", AllowedValues: ["true", "false"], Default: env === "prod" ? "false" : "true" },
+      SkipEmailVerification: { Type: "String", AllowedValues: ["true", "false"], Default: env === "prod" ? "false" : "true" },
     },
     Resources: resources,
     Outputs: {
@@ -896,6 +903,10 @@ async function main() {
     ? arg("payment-webhook-secret", "")
     : process.env.PAYMENT_WEBHOOK_SECRET ?? deployedEnv?.PAYMENT_WEBHOOK_SECRET ?? "";
   const billingSkipPayment = arg("billing-skip-payment", env === "prod" ? "false" : "true");
+  const skipEmailVerification = arg(
+    "skip-email-verification",
+    process.env.SKIP_EMAIL_VERIFICATION === "false" ? "false" : env === "prod" ? "false" : "true"
+  );
   const jwtSecret = hasArg("jwt-secret")
     ? arg("jwt-secret", "")
     : process.env.JWT_SECRET ?? deployedEnv?.JWT_SECRET ?? randomBytes(32).toString("hex");
@@ -947,6 +958,7 @@ async function main() {
   try {
     console.log(`Account ${accountId} | stack ${stackName} | region ${region}`);
     console.log(`AppUrl ${appUrl} | ApiPublicUrl ${apiPublicUrl || "(empty)"}`);
+    console.log(`Skip email verification: ${skipEmailVerification}`);
     if (metaOAuthRedirectUri) console.log(`Meta OAuth redirect ${metaOAuthRedirectUri}`);
     if (smtpHost && smtpUser && smtpPass) {
       console.log(`SMTP ${smtpHost}:${smtpPort} as ${smtpUser}`);
@@ -1045,6 +1057,7 @@ async function main() {
         `SmtpFrom=${smtpFrom}`,
         `PaymentWebhookSecret=${paymentWebhookSecret}`,
         `BillingSkipPayment=${billingSkipPayment}`,
+        `SkipEmailVerification=${skipEmailVerification}`,
         "--tags",
         "Project=CommerceChat",
         "Application=commercechat",

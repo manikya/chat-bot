@@ -9,6 +9,7 @@ import { sendMessengerGenericTemplate } from "../channels/meta-client";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { sendMessengerReply } from "./messenger-outbound";
+import { setPendingCustomerMessage } from "../page-voice/service";
 import {
   buildMessengerProductElements,
   formatProductCardsForChannel,
@@ -64,6 +65,8 @@ export async function processMessengerInbound(
     role: "viewer" as const,
     email: "",
   };
+
+  await setPendingCustomerMessage(tenantId, inbound.from, inbound.text, inbound.messageId, config);
 
   try {
     const result = await runChatOrchestrator(

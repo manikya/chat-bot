@@ -23,12 +23,16 @@ export function detectIntent(message: string, isFirstMessage: boolean): ChatInte
 export function ragSourceTypesForIntent(intent: ChatIntent): string[] {
   switch (intent) {
     case "faq":
-      return ["website", "faq"];
+      return ["website", "faq", "conversation"];
+    case "greeting":
+      return ["website", "conversation"];
+    case "unknown":
+      return ["website", "faq", "conversation"];
     case "product":
-      return ["catalog", "website"];
+      return ["catalog", "website", "conversation"];
     case "checkout":
       return ["catalog", "website"];
     default:
-      return ["website", "catalog"];
+      return ["website", "catalog", "conversation"];
   }
 }

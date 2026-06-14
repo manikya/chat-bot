@@ -15,6 +15,7 @@ import {
   resolveConversation,
 } from "./conversation";
 import { detectIntent, ragSourceTypesForIntent } from "./intent";
+import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
@@ -65,7 +66,12 @@ async function retrieveForIntent(
   intent: ChatIntent,
   config: CoreConfig
 ): Promise<ScoredChunk[]> {
-  const sourceTypes = ragSourceTypesForIntent(intent);
+  let sourceTypes = ragSourceTypesForIntent(intent);
+  const conversationEnabled = await tenantHasPageVoiceVectors(auth.tenantId, config);
+  if (!conversationEnabled) {
+    sourceTypes = sourceTypes.filter((t) => t !== "conversation");
+  }
+
   const all: ScoredChunk[] = [];
   for (const sourceType of sourceTypes) {
     const hits = await retrieveKnowledge(auth, query, config, { topK: 3, sourceType });
@@ -136,7 +142,7 @@ export async function runChatOrchestrator(
 
   await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, { intent });
 
-  const ragChunks = intent === "greeting" ? [] : await retrieveForIntent(auth, text, intent, config);
+  const ragChunks = await retrieveForIntent(auth, text, intent, config);
   const cart = await loadCart(auth.tenantId, conversation.conversationId, config);
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,

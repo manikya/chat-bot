@@ -12,6 +12,7 @@ export function parseMessengerWebhookPayload(payload: unknown): MessengerInbound
           mid?: string;
           text?: string;
           is_echo?: boolean;
+          app_id?: number | string;
         };
         postback?: {
           mid?: string;
@@ -31,7 +32,27 @@ export function parseMessengerWebhookPayload(payload: unknown): MessengerInbound
     if (!pageId) continue;
 
     for (const event of entry.messaging ?? []) {
-      if (event.message?.is_echo) continue;
+      if (event.message?.is_echo) {
+        const recipientId = event.recipient?.id;
+        const text = event.message?.text;
+        const messageId = event.message?.mid;
+        if (!recipientId || !text || !messageId) continue;
+
+        messages.push({
+          messageId,
+          pageId,
+          from: event.sender?.id ?? pageId,
+          recipientId,
+          text,
+          isEcho: true,
+          appId: event.message?.app_id != null ? String(event.message.app_id) : undefined,
+          timestamp: event.timestamp
+            ? new Date(event.timestamp).toISOString()
+            : new Date().toISOString(),
+        });
+        continue;
+      }
+
       const from = event.sender?.id;
       if (!from) continue;
 

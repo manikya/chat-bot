@@ -8,6 +8,8 @@ export interface ChunkMetadata {
   crawled_at?: string;
   sku?: string;
   question?: string;
+  platform?: string;
+  date?: string;
 }
 
 export interface VectorChunk {

@@ -7,6 +7,7 @@ import {
   parseMessengerWebhookPayload,
   processWhatsAppInbound,
   processMessengerInbound,
+  processMessengerEcho,
 } from "@commercechat/core";
 import { queryParam } from "../lib/apigw";
 
@@ -65,9 +66,15 @@ export async function handler(
 
     const messengerMessages = parseMessengerWebhookPayload(payload);
     for (const msg of messengerMessages) {
-      void processMessengerInbound(msg, config).catch((err) => {
-        console.error("[webhook-meta] messenger process error:", err instanceof Error ? err.message : err);
-      });
+      if (msg.isEcho) {
+        void processMessengerEcho(msg, config).catch((err) => {
+          console.error("[webhook-meta] messenger echo error:", err instanceof Error ? err.message : err);
+        });
+      } else {
+        void processMessengerInbound(msg, config).catch((err) => {
+          console.error("[webhook-meta] messenger process error:", err instanceof Error ? err.message : err);
+        });
+      }
     }
 
     if (waMessages.length === 0 && messengerMessages.length === 0) {

@@ -27,7 +27,7 @@ import { deleteProductsForSource } from "../catalog/products";
 import { parseCatalogCsv } from "../ingest/parsers/catalog-csv";
 import { type FaqItem } from "../ingest/chunker/faq";
 import { embedFaqItems } from "../ingest/faq-ingest";
-import { scheduleCatalogIngestJob, scheduleFaqIngestJob, scheduleWebsiteIngestJob } from "../ingest/orchestrator";
+import { scheduleCatalogIngestJob, scheduleConversationIngestJob, scheduleFaqIngestJob, scheduleWebsiteIngestJob } from "../ingest/orchestrator";
 import { saveCatalogFile } from "../ingest/storage/catalog-file";
 import { createVectorStore } from "../ingest/vectors";
 import { getTenantLimits } from "../tenant/service";
@@ -234,6 +234,8 @@ export async function syncKnowledgeSource(
     scheduleCatalogIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "faq") {
     scheduleFaqIngestJob(auth.tenantId, jobId, config);
+  } else if (source.type === "conversation") {
+    scheduleConversationIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "woocommerce") {
     const { scheduleWordPressCatalogIngestJob } = await import("../ingest/orchestrator");
     scheduleWordPressCatalogIngestJob(auth.tenantId, jobId, config);

@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
+import type { LoginResult } from "@commercechat/mock-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,7 +35,7 @@ function AcceptInviteForm() {
         password,
         ...(name.trim() ? { name: name.trim() } : {}),
       });
-      setSession(res.data);
+      setSession(res.data as LoginResult);
       toast.success(`Welcome to ${res.data.tenant.storeName}!`);
       router.push("/dashboard");
     } catch (err) {

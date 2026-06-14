@@ -282,6 +282,22 @@ export function createHttpApi() {
           method: "POST",
           body: JSON.stringify({ url }),
         }),
+      getPageVoice: () => request("/api/v1/knowledge/page-voice"),
+      updatePageVoice: (body: { learningPaused?: boolean }) =>
+        request("/api/v1/knowledge/page-voice", {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        }),
+      syncPageVoice: () =>
+        request("/api/v1/knowledge/page-voice/sync", {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      uploadPageVoice: (file: File) => {
+        const form = new FormData();
+        form.append("file", file);
+        return request("/api/v1/knowledge/page-voice/upload", { method: "POST", body: form });
+      },
     },
     commerce: {
       listProducts: (params?: { q?: string; limit?: number }) => {

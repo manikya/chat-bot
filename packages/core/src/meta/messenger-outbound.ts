@@ -10,6 +10,8 @@ import {
 
 import type { MetaOutboundOptions } from "./whatsapp-outbound";
 
+import { markBotMessengerReply } from "../page-voice/service";
+
 export async function sendMessengerReply(
   tenantId: string,
   recipientId: string,
@@ -33,5 +35,8 @@ export async function sendMessengerReply(
   const creds = await ensureFreshMessengerToken(tenantId, config);
   if (!creds) throw new Error("Missing Messenger credentials for tenant");
 
-  return sendMessengerText(config, creds.pageAccessToken, recipientId, stripMarkdown(text));
+  const plain = stripMarkdown(text);
+  const result = await sendMessengerText(config, creds.pageAccessToken, recipientId, plain);
+  await markBotMessengerReply(tenantId, recipientId, plain, config);
+  return result;
 }

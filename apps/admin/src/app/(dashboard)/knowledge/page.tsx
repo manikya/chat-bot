@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, MessageSquare, Pause, Play, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
   WOOCOMMERCE_PLUGIN_DOWNLOAD_URL,
   WOOCOMMERCE_PLUGIN_INSTALL_STEPS,
@@ -15,6 +15,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+
+type PageVoiceStatus = {
+  sourceId: string | null;
+  learningPaused: boolean;
+  pairCount: number;
+  vectorCount: number;
+  lastCaptureAt: string | null;
+  lastSyncAt: string | null;
+  platform: string;
+  preview: Array<{ customerText: string; ownerText: string; capturedAt: string }>;
+};
 
 export default function KnowledgePage() {
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
@@ -33,11 +45,16 @@ export default function KnowledgePage() {
   } | null>(null);
   const [wpConnecting, setWpConnecting] = useState(false);
   const [wpSyncing, setWpSyncing] = useState(false);
+  const [pageVoice, setPageVoice] = useState<PageVoiceStatus | null>(null);
+  const [pageVoiceSyncing, setPageVoiceSyncing] = useState(false);
+  const [pageVoiceUploading, setPageVoiceUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     api.knowledge.listSources().then((r) => setSources(r.data.items));
     api.knowledge.listJobs().then((r) => setJobs(r.data.items));
     api.commerce.wordpressStatus().then((r) => setWpStatus(r.data)).catch(() => setWpStatus(null));
+    api.knowledge.getPageVoice().then((r) => setPageVoice(r.data)).catch(() => setPageVoice(null));
   };
 
   useEffect(() => {
@@ -177,6 +194,140 @@ export default function KnowledgePage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Page voice
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Learns your Messenger reply style from owner echoes (paired with the customer message before each
+            reply). Upload a JSON or CSV export for older history — no Meta API backfill.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Badge variant={pageVoice?.learningPaused ? "secondary" : "success"}>
+                {pageVoice?.learningPaused ? "Paused" : "Learning"}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {pageVoice?.pairCount ?? 0} samples
+                {(pageVoice?.vectorCount ?? 0) > 0 && ` · ${pageVoice?.vectorCount} indexed`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="page-voice-pause"
+                checked={!pageVoice?.learningPaused}
+                onCheckedChange={async (on) => {
+                  try {
+                    await api.knowledge.updatePageVoice({ learningPaused: !on });
+                    toast.success(on ? "Learning resumed" : "Learning paused");
+                    load();
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Update failed");
+                  }
+                }}
+              />
+              <Label htmlFor="page-voice-pause" className="text-sm font-normal">
+                {pageVoice?.learningPaused ? (
+                  <span className="inline-flex items-center gap-1"><Pause className="h-3 w-3" /> Paused</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1"><Play className="h-3 w-3" /> Active</span>
+                )}
+              </Label>
+            </div>
+          </div>
+
+          {pageVoice?.lastSyncAt && (
+            <p className="text-xs text-muted-foreground">
+              Last indexed {new Date(pageVoice.lastSyncAt).toLocaleString()}
+              {pageVoice.lastCaptureAt && ` · Last capture ${new Date(pageVoice.lastCaptureAt).toLocaleString()}`}
+            </p>
+          )}
+
+          {pageVoice?.preview && pageVoice.preview.length > 0 && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-xs font-medium text-muted-foreground">Preview (PII scrubbed)</p>
+              {pageVoice.preview.map((p, i) => (
+                <div key={i} className="text-sm space-y-1 border-b pb-2 last:border-0 last:pb-0">
+                  <p><span className="text-muted-foreground">Customer:</span> {p.customerText}</p>
+                  <p><span className="text-muted-foreground">Owner:</span> {p.ownerText}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept=".json,.csv"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setPageVoiceUploading(true);
+                try {
+                  const res = await api.knowledge.uploadPageVoice(file);
+                  toast.success(`Imported ${res.data.added} conversation pairs`);
+                  if (res.data.jobId) {
+                    await pollIngestJob(res.data.jobId, () => load());
+                  }
+                  load();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Upload failed");
+                } finally {
+                  setPageVoiceUploading(false);
+                  if (uploadInputRef.current) uploadInputRef.current.value = "";
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pageVoiceUploading}
+              onClick={() => uploadInputRef.current?.click()}
+            >
+              {pageVoiceUploading ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                <Upload className="h-3 w-3" />
+              )}
+              Upload history
+            </Button>
+            <Button
+              size="sm"
+              disabled={pageVoiceSyncing || !(pageVoice?.pairCount ?? 0)}
+              onClick={async () => {
+                setPageVoiceSyncing(true);
+                try {
+                  const sync = await api.knowledge.syncPageVoice();
+                  toast.success("Re-sync started");
+                  await pollIngestJob(sync.data.jobId, () => load());
+                  toast.success("Page voice indexed");
+                  load();
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Sync failed");
+                  load();
+                } finally {
+                  setPageVoiceSyncing(false);
+                }
+              }}
+            >
+              {pageVoiceSyncing ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Re-sync
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {showAdd && (
         <Card>
           <CardHeader><CardTitle className="text-base">Add website</CardTitle></CardHeader>
@@ -238,7 +389,7 @@ export default function KnowledgePage() {
       )}
 
       <div className="grid gap-4">
-        {sources.map((s) => (
+        {sources.filter((s) => s.type !== "conversation").map((s) => (
           <Card key={s.sourceId}>
             <CardContent className="flex items-center justify-between p-6">
               <div>

@@ -15,6 +15,7 @@ import { getJobItem, updateJob } from "./jobs";
 import { extractPageTitle, extractSections } from "./parsers/html";
 import type { ChunkMetadata, IngestJobStats } from "./types";
 import { runFaqIngestForSource } from "./faq-ingest";
+import { runConversationIngestForSource } from "./conversation-ingest";
 import {
   fetchWordPressCatalogProducts,
   touchWordPressSyncTimestamp,
@@ -572,6 +573,63 @@ export function scheduleFaqIngestJob(
 ): void {
   scheduleIngestJob("faq", tenantId, jobId, config, () =>
     runFaqIngestJob(tenantId, jobId, config)
+  );
+}
+
+export async function runConversationIngestJob(
+  tenantId: string,
+  jobId: string,
+  config: CoreConfig
+): Promise<void> {
+  const started = Date.now();
+  const stats: IngestJobStats = { chunksCreated: 0, tokensEmbedded: 0, errors: [] };
+  let sourceId = "";
+
+  try {
+    const jobItem = await getJobItem(tenantId, jobId, config);
+    sourceId = jobItem.sourceId as string;
+    const result = await runConversationIngestForSource(tenantId, sourceId, config);
+    stats.chunksCreated = result.chunkCount;
+    stats.durationSec = Math.round((Date.now() - started) / 1000);
+
+    await updateJob(
+      tenantId,
+      jobId,
+      {
+        status: "completed",
+        stats,
+        progressPct: 100,
+        completedAt: new Date().toISOString(),
+        error: null,
+      },
+      config
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    stats.durationSec = Math.round((Date.now() - started) / 1000);
+    await updateJob(
+      tenantId,
+      jobId,
+      {
+        status: "failed",
+        stats,
+        progressPct: 100,
+        error: message,
+        completedAt: new Date().toISOString(),
+      },
+      config
+    );
+    if (sourceId) await setSourceStatus(tenantId, sourceId, "error", config);
+  }
+}
+
+export function scheduleConversationIngestJob(
+  tenantId: string,
+  jobId: string,
+  config: CoreConfig
+): void {
+  scheduleIngestJob("conversation", tenantId, jobId, config, () =>
+    runConversationIngestJob(tenantId, jobId, config)
   );
 }
 

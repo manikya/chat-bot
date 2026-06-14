@@ -31,6 +31,12 @@ export type { ConnectWordPressBody } from "./commerce/wordpress/types";
 export * from "./onboarding/service";
 export * from "./knowledge/service";
 export { detectStorePlatform, type StorePlatform, type StorePlatformDetection } from "./knowledge/platform-detect";
+export {
+  getPageVoiceStatus,
+  updatePageVoiceSettings,
+  uploadPageVoiceHistory,
+  syncPageVoice,
+} from "./page-voice/service";
 export { createVectorStore } from "./ingest/vectors";
 export { createEmbeddingProvider } from "./ingest/embedding";
 export { retrieveKnowledge } from "./ingest/retrieve";
@@ -72,6 +78,7 @@ export { parseWhatsAppWebhookPayload } from "./meta/whatsapp-inbound";
 export { parseMessengerWebhookPayload } from "./meta/messenger-inbound";
 export { processWhatsAppInbound } from "./meta/process-inbound";
 export { processMessengerInbound } from "./meta/process-messenger-inbound";
+export { processMessengerEcho } from "./meta/process-messenger-echo";
 export { sendWhatsAppReply } from "./meta/whatsapp-outbound";
 export { sendMessengerReply } from "./meta/messenger-outbound";
 export {

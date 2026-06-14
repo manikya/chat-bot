@@ -45,6 +45,11 @@ export interface MessengerInboundMessage {
   messageId: string;
   pageId: string;
   from: string;
+  /** Customer PSID when `isEcho` is true (owner reply). */
+  recipientId?: string;
   text: string;
   timestamp: string;
+  isEcho?: boolean;
+  /** Present on API-sent echoes; matches `META_APP_ID` for bot replies. */
+  appId?: string;
 }
