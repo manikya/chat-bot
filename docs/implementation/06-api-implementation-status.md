@@ -1,10 +1,11 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-12  
+**Last updated:** 2026-06-14  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)  
 **AWS dev API:** `https://fimfx57xwl.execute-api.us-east-1.amazonaws.com`  
-**AWS dev admin:** `https://d3g8dfkodwqrza.cloudfront.net`
+**AWS dev admin:** `https://d3g8dfkodwqrza.cloudfront.net`  
+**AWS dev ingest SFN:** `commercechat-dev-ingest`
 
 ---
 
@@ -31,8 +32,14 @@
 | 2026-06-12 | AWS serverless deploy: `npm run deploy:aws` → API Gateway + 39 Lambdas + DynamoDB (stack `commercechat-dev`) |
 | 2026-06-12 | Admin static deploy: `npm run deploy:admin` → S3 + CloudFront (stack `commercechat-dev-admin`) |
 | 2026-06-12 | Deploy IAM preflight, failed-stack cleanup, managed-policy attach docs |
+| 2026-06-14 | Plan limits: message quota, vector cap, suspended-tenant enforcement (widget/Meta/chat) |
+| 2026-06-14 | Billing lifecycle cron (`runBillingLifecycle`), cancel/reactivate APIs, trial/cancel emails |
+| 2026-06-14 | Widget SSE `POST /api/v1/widget/chat/stream`, typing events, plan-based rate limits |
+| 2026-06-14 | Rich product cards (carousel) in widget; conversation ingest UI (page-voice, Pro+ gate) |
+| 2026-06-14 | AWS: Step Functions ingest, EventBridge crons, `deploy:aws:full`, `ensure-deploy-iam` |
+| 2026-06-14 | E2E script `apps/api/scripts/test-billing-limits.mjs` (11 checks on dev API) |
 
-**Git (local `main`):** includes AWS dev API + admin CloudFront deploy.
+**Git (local `main`):** AWS dev API + admin + ingest Step Functions + billing cron schedules.
 
 ---
 
@@ -40,10 +47,10 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **54 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **~75 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
-| **Not started** (no handler, no mock) | 8+ routes |
-| **Phase 2** (billing, MFA, widget SSE) | 8 routes |
+| **Not started** (no handler, no mock) | 6+ routes |
+| **Phase 2** (MFA, payment gateway, widget CDN) | 5+ routes |
 
 The admin UI calls all endpoints over HTTP. The local dev server routes matching paths to Lambda handlers; everything else falls through to `@commercechat/mock-api`.
 
@@ -98,10 +105,12 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/conversations/{id}/messages` | `conversations` | Yes |
 | `GET` | `/api/v1/widget/config` | `widget` | Yes |
 | `POST` | `/api/v1/widget/chat` | `widget` | Yes (embed) |
+| `POST` | `/api/v1/widget/chat/stream` | `widget` | Yes (embed SSE) |
 | `GET` | `/api/v1/dashboard/stats` | `dashboard-stats` | Yes |
 | `GET` | `/api/v1/channels` | `channels` | Yes |
 | `POST` | `/api/v1/channels/meta/connect` | `channels-meta-connect` | Yes |
 | `POST` | `/api/v1/channels/meta/connect-messenger` | `channels-meta-connect-messenger` | Yes |
+| `POST` | `/api/v1/channels/meta/connect-instagram` | `channels-meta-connect-instagram` | Yes |
 | `POST` | `/api/v1/channels/meta/connect-dev` | `channels-meta-connect-dev` | Yes |
 | `POST` | `/api/v1/channels/meta/connect-messenger-dev` | `channels-meta-connect-messenger-dev` | Yes |
 | `GET` | `/api/v1/channels/meta/dev-status` | `channels-meta-dev-status` | Yes |
@@ -111,20 +120,29 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/billing/subscription` | `billing` | Yes |
 | `GET` | `/api/v1/billing/overview` | `billing` | Yes |
 | `POST` | `/api/v1/billing/checkout` | `billing` | Yes |
+| `POST` | `/api/v1/billing/cancel` | `billing` | Yes |
+| `POST` | `/api/v1/billing/reactivate` | `billing` | Yes |
 | `POST` | `/webhooks/payment` | `webhook-payment` | — |
 | `GET` | `/webhooks/meta` | `webhooks-meta` | — |
 | `POST` | `/webhooks/meta` | `webhooks-meta` | — |
+| `POST` | `/internal/cron/billing-lifecycle` | `cron-billing-lifecycle` | — (EventBridge daily) |
+| `POST` | `/internal/cron/meta-token-refresh` | `cron-meta-token-refresh` | — (EventBridge daily) |
+
+**Knowledge (page-voice / conversation ingest):** `GET/PATCH /api/v1/knowledge/page-voice`, upload, sync, export — Pro+ plan gate in admin UI.
 
 **Also built (not a route):**
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
 - Chat orchestrator — `packages/core/src/chat/`
 - Messenger inbound/outbound — `packages/core/src/meta/messenger-*.ts`, `process-messenger-inbound.ts`
 - Meta credentials — Secrets Manager `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_USE_SECRETS_MANAGER=true`; else `.data/meta/*.json`
-- Meta token refresh — `POST /internal/cron/meta-token-refresh` or `META_TOKEN_REFRESH_INTERVAL_MS`
-- 24h messaging window — enforced on WhatsApp/Messenger outbound sends
-- Logo storage — S3 presigned upload (`POST .../logo/presign` + `complete`) via LocalStack; local filesystem fallback when `S3_BUCKET` unset
-- Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, sync chat, `formatBotText` for `**bold**` / numbered lists / `\n`, `suggestedActions` product chips)
+- Meta token refresh — EventBridge `cron(0 3 * * ? *)` UTC + optional `POST /internal/cron/meta-token-refresh`
+- Billing lifecycle — EventBridge `cron(0 6 * * ? *)` UTC; trial expiry, cancel-at-period-end, SMTP emails; HTTP requires `x-cron-secret`
+- Plan enforcement — `reserveMessageQuota`, `assertVectorQuota`, `assertTenantOperational` (suspended tenants blocked)
+- Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, SSE stream, product carousel, plan rate limits)
 - Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)
+- 24h messaging window — enforced on WhatsApp/Messenger/Instagram outbound sends
+- Logo storage — S3 presigned upload (`POST .../logo/presign` + `complete`) via LocalStack; local filesystem fallback when `S3_BUCKET` unset
+- Ingest pipeline (AWS) — SQS + Step Functions `commercechat-{env}-ingest` when deployed with `--with-ingest-step-functions`
 
 **Code locations:**
 - Handlers: `apps/api/src/handlers/`
@@ -147,16 +165,39 @@ _None — core auth + team invite flow complete._
 
 ### Phase 2
 
-MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets, full payment gateway adapter (Sri Lankan provider).
+MFA (TOTP + email OTP), production widget CDN (CloudFront for `v1.js`), full payment gateway adapter (Sri Lankan provider — Stripe deferred), analytics dashboard, 80% quota warning emails.
 
 ---
 
 ## 5. Recommended build order
 
-1. **WhatsApp E2E** — ngrok webhooks, inbound message + reply test
-2. **Instagram DMs** — OAuth + webhook (same Meta app)
-3. **Infra** — CDK deploy, production S3/CDN, CI
-4. **Phase 2** — payment gateway adapter, MFA, widget SSE
+### Near term (highest impact)
+
+| Priority | Item | Why |
+|----------|------|-----|
+| 1 | **Payment gateway** | Checkout stub exists; wire Sri Lankan provider + `POST /webhooks/payment` for paid plans |
+| 2 | **Meta production** | Custom domain for webhooks/OAuth; submit App Review for WhatsApp live |
+| 3 | **Instagram DM E2E** | Handler + OAuth shipped; validate on AWS dev with real IG test account |
+| 4 | **Widget CDN** | Serve `v1.js` from CloudFront (`widget-cdn` cost group), not API Gateway |
+| 5 | **S3 Vectors on AWS** | Confirm ingest Step Functions write to prod vector index (not file-backed) |
+
+### Medium term
+
+| Item | Notes |
+|------|-------|
+| **CI/CD** | GitHub Actions → `deploy:aws:full` + `deploy:admin` on merge to `main` |
+| **Custom domains** | `api.*`, `app.*`, ACM + Route 53 |
+| **MFA** | TOTP + email OTP per [13-custom-auth.md](../functions/13-custom-auth.md) |
+| **Analytics** | Conversation aggregates + admin charts (Phase 2) |
+| **Quota emails** | 80% usage warning via Resend |
+| **WAF + budgets** | Pre-launch hardening per [aws-serverless-deployment.md](../../infra/aws-serverless-deployment.md) |
+
+### Already done (remove from backlog)
+
+- Widget SSE streaming, rich product cards, plan rate limits
+- Billing lifecycle cron + suspend enforcement
+- Step Functions ingest deploy automation
+- Conversation ingest admin UI (page-voice)
 
 ---
 
@@ -169,18 +210,19 @@ MFA, `POST /api/v1/widget/chat/stream` (SSE), production CDN for S3 assets, full
 | Logo upload — S3 presign (onboarding profile) | Yes | — |
 | FAQ quick-add, catalog products (knowledge page) | Yes | — |
 | Bot config + test simulator | Config + chat orchestrator | — |
-| Usage, billing, dashboard | Usage overview, billing plans/checkout | — |
+| Usage, billing, dashboard | Usage overview, billing plans/checkout/cancel/reactivate | — |
+| Knowledge (page-voice) | Pro+ conversation ingest, export JSON | — |
 | Conversations | List, thread, messages | — |
 | Widget / API keys | Config, regen-key, embed snippet | — |
-| Channels | WhatsApp + Messenger connect/disconnect/health, Meta webhooks | — |
+| Channels | WhatsApp + Messenger + Instagram connect/disconnect/health, Meta webhooks | — |
 
 ---
 
 ## 7. AWS dev deploy
 
 ```bash
-# Attach infra/aws-deploy-iam-policy.json to deploy IAM user (customer-managed policy)
-npm run deploy:aws -- --credentials-csv="..." --env=dev --region=us-east-1 \
+# Recommended: IAM + ingest pipeline + Step Functions + EventBridge crons
+npm run deploy:aws:full -- --credentials-csv="..." --env=dev --region=us-east-1 \
   --openai-api-key="$OPENAI_API_KEY" --meta-app-id="$META_APP_ID" \
   --meta-app-secret="$META_APP_SECRET" --meta-verify-token="$META_VERIFY_TOKEN" \
   --app-url=https://d3g8dfkodwqrza.cloudfront.net
@@ -189,8 +231,24 @@ npm run deploy:admin -- --credentials-csv="..." --env=dev \
   --api-url=https://fimfx57xwl.execute-api.us-east-1.amazonaws.com
 ```
 
+IAM only: `npm run ensure:deploy-iam -- --credentials-csv="..."`  
 Preflight only: `npm run deploy:aws -- --preflight-only --credentials-csv="..."`  
-Retry after failed stack: add `--delete-failed-stack`.
+Retry after failed stack: add `--delete-failed-stack`.  
+Skip crons: `--no-cron-schedules`.
+
+**Verify billing cron (Lambda invoke, not HTTP):**
+
+```bash
+aws lambda invoke --function-name commercechat-dev-cron-billing-lifecycle \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"aws.events","detail-type":"Scheduled Event"}' /tmp/out.json && cat /tmp/out.json
+```
+
+**E2E on dev:**
+
+```bash
+node apps/api/scripts/test-billing-limits.mjs
+```
 
 Inventories: `infra/deployments/`. Guide: [infra/aws-serverless-deployment.md](../../infra/aws-serverless-deployment.md).
 
@@ -232,4 +290,5 @@ npm run dev:ngrok:ui          # tunnel :3000 — admin + /webhooks/* proxy to AP
 cd apps/api && node scripts/test-dashboard-widget.mjs
 cd apps/api && node scripts/test-chat.mjs
 cd apps/api && node scripts/test-usage-widget-conversations.mjs
+cd apps/api && node scripts/test-billing-limits.mjs   # plan limits + SSE + billing cron guard
 ```

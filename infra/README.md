@@ -32,7 +32,14 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 | `knowledge-jobs` | `knowledge-jobs.cjs` | `GET /api/v1/knowledge/jobs`, `GET /api/v1/knowledge/jobs/{jobId}` |
 | `jwt-authorizer` | `jwt-authorizer.cjs` | API Gateway authorizer |
 
-**Status (2026-06-12):** 39 handler bundles. Deploy to AWS via `npm run deploy:aws` (API + DynamoDB + S3 + API Gateway). Admin UI via `npm run deploy:admin` (static Next export → S3 + CloudFront). Inventories under `infra/deployments/`.
+**Status (2026-06-14):** 40+ handler bundles · **75 API routes** on AWS dev. Deploy via `npm run deploy:aws:full` (IAM + ingest + Step Functions + cron) or `npm run deploy:aws` (API only). Admin UI via `npm run deploy:admin`. Inventories under `infra/deployments/`.
+
+| npm script | What it does |
+|------------|--------------|
+| `ensure:deploy-iam` | Create/update `CommerceChatDeploy` policy from `aws-deploy-iam-policy.json` |
+| `deploy:aws` | API CloudFormation stack |
+| `deploy:aws:full` | `--ensure-iam --with-ingest-pipeline --with-ingest-step-functions` |
+| `deploy:admin` | Static admin → S3 + CloudFront |
 
 **Remaining Lambdas:** see [docs/implementation/06-api-implementation-status.md](../docs/implementation/06-api-implementation-status.md).
 
@@ -49,7 +56,10 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 ## AWS deploy
 
 ```bash
-# API (CloudFormation stack commercechat-{env})
+# Full stack: IAM policy + API + ingest SQS + Step Functions + EventBridge crons
+npm run deploy:aws:full -- --credentials-csv="/path/to/accessKeys.csv" --env=dev --region=us-east-1
+
+# API only
 npm run deploy:aws -- --credentials-csv="/path/to/accessKeys.csv" --env=dev --region=us-east-1
 
 # Admin UI (stack commercechat-{env}-admin)
@@ -57,7 +67,7 @@ npm run deploy:admin -- --credentials-csv="/path/to/accessKeys.csv" --env=dev \
   --api-url=https://YOUR_API_GATEWAY_URL
 ```
 
-IAM: attach [aws-deploy-iam-policy.json](aws-deploy-iam-policy.json) as a **customer-managed policy** (inline limit is 2 KB). Full guide: [aws-serverless-deployment.md](aws-serverless-deployment.md).
+IAM: `npm run ensure:deploy-iam` or `--ensure-iam` on deploy. Policy: [aws-deploy-iam-policy.json](aws-deploy-iam-policy.json). Full guide: [aws-serverless-deployment.md](aws-serverless-deployment.md).
 
 ## Local dev
 

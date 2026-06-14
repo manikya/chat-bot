@@ -10,9 +10,11 @@ AI-powered e-commerce chatbot SaaS for **WhatsApp**, **Facebook Messenger**, **I
 
 🎨 **[Reference UI](../reference%20UI/README.md)** — cloned [jetwing-ai-itinerary](https://github.com/Capricon-Solutions/jetwing-ai-itinerary) for shadcn/Next.js patterns and components.
 
-🖥️ **[Admin UI](../apps/admin/README.md)** — Next.js dashboard; **54 real API routes** (auth, tenant, knowledge, chat, channels, billing, widget).
+🖥️ **[Admin UI](../apps/admin/README.md)** — Next.js dashboard; **~75 real API routes** (auth, tenant, knowledge, chat, channels, billing, widget).
 
-📡 **[API implementation status](implementation/06-api-implementation-status.md)** — built vs mock vs remaining (last updated 2026-06-11).
+📡 **[API implementation status](implementation/06-api-implementation-status.md)** — built vs remaining + **what to build next** (last updated 2026-06-14).
+
+🚀 **[AWS deploy guide](../infra/aws-serverless-deployment.md)** — `npm run deploy:aws:full` (IAM + ingest + crons).
 
 🧩 **Widget demo (local):** `http://localhost:3001/widget/demo.html?key=pk_live_...` — requires `npm run dev` and a key from Settings → API keys.
 
@@ -86,7 +88,7 @@ Ready-to-build artifacts derived from the function specs:
 | MFA            | Off MVP; TOTP + email Phase 2; SMS Phase 3   |
 | Auth + platform email | Resend (`EmailProvider`)              |
 | SMS            | Skipped MVP; Twilio optional Phase 3         |
-| Billing        | Stripe                                         |
+| Billing        | Trial + lifecycle cron (payment gateway deferred) |
 
 
 ---

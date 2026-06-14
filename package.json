@@ -21,6 +21,8 @@
     "docker:down": "docker compose down",
     "cost:aws": "node scripts/aws-cost-report.mjs",
     "deploy:aws": "node scripts/deploy-aws-serverless.mjs",
+    "ensure:deploy-iam": "node scripts/ensure-deploy-iam.mjs",
+    "deploy:aws:full": "node scripts/deploy-aws-serverless.mjs --env=dev --with-ingest-pipeline --with-ingest-step-functions --ensure-iam",
     "deploy:admin": "node scripts/deploy-admin-static.mjs"
   },
   "devDependencies": {

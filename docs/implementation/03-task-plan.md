@@ -4,22 +4,23 @@
 **Version:** 1.0  
 **Timeline:** MVP ~10 weeks (2.5 FTE)  
 **Related:** [phases/01-phase-mvp.md](../phases/01-phase-mvp.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
-**Last progress update:** 2026-06-07
+**Last progress update:** 2026-06-14
 
 ---
 
-## 0. Progress snapshot (local dev)
+## 0. Progress snapshot (local dev + AWS dev)
 
-| Sprint | Status | Done locally |
-|--------|--------|--------------|
-| **Sprint 1 — Foundation** | ~95% | Auth, tenant profile/config/limits/usage, JWT, onboarding APIs, session auto-refresh; **not done:** CDK deploy, logo upload |
-| **Sprint 2 — Knowledge** | ~90% | Website crawl, catalog CSV, embeddings, `FileVectorStore`, job polling, RAG retriever; **not done:** S3 Vectors prod, FAQ ingest, Step Functions |
-| **Sprint 3 — Chat** | ~90% | Orchestrator, LLM, tools, cart persistence, usage metering, `POST /chat`, test simulator |
-| **Sprint 4 — Meta** | 0% | Channels UI uses mock; conversations API live |
-| **Sprint 5 — Widget** | ~85% | API key auth, widget config/chat, `v1.js` embed (shadow DOM, formatting, action chips), dashboard stats, embed snippet in admin; **not done:** SSE stream, rich product cards, rate limits, CDN deploy |
-| **Infra (Week 0)** | ~55% | LocalStack + persist volume; `deploy:aws` (API CFN), `deploy:admin` (S3+CloudFront); **not done:** CDK, CI, custom domain |
+| Sprint | Status | Done |
+|--------|--------|------|
+| **Sprint 1 — Foundation** | ~98% | Auth, tenant, JWT, onboarding, logo S3 presign; **not done:** CDK |
+| **Sprint 2 — Knowledge** | ~95% | Crawl, CSV, FAQ, page-voice ingest UI, vector quota guard; **AWS:** Step Functions + SQS ingest |
+| **Sprint 3 — Chat** | ~95% | Orchestrator, tools, usage metering, message quota, suspended tenants |
+| **Sprint 4 — Meta** | ~75% | WhatsApp + Messenger + Instagram connect/webhooks; **not done:** App Review, prod domains |
+| **Sprint 5 — Widget** | ~95% | SSE stream, carousel cards, rate limits; **not done:** widget CloudFront CDN |
+| **Sprint 7 — Billing** | ~60% | Plans, trial lifecycle cron, cancel/reactivate, limit enforcement; **not done:** payment gateway |
+| **Infra (Week 0)** | ~75% | `deploy:aws:full`, IAM bootstrap, EventBridge crons, admin CloudFront; **not done:** CI, custom domain |
 
-**35 real API routes** · **6 mock routes** remaining for MVP UI · See [06-api-implementation-status.md](06-api-implementation-status.md).
+**~75 real API routes** · **0 mock routes** · See [06-api-implementation-status.md](06-api-implementation-status.md).
 
 ---
 

@@ -109,14 +109,20 @@ async function main() {
   }
 
   try {
+    const cronSecret = process.env.BILLING_LIFECYCLE_CRON_SECRET;
+    const headers = { "Content-Type": "application/json", ...(cronSecret ? { "x-cron-secret": cronSecret } : {}) };
     const lifecycle = await reqOk("/internal/cron/billing-lifecycle", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: "{}",
     });
-    ok(`billing lifecycle cron (scanned=${lifecycle.data?.scanned ?? "?"})`);
+    ok(`billing lifecycle HTTP cron (scanned=${lifecycle.data?.scanned ?? "?"})`);
   } catch (e) {
-    fail("billing lifecycle cron", e);
+    if (String(e).includes("403")) {
+      ok("billing lifecycle HTTP cron protected (403 without secret — EventBridge schedule handles daily runs)");
+    } else {
+      fail("billing lifecycle cron", e);
+    }
   }
 
   let apiKey;

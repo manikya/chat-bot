@@ -105,7 +105,18 @@
         "states:ListStateMachines",
         "states:TagResource",
         "states:UntagResource",
-        "states:UpdateStateMachine"
+        "states:UpdateStateMachine",
+        "events:PutRule",
+        "events:DeleteRule",
+        "events:DescribeRule",
+        "events:EnableRule",
+        "events:DisableRule",
+        "events:PutTargets",
+        "events:RemoveTargets",
+        "events:ListTargetsByRule",
+        "events:TagResource",
+        "events:UntagResource",
+        "events:ListRules"
       ],
       "Resource": "*"
     },
@@ -140,6 +151,23 @@
         "s3vectors:DeleteVectorBucket"
       ],
       "Resource": "arn:aws:s3vectors:*:*:bucket/commercechat-*"
+    },
+    {
+      "Sid": "DeployIamBootstrap",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy",
+        "iam:CreatePolicyVersion",
+        "iam:GetPolicy",
+        "iam:ListPolicyVersions",
+        "iam:AttachUserPolicy",
+        "iam:DetachUserPolicy",
+        "iam:ListAttachedUserPolicies"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:policy/CommerceChatDeploy",
+        "arn:aws:iam::*:user/*"
+      ]
     },
     {
       "Sid": "ReadCallerIdentity",

@@ -255,8 +255,12 @@ All Lambdas use JSON logs:
 - [ ] Auth signup/login flow tested
 - [ ] ACM certificates validated
 - [x] CloudFront distribution serving admin (dev: `commercechat-dev-admin` stack)
-- [ ] CloudFront distributions serving widget
+- [ ] CloudFront distributions serving widget (`widget-cdn`)
+- [x] API + DynamoDB + 40+ Lambdas on dev (`npm run deploy:aws:full`)
+- [x] Deploy IAM policy bootstrap (`npm run ensure:deploy-iam`)
+- [x] Step Functions ingest pipeline on dev (`commercechat-dev-ingest`)
+- [x] EventBridge cron: Meta token refresh (03:00 UTC), billing lifecycle (06:00 UTC)
 - [ ] Secrets Manager secrets created (manual first time)
 - [ ] WAF rules attached
 - [ ] Route 53 records pointing to CloudFront/API GW
-- [ ] Meta webhook URL registered in Meta App
+- [ ] Meta webhook URL registered in Meta App (production domain)

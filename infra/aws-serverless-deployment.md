@@ -119,6 +119,14 @@ Attach that JSON as a **customer-managed IAM policy** on the deploy user before 
 Inline user policies are limited to 2,048 bytes; this file is ~3 KB, so use:
 
 ```bash
+npm run ensure:deploy-iam -- --credentials-csv="/path/to/accessKeys.csv" --region=us-east-1
+```
+
+Or let the deploy script do it automatically with `--ensure-iam` (used by `deploy:aws:full`).
+
+Manual equivalent:
+
+```bash
 aws iam create-policy --policy-name CommerceChatDeploy \
   --policy-document file://infra/aws-deploy-iam-policy.json
 aws iam attach-user-policy --user-name YOUR_USER \
@@ -138,6 +146,18 @@ deployment artifact bucket; record or remove it using the generated partial inve
 | 2026-06-12 05:26 UTC | `ROLLBACK_COMPLETE` | Same user still lacked **`dynamodb:DescribeTable`** when CloudFormation created `MainTable`; all other resources rolled back |
 
 Fix: attach [aws-deploy-iam-policy.json](aws-deploy-iam-policy.json), delete the failed stack (or use `--delete-failed-stack`), then redeploy.
+
+### One-command full deploy (recommended)
+
+Creates/updates IAM policy, ingest SQS, Step Functions, EventBridge cron schedules, and all API Lambdas:
+
+```bash
+npm run deploy:aws:full -- --credentials-csv="/path/to/accessKeys.csv" --region=us-east-1
+```
+
+Equivalent flags: `--env=dev --with-ingest-pipeline --with-ingest-step-functions --ensure-iam`
+
+### API-only deploy
 
 ```bash
 npm run deploy:aws -- --credentials-csv="/Users/manikya/Downloads/manikya_accessKeys (1).csv" --env=dev --region=us-east-1
@@ -170,6 +190,33 @@ npm run deploy:aws -- \
 ```
 
 **SMTP (auth emails):** set `SMTP_*` in `apps/api/.env` (gitignored). The deploy script loads that file automatically and passes Zoho/other SMTP settings to all Lambdas. Without SMTP, verify/reset links are logged to CloudWatch only.
+
+### EventBridge cron schedules (AWS)
+
+Created automatically on deploy (disable with `--no-cron-schedules`). Lambdas are invoked directly by EventBridge — no HTTP hop.
+
+| Rule | Schedule (UTC) | Lambda | Purpose |
+|------|----------------|--------|---------|
+| `commercechat-{env}-cron-meta-token-refresh` | `cron(0 3 * * ? *)` (03:00 daily) | `cron-meta-token-refresh` | Refresh expiring Meta tokens |
+| `commercechat-{env}-cron-billing-lifecycle` | `cron(0 6 * * ? *)` (06:00 daily) | `cron-billing-lifecycle` | Trial expiry, cancel-at-period-end, billing emails |
+
+Secrets are generated at deploy time and stored as Lambda env vars:
+
+- `META_TOKEN_REFRESH_CRON_SECRET` — optional guard for manual `POST /internal/cron/meta-token-refresh`
+- `BILLING_LIFECYCLE_CRON_SECRET` — required for manual `POST /internal/cron/billing-lifecycle` (`x-cron-secret` header)
+
+Override at deploy: `--billing-lifecycle-cron-secret=...` / `--meta-token-refresh-cron-secret=...`
+
+### Ingest pipeline (optional flags)
+
+| Flag | Creates |
+|------|---------|
+| `--with-ingest-pipeline` | SQS `commercechat-{env}-ingest` + ingest worker Lambdas |
+| `--with-ingest-step-functions` | Step Functions `commercechat-{env}-ingest` (requires `states:*` in deploy IAM policy) |
+
+Both are enabled by `npm run deploy:aws:full`. S3 Vectors bucket is created via `scripts/create-s3-vectors-bucket.mjs` when the ingest pipeline is on.
+
+**Dev (2026-06):** `commercechat-dev-ingest` state machine + ingest queue deployed; `INGEST_STATE_MACHINE_ARN` set on API Lambdas.
 
 Removal is intentionally simple:
 

@@ -9,17 +9,19 @@
 
 Provide an embeddable JavaScript chat widget merchants add to their storefront, sharing the same AI orchestrator and tools as social channels.
 
-### Implementation status (local dev, 2026-06-07)
+### Implementation status (2026-06-14)
 
-| Spec | Shipped locally | Notes |
-|------|-----------------|-------|
+| Spec | Shipped | Notes |
+|------|---------|-------|
 | Embed script | `apps/widget/public/v1.js` | Served at `GET /widget/v1.js`; `API_PUBLIC_URL` in embed snippet |
 | UI framework | Vanilla JS + shadow DOM | Spec calls for React/Preact bundle + loader — deferred |
-| Chat API | `POST /api/v1/widget/chat` (sync JSON) | Spec shows SSE on `/chat`; streaming is Phase 2 |
+| Chat API | `POST /api/v1/widget/chat` (sync) + `/chat/stream` (SSE) | Typing events, token streaming |
 | Auth | `X-API-Key: pk_live_...` | Same orchestrator as admin test chat |
 | Config | `GET /api/v1/widget/config` | Greeting, colors, `suggestedQuestions` |
-| Bot formatting | `formatBotText()` | `**bold**`, breaks before `2.`/`3.` on one line, `\n` → `<br>` |
-| Product UI | `suggestedActions` chips | Tappable buttons under reply when `search_products` runs; rich product cards pending |
+| Bot formatting | `formatBotText()` | `**bold**`, lists, `\n` → `<br>` |
+| Product UI | Carousel cards (up to 5) | Multi-image dots; `search_products` tool |
+| Rate limits | Per-plan | `WIDGET_CHAT_RATE_LIMITS` / config limits in `billing/plans.ts` |
+| CDN | API Gateway only | CloudFront widget CDN — **not yet deployed** |
 | Demo | `http://localhost:3001/widget/demo.html?key=...` | Must use HTTP (CORS blocks `file://`) |
 
 ---

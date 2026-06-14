@@ -45,19 +45,28 @@ npm run build:lambdas
 # → apps/api/dist/handlers/*.cjs
 ```
 
-## Implemented (54 routes)
+## Implemented (~75 routes)
 
-See [docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md) for the full table.
+See [docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md) for the full table and **recommended next steps**.
 
 **Highlights:**
 - Auth, tenant, onboarding, team
-- Knowledge ingest (website crawl, catalog CSV, jobs)
+- Knowledge ingest (website, catalog, FAQ, page-voice/conversation export)
 - Chat orchestrator (`POST /api/v1/chat`)
-- Usage, conversations, dashboard stats, billing
-- Widget config/chat + API key auth
-- WhatsApp + Messenger connect/disconnect/health
+- Usage, conversations, dashboard stats, billing (trial lifecycle, cancel/reactivate)
+- Widget config/chat + SSE stream + API key auth + plan rate limits
+- WhatsApp + Messenger + Instagram connect/disconnect/health
 - Meta webhooks (`GET`/`POST /webhooks/meta`)
+- Billing crons via EventBridge (`cron-billing-lifecycle`, `cron-meta-token-refresh`)
 - Static widget bundle at `GET /widget/v1.js`
+
+## AWS deploy
+
+```bash
+npm run deploy:aws:full -- --credentials-csv="..." --env=dev --region=us-east-1
+```
+
+See [infra/aws-serverless-deployment.md](../../infra/aws-serverless-deployment.md).
 
 ## Test scripts
 
@@ -66,6 +75,7 @@ node scripts/test-dashboard-widget.mjs
 node scripts/test-chat.mjs
 node scripts/test-usage-widget-conversations.mjs
 node scripts/test-catalog-chat.mjs
+node scripts/test-billing-limits.mjs
 ```
 
 ## Environment

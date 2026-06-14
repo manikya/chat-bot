@@ -227,7 +227,7 @@ function isAccessDenied(stderr) {
   return /AccessDenied|not authorized|not allowed to perform/i.test(stderr);
 }
 
-function runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv }) {
+function runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv, withIngestStepFunctions = false }) {
   const tableName = `commercechat-${env}-storage-main`;
   const roleName = `commercechat-${env}-api-lambda-role-${region}`;
   const checks = [
@@ -281,6 +281,13 @@ function runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv }) 
       run: () => awsCall(["apigatewayv2", "get-apis", "--region", region, "--max-items", "1"], awsEnv),
     },
   ];
+
+  if (withIngestStepFunctions) {
+    checks.push({
+      permission: "states:ListStateMachines",
+      run: () => awsCall(["stepfunctions", "list-state-machines", "--max-results", "1", "--region", region], awsEnv),
+    });
+  }
 
   const missing = [];
   for (const check of checks) {
@@ -447,6 +454,56 @@ function routeKey(method, path) {
   return `${method} ${path}`;
 }
 
+function addCronSchedules(resources, env, handlerFiles) {
+  const schedules = [
+    {
+      id: "MetaTokenRefresh",
+      handler: "cron-meta-token-refresh",
+      cron: "cron(0 3 * * ? *)",
+      description: "Refresh expiring Meta channel tokens",
+    },
+    {
+      id: "BillingLifecycle",
+      handler: "cron-billing-lifecycle",
+      cron: "cron(0 6 * * ? *)",
+      description: "Trial expiry, subscription end, billing emails",
+    },
+  ];
+
+  for (const schedule of schedules) {
+    if (!handlerFiles.includes(schedule.handler)) continue;
+    const fnId = logicalId("Fn", schedule.handler);
+    const ruleId = `${schedule.id}Schedule`;
+    const permId = `${schedule.id}SchedulePermission`;
+
+    resources[ruleId] = {
+      Type: "AWS::Events::Rule",
+      Properties: {
+        Name: `commercechat-${env}-${schedule.handler}`,
+        Description: schedule.description,
+        ScheduleExpression: schedule.cron,
+        State: "ENABLED",
+        Targets: [
+          {
+            Arn: { "Fn::GetAtt": [fnId, "Arn"] },
+            Id: "LambdaTarget",
+          },
+        ],
+      },
+    };
+
+    resources[permId] = {
+      Type: "AWS::Lambda::Permission",
+      Properties: {
+        Action: "lambda:InvokeFunction",
+        FunctionName: { Ref: fnId },
+        Principal: "events.amazonaws.com",
+        SourceArn: { "Fn::GetAtt": [ruleId, "Arn"] },
+      },
+    };
+  }
+}
+
 function buildTemplate({
   env,
   region,
@@ -455,6 +512,7 @@ function buildTemplate({
   handlerFiles,
   withIngestPipeline = false,
   withIngestStepFunctions = false,
+  withCronSchedules = true,
 }) {
   const resources = {};
   const lambdaRole = "LambdaRole";
@@ -797,6 +855,8 @@ function buildTemplate({
             PAYMENT_WEBHOOK_SECRET: { Ref: "PaymentWebhookSecret" },
             BILLING_SKIP_PAYMENT: { Ref: "BillingSkipPayment" },
             SKIP_EMAIL_VERIFICATION: { Ref: "SkipEmailVerification" },
+            META_TOKEN_REFRESH_CRON_SECRET: { Ref: "MetaTokenRefreshCronSecret" },
+            BILLING_LIFECYCLE_CRON_SECRET: { Ref: "BillingLifecycleCronSecret" },
             S3_VECTORS_BUCKET: vectorBucketName,
             DATA_DIR: "/tmp/commercechat",
             ...(handlerName !== "ingest-worker" && withIngestPipeline
@@ -916,6 +976,10 @@ function buildTemplate({
     };
   }
 
+  if (withCronSchedules) {
+    addCronSchedules(resources, env, handlerFiles);
+  }
+
   return {
     AWSTemplateFormatVersion: "2010-09-09",
     Description: `CommerceChat ${env} serverless API stack`,
@@ -937,6 +1001,8 @@ function buildTemplate({
       PaymentWebhookSecret: { Type: "String", NoEcho: true, Default: "" },
       BillingSkipPayment: { Type: "String", AllowedValues: ["true", "false"], Default: env === "prod" ? "false" : "true" },
       SkipEmailVerification: { Type: "String", AllowedValues: ["true", "false"], Default: env === "prod" ? "false" : "true" },
+      MetaTokenRefreshCronSecret: { Type: "String", NoEcho: true, Default: "" },
+      BillingLifecycleCronSecret: { Type: "String", NoEcho: true, Default: "" },
     },
     Resources: resources,
     Outputs: {
@@ -1084,6 +1150,8 @@ async function main() {
   const deleteFailedStack = process.argv.includes("--delete-failed-stack");
   const withIngestPipeline = process.argv.includes("--with-ingest-pipeline");
   const withIngestStepFunctions = process.argv.includes("--with-ingest-step-functions");
+  const withCronSchedules = !process.argv.includes("--no-cron-schedules");
+  const ensureIam = process.argv.includes("--ensure-iam");
 
   if (!existsSync(credentialsCsv)) throw new Error(`Credentials CSV not found: ${credentialsCsv}`);
   loadLocalApiEnv();
@@ -1145,6 +1213,12 @@ async function main() {
   const smtpFrom = hasArg("smtp-from")
     ? arg("smtp-from", "")
     : process.env.SMTP_FROM ?? deployedEnv?.SMTP_FROM ?? smtpUser;
+  const metaTokenRefreshCronSecret = hasArg("meta-token-refresh-cron-secret")
+    ? arg("meta-token-refresh-cron-secret", "")
+    : process.env.META_TOKEN_REFRESH_CRON_SECRET ?? deployedEnv?.META_TOKEN_REFRESH_CRON_SECRET ?? randomBytes(32).toString("hex");
+  const billingLifecycleCronSecret = hasArg("billing-lifecycle-cron-secret")
+    ? arg("billing-lifecycle-cron-secret", "")
+    : process.env.BILLING_LIFECYCLE_CRON_SECRET ?? deployedEnv?.BILLING_LIFECYCLE_CRON_SECRET ?? randomBytes(32).toString("hex");
   const artifactBucket = `commercechat-${env}-${accountId}-${region}-deploy`;
   let artifactPrefix = null;
   let artifactUploaded = false;
@@ -1181,7 +1255,14 @@ async function main() {
     } else {
       console.log("SMTP not configured — auth emails log to CloudWatch only");
     }
-    runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv });
+    if (ensureIam) {
+      console.log("Ensuring deploy IAM policy is attached...");
+      sh("node", ["scripts/ensure-deploy-iam.mjs", `--credentials-csv=${credentialsCsv}`, `--region=${region}`], {
+        cwd: ROOT,
+        stdio: "inherit",
+      });
+    }
+    runPreflightChecks({ env, region, stackName, artifactBucket, awsEnv, withIngestStepFunctions });
 
     if (preflightOnly) {
       const stackStatus = getStackStatus(stackName, region, awsEnv);
@@ -1205,6 +1286,11 @@ async function main() {
       console.log("Ingest SQS skipped (pass --with-ingest-pipeline).");
     } else if (!withIngestStepFunctions) {
       console.log("Ingest Step Functions skipped (pass --with-ingest-step-functions when States IAM is attached).");
+    }
+    if (!withCronSchedules) {
+      console.log("EventBridge cron schedules skipped (pass default or omit --no-cron-schedules).");
+    } else {
+      console.log("EventBridge cron schedules enabled (meta token 03:00 UTC, billing lifecycle 06:00 UTC).");
     }
     console.log(`Ensuring S3 Vectors bucket ${vectorBucketName}...`);
     try {
@@ -1237,6 +1323,7 @@ async function main() {
       handlerFiles,
       withIngestPipeline,
       withIngestStepFunctions,
+      withCronSchedules,
     });
     writeFileSync(templatePath, `${JSON.stringify(template, null, 2)}\n`);
 
@@ -1301,6 +1388,8 @@ async function main() {
         `PaymentWebhookSecret=${paymentWebhookSecret}`,
         `BillingSkipPayment=${billingSkipPayment}`,
         `SkipEmailVerification=${skipEmailVerification}`,
+        `MetaTokenRefreshCronSecret=${metaTokenRefreshCronSecret}`,
+        `BillingLifecycleCronSecret=${billingLifecycleCronSecret}`,
         "--tags",
         "Project=CommerceChat",
         "Application=commercechat",

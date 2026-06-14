@@ -77,8 +77,21 @@ stripe products:
 
 `assertChannelEnabled(tenantId, channel)` blocks channels not in the tenant `LIMITS.enabledChannels` list.
 
-**Soft limit (80%):** Shown in admin Usage/Billing UI (`messagesPct`). Email warning — planned.  
-**Hard limit (100%):** Orchestrator rejects new AI turns; Meta channels receive a short auto-reply explaining the limit.
+**Soft limit (80%):** Shown in admin Usage/Billing UI (`messagesPct`). Email warning — **planned** (next).  
+**Hard limit (100%):** Orchestrator rejects new AI turns; Meta channels receive a short auto-reply explaining the limit.  
+**Suspended tenant:** `assertTenantOperational` blocks widget, Meta, and chat when status is `suspended` or trial expired.
+
+### Billing lifecycle (implemented, no Stripe)
+
+Daily EventBridge rule invokes `runBillingLifecycle()`:
+
+- Expire trials past `trialEndsAt` → `suspended` + email
+- End subscriptions with `cancelAtPeriodEnd` past period end → `cancelled` + email
+- Manual HTTP: `POST /internal/cron/billing-lifecycle` with `x-cron-secret` (secret in Lambda env on AWS)
+
+Cancel/reactivate APIs: `POST /api/v1/billing/cancel`, `POST /api/v1/billing/reactivate` (trial cannot cancel).
+
+**Payment:** Stripe deferred. Checkout returns redirect URL stub for Sri Lankan / external gateway (`PAYMENT_GATEWAY_URL` template).
 
 ---
 
