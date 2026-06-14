@@ -23,7 +23,7 @@ export default function ConversationsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Conversations</h1>
-        <p className="text-muted-foreground">Live conversations from DynamoDB (test, web, and channel simulators)</p>
+        <p className="text-muted-foreground">Customer chats across WhatsApp, Messenger, and your website</p>
       </div>
 
       <div className="flex gap-2 flex-wrap">

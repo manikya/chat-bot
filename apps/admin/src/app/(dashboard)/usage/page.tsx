@@ -6,7 +6,6 @@ import { ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import type { BillingOverview } from "@commercechat/mock-api";
 import { UsageMeters } from "@/components/billing/usage-meters";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -24,9 +23,7 @@ export default function UsagePage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Usage</h1>
-          <p className="text-muted-foreground">
-            Plan limits and live metering from DynamoDB
-          </p>
+          <p className="text-muted-foreground">Messages, sources, and plan limits for this billing period</p>
         </div>
         <Button variant="outline" asChild>
           <Link href="/billing">
@@ -36,11 +33,10 @@ export default function UsagePage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base capitalize">
             {overview.subscription.plan} plan
           </CardTitle>
-          <Badge variant="success">Live API</Badge>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <p>Max messages: {overview.limits.maxMessages.toLocaleString()}</p>

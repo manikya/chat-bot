@@ -5,13 +5,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
-import { requireChannelsInOnboarding, apiPublicBaseUrl } from "@/lib/onboarding-env";
-import { getMetaOAuthRedirectUri } from "@/lib/meta-oauth";
+import { requireChannelsInOnboarding } from "@/lib/onboarding-env";
 import type { ChannelInfo } from "@commercechat/mock-api";
 import { MetaConnectButton } from "@/components/channels/meta-connect-button";
 import { MetaMessengerConnectButton } from "@/components/channels/meta-messenger-connect-button";
-import { MetaDevConnectButton } from "@/components/channels/meta-dev-connect-button";
-import { MetaMessengerDevConnectButton } from "@/components/channels/meta-messenger-dev-connect-button";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,22 +19,15 @@ export default function OnboardingChannelsPage() {
   const { refreshMe } = useAuth();
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [health, setHealth] = useState<Record<string, { status: string; detail?: string }>>({});
-  const [devConnectAvailable, setDevConnectAvailable] = useState(false);
-  const [messengerDevConnectAvailable, setMessengerDevConnectAvailable] = useState(false);
   const requireChannel = requireChannelsInOnboarding();
 
   const load = async () => {
-    const [listRes, healthRes, devStatusRes] = await Promise.all([
+    const [listRes, healthRes] = await Promise.all([
       api.channels.list(),
       api.channels.health().catch(() => null),
-      api.channels.metaDevStatus().catch(() => null),
     ]);
     setChannels(listRes.data.channels);
     if (healthRes?.data) setHealth(healthRes.data as Record<string, { status: string; detail?: string }>);
-    if (devStatusRes?.data) {
-      setDevConnectAvailable(Boolean(devStatusRes.data.devConnectAvailable));
-      setMessengerDevConnectAvailable(Boolean(devStatusRes.data.messengerDevConnectAvailable));
-    }
   };
 
   useEffect(() => {
@@ -51,15 +41,13 @@ export default function OnboardingChannelsPage() {
 
   const next = async (skip = false) => {
     if (requireChannel && !anyConnected && skip) {
-      toast.error("Connect WhatsApp or Messenger before continuing on production");
+      toast.error("Connect WhatsApp or Messenger before continuing");
       return;
     }
     await api.onboarding.advanceStep("knowledge", skip);
     await refreshMe();
     router.push("/onboarding/knowledge");
   };
-
-  const webhookUrl = `${apiPublicBaseUrl()}/webhooks/meta`;
 
   return (
     <OnboardingShell currentStep="channels">
@@ -83,10 +71,7 @@ export default function OnboardingChannelsPage() {
               <Badge variant={wa?.status === "connected" ? "success" : "secondary"}>{wa?.status ?? "disconnected"}</Badge>
             </div>
             {wa?.status !== "connected" && (
-              <>
-                <MetaConnectButton returnPath="/onboarding/channels" />
-                {devConnectAvailable && <MetaDevConnectButton onConnected={load} />}
-              </>
+              <MetaConnectButton returnPath="/onboarding/channels" />
             )}
           </div>
 
@@ -104,10 +89,7 @@ export default function OnboardingChannelsPage() {
               </Badge>
             </div>
             {messenger?.status !== "connected" && (
-              <>
-                <MetaMessengerConnectButton returnPath="/onboarding/channels" />
-                {messengerDevConnectAvailable && <MetaMessengerDevConnectButton onConnected={load} />}
-              </>
+              <MetaMessengerConnectButton returnPath="/onboarding/channels" />
             )}
           </div>
 
@@ -117,17 +99,6 @@ export default function OnboardingChannelsPage() {
               <p className="text-sm text-muted-foreground">Embed chat on your storefront</p>
             </div>
             <Badge variant={web?.status === "connected" ? "success" : "secondary"}>Auto-enabled</Badge>
-          </div>
-
-          <div className="space-y-1 text-xs text-muted-foreground rounded-lg bg-muted/50 p-3">
-            <p className="font-medium text-foreground">Meta app checklist</p>
-            <p>
-              OAuth redirect:{" "}
-              <code className="break-all">{getMetaOAuthRedirectUri()}</code>
-            </p>
-            <p>
-              Webhook URL: <code className="break-all">{webhookUrl}</code>
-            </p>
           </div>
 
           <div className="flex gap-2">

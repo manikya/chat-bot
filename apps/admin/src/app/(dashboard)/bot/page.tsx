@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { TenantConfig } from "@commercechat/mock-api";
 import { ChatSimulator } from "@/components/chat/chat-simulator";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,7 @@ export default function BotConfigPage() {
     try {
       const res = await api.tenant.updateConfig(config);
       setConfig(res.data ?? config);
-      toast.success("Bot config saved to DynamoDB");
+      toast.success("Bot configuration saved");
     } catch {
       toast.error("Failed to save config");
     } finally {
@@ -40,12 +39,9 @@ export default function BotConfigPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Bot configuration</h1>
-          <p className="text-muted-foreground">Prompts stored via real tenant config API</p>
+          <p className="text-muted-foreground">Customize how your assistant greets and replies to customers</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="success">Live API</Badge>
-          <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
-        </div>
+        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -87,7 +83,6 @@ export default function BotConfigPage() {
                 return res.data.reply.content;
               }}
             />
-            <p className="mt-2 text-xs text-muted-foreground">Simulator uses the live chat orchestrator (RAG + LLM + tools).</p>
           </CardContent>
         </Card>
       </div>

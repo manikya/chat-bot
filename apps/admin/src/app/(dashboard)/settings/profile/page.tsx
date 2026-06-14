@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/context";
 import { api } from "@/lib/api";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimezoneSelect } from "@/components/timezone-select";
@@ -42,13 +41,12 @@ export default function ProfileSettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Profile and store — wired to real tenant APIs</p>
+        <p className="text-muted-foreground">Your account and store details</p>
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base">Profile</CardTitle>
-          <Badge variant="success">Live API</Badge>
         </CardHeader>
         <CardContent className="space-y-4 max-w-md">
           <div className="space-y-2"><Label>Name</Label><Input value={user?.name ?? ""} readOnly /></div>
@@ -58,9 +56,8 @@ export default function ProfileSettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base">Store</CardTitle>
-          <Badge variant="success">Live API</Badge>
         </CardHeader>
         <CardContent className="space-y-4 max-w-md">
           <div className="space-y-2">

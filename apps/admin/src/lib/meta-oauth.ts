@@ -31,7 +31,7 @@ export function assertOAuthRedirectAllowed(): void {
   const uri = getMetaOAuthRedirectUri();
   if (uri.startsWith("http://")) {
     throw new Error(
-      "Meta OAuth requires HTTPS. Open the admin via your ngrok URL, then click Connect WhatsApp again."
+      "Meta sign-in requires a secure (HTTPS) connection. Open this page from your store’s admin URL."
     );
   }
 }

@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { REAL_API_DOMAINS } from "@/lib/api";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -79,11 +78,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="mx-3 mb-3 space-y-2">
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
-            <strong>Live:</strong> {REAL_API_DOMAINS.join(", ")}
-          </div>
-        </div>
       </aside>
 
       <div className="flex flex-1 flex-col">

@@ -16,8 +16,6 @@ export default function OnboardingTestPage() {
   const suggested = suggestedQuestionsForTimezone(tenant?.timezone);
   const [testCount, setTestCount] = useState(0);
   const [canAdvance, setCanAdvance] = useState(false);
-  const [debug, setDebug] = useState<{ intent?: string; tools?: string } | null>(null);
-  const [showDebug, setShowDebug] = useState(false);
 
   const next = async () => {
     if (!canAdvance) return;
@@ -43,28 +41,13 @@ export default function OnboardingTestPage() {
               const res = await api.onboarding.testChat(msg);
               setTestCount(res.data.testMessageCount);
               setCanAdvance(res.data.canAdvanceToWidget);
-              setDebug({
-                intent: res.data.intent,
-                tools: res.data.toolResults?.map((t) => `${t.tool}:${t.success ? "ok" : "fail"}`).join(", "),
-              });
               return res.data.reply.content;
             }}
           />
 
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>{testCount > 0 ? `${testCount} test message(s) sent` : "Send a message to continue"}</span>
-            {debug && (
-              <button type="button" className="text-primary text-xs underline" onClick={() => setShowDebug((v) => !v)}>
-                {showDebug ? "Hide" : "Show"} debug
-              </button>
-            )}
-          </div>
-
-          {showDebug && debug && (
-            <pre className="rounded-lg bg-muted p-3 text-xs overflow-x-auto">
-              {JSON.stringify(debug, null, 2)}
-            </pre>
-          )}
+          <p className="text-sm text-muted-foreground">
+            {testCount > 0 ? `${testCount} test message(s) sent` : "Send a message to continue"}
+          </p>
 
           <Button onClick={next} disabled={!canAdvance}>
             Continue to widget

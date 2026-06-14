@@ -5,10 +5,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { ChannelInfo } from "@commercechat/mock-api";
 import { MetaConnectButton } from "@/components/channels/meta-connect-button";
-import { MetaDevConnectButton } from "@/components/channels/meta-dev-connect-button";
 import { MetaMessengerConnectButton } from "@/components/channels/meta-messenger-connect-button";
-import { MetaMessengerDevConnectButton } from "@/components/channels/meta-messenger-dev-connect-button";
-import { getMetaOAuthRedirectUri } from "@/lib/meta-oauth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,29 +13,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [health, setHealth] = useState<Record<string, { status: string; detail?: string }>>({});
-  const [devConnectAvailable, setDevConnectAvailable] = useState(false);
-  const [messengerDevConnectAvailable, setMessengerDevConnectAvailable] = useState(false);
-  const [oauthRedirectUri, setOauthRedirectUri] = useState<string | null>(null);
-  const [clientOAuthRedirectUri, setClientOAuthRedirectUri] = useState<string | null>(null);
 
   const load = async () => {
-    const [listRes, healthRes, devStatusRes] = await Promise.all([
+    const [listRes, healthRes] = await Promise.all([
       api.channels.list(),
       api.channels.health().catch(() => null),
-      api.channels.metaDevStatus().catch(() => null),
     ]);
     setChannels(listRes.data.channels);
     if (healthRes?.data) setHealth(healthRes.data as Record<string, { status: string; detail?: string }>);
-    if (devStatusRes?.data) {
-      setDevConnectAvailable(Boolean(devStatusRes.data.devConnectAvailable));
-      setMessengerDevConnectAvailable(Boolean(devStatusRes.data.messengerDevConnectAvailable));
-      setOauthRedirectUri(devStatusRes.data.oauthRedirectUri ?? null);
-    }
   };
 
   useEffect(() => {
     load();
-    setClientOAuthRedirectUri(getMetaOAuthRedirectUri());
   }, []);
 
   const disconnect = async (channel: "whatsapp" | "messenger") => {
@@ -47,26 +33,12 @@ export default function ChannelsPage() {
     load();
   };
 
-  const oauthHint = (clientOAuthRedirectUri || oauthRedirectUri) && (
-    <div className="space-y-1 text-xs text-muted-foreground">
-      <p>OAuth redirect URI (whitelist in Meta → Facebook Login → Settings):</p>
-      <code className="block break-all rounded bg-muted px-2 py-1 text-[11px]">
-        {clientOAuthRedirectUri || oauthRedirectUri}
-      </code>
-      {clientOAuthRedirectUri?.startsWith("http://") && (
-        <p className="text-amber-700">
-          Open the admin via your ngrok HTTPS URL (not localhost) before connecting Meta channels.
-        </p>
-      )}
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Channels</h1>
         <p className="text-muted-foreground">
-          Connect WhatsApp and Facebook Messenger — each store uses its own Meta assets
+          Connect WhatsApp and Facebook Messenger so customers can message your store
         </p>
       </div>
 
@@ -105,11 +77,7 @@ export default function ChannelsPage() {
               )}
 
               {ch.channel === "whatsapp" && ch.status === "disconnected" && (
-                <div className="flex flex-col gap-2">
-                  <MetaConnectButton returnPath="/channels" />
-                  {devConnectAvailable && <MetaDevConnectButton onConnected={load} />}
-                  {oauthHint}
-                </div>
+                <MetaConnectButton returnPath="/channels" />
               )}
               {ch.channel === "whatsapp" && ch.status === "connected" && (
                 <Button variant="outline" size="sm" onClick={() => disconnect("whatsapp")}>
@@ -118,13 +86,7 @@ export default function ChannelsPage() {
               )}
 
               {ch.channel === "messenger" && ch.status === "disconnected" && (
-                <div className="flex flex-col gap-2">
-                  <MetaMessengerConnectButton returnPath="/channels" />
-                  {messengerDevConnectAvailable && (
-                    <MetaMessengerDevConnectButton onConnected={load} />
-                  )}
-                  {oauthHint}
-                </div>
+                <MetaMessengerConnectButton returnPath="/channels" />
               )}
               {ch.channel === "messenger" && ch.status === "connected" && (
                 <Button variant="outline" size="sm" onClick={() => disconnect("messenger")}>
@@ -133,7 +95,7 @@ export default function ChannelsPage() {
               )}
 
               {ch.channel === "instagram" && (
-                <p className="text-xs text-muted-foreground">Instagram DMs — coming next</p>
+                <p className="text-xs text-muted-foreground">Instagram DMs — coming soon</p>
               )}
             </CardContent>
           </Card>

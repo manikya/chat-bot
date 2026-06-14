@@ -67,11 +67,6 @@ export default function LoginPage() {
             <p className="text-center text-sm text-muted-foreground">
               No account? <Link href="/signup" className="text-primary hover:underline">Start free trial</Link>
             </p>
-            <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-              Uses <strong>real Lambda APIs</strong> (auth + tenant). With{" "}
-              <code className="text-[11px]">SKIP_EMAIL_VERIFICATION=true</code> in{" "}
-              <code className="text-[11px]">apps/api/.env</code>, sign up and log in without email verification.
-            </p>
           </form>
         </CardContent>
       </Card>

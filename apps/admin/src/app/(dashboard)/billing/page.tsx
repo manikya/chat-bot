@@ -253,24 +253,6 @@ export default function BillingPage() {
           })}
         </div>
       </div>
-
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="text-base">Payment gateway integration</CardTitle>
-          <CardDescription>
-            Checkout creates a session in DynamoDB. Wire your Sri Lankan gateway to redirect using{" "}
-            <code className="text-xs">PAYMENT_GATEWAY_CHECKOUT_URL</code> and confirm via{" "}
-            <code className="text-xs">POST /webhooks/payment</code> with{" "}
-            <code className="text-xs">X-Payment-Secret</code>.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          <p>
-            Set <code>BILLING_SKIP_PAYMENT=true</code> in local <code>.env</code> to activate plans instantly
-            without a gateway while developing.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, Mail, ExternalLink } from "lucide-react";
+import { Copy, Check, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
-import { apiPublicBaseUrl } from "@/lib/onboarding-env";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,8 +35,6 @@ export default function OnboardingWidgetPage() {
   const [embed, setEmbed] = useState("");
   const [copied, setCopied] = useState(false);
   const [openGuide, setOpenGuide] = useState<string | null>(INSTALL_GUIDES[0].platform);
-  const apiBase = apiPublicBaseUrl();
-  const demoUrl = `${apiBase}/widget/demo.html`;
 
   useEffect(() => {
     api.widget.getConfig().then((r) => setEmbed(r.data.embedCode ?? ""));
@@ -63,7 +60,7 @@ export default function OnboardingWidgetPage() {
           <CardHeader>
             <CardTitle>Add widget to your store</CardTitle>
             <CardDescription>
-              Copy this snippet before your closing &lt;/body&gt; tag. API: <code className="text-xs">{apiBase}</code>
+              Copy this snippet and paste it before the closing &lt;/body&gt; tag on your store.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -80,12 +77,7 @@ export default function OnboardingWidgetPage() {
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy embed code
               </Button>
               <Button variant="outline" onClick={emailSnippet}>
-                <Mail className="h-4 w-4" /> Email to developer
-              </Button>
-              <Button variant="outline" asChild>
-                <a href={demoUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-4 w-4" /> Open widget demo
-                </a>
+                <Mail className="h-4 w-4" /> Email embed code
               </Button>
             </div>
           </CardContent>

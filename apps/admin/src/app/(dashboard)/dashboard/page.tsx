@@ -30,7 +30,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Live stats from usage, conversations, and carts</p>
+        <p className="text-muted-foreground">Overview of messages, conversations, and sales activity</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

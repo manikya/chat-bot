@@ -31,7 +31,6 @@ export default function OnboardingKnowledgePage() {
   const [detecting, setDetecting] = useState(false);
   const [platform, setPlatform] = useState<StorePlatform | null>(null);
   const [detectedUrl, setDetectedUrl] = useState("");
-  const [signals, setSignals] = useState<string[]>([]);
   const [pluginInstalled, setPluginInstalled] = useState(false);
   const [crawling, setCrawling] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -107,13 +106,11 @@ export default function OnboardingKnowledgePage() {
     }
     setDetecting(true);
     setPlatform(null);
-    setSignals([]);
     try {
       const res = await api.knowledge.detectPlatform(trimmed);
       const data = res.data;
       setPlatform(data.platform);
       setDetectedUrl(data.normalizedUrl);
-      setSignals(data.signals ?? []);
       setPluginInstalled(Boolean(data.commerceChatPluginInstalled));
       setUrl(data.normalizedUrl);
 
@@ -258,9 +255,6 @@ export default function OnboardingKnowledgePage() {
                 <CardTitle className="text-base">Detected: {platformLabel}</CardTitle>
                 <Badge variant="secondary">{detectedUrl}</Badge>
               </div>
-              {signals.length > 0 && (
-                <CardDescription className="text-xs">{signals.join(" · ")}</CardDescription>
-              )}
             </CardHeader>
             <CardContent className="space-y-4">
               {platform === "woocommerce" && (

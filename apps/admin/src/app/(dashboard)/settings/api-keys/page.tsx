@@ -10,7 +10,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default function ApiKeysPage() {
   const [key, setKey] = useState<string | null>(null);
   const [embed, setEmbed] = useState<string | null>(null);
-  const [prefix] = useState("pk_live_abc");
 
   const regenerate = async () => {
     const res = await api.tenant.regenerateWidgetKey();
@@ -32,7 +31,9 @@ export default function ApiKeysPage() {
           <CardDescription>Used in your embed script. Public by design — rate limited per key.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <code className="block rounded-lg bg-muted p-3 text-sm">{key ?? `${prefix}••••••••`}</code>
+          <code className="block rounded-lg bg-muted p-3 text-sm">
+            {key ?? "Click regenerate to view your key"}
+          </code>
           <div className="flex gap-2">
             {key && (
               <Button variant="outline" onClick={() => { navigator.clipboard.writeText(key); toast.success("Copied"); }}>
@@ -59,7 +60,9 @@ export default function ApiKeysPage() {
               </Button>
             </div>
           )}
-          <p className="text-xs text-muted-foreground">Paste the embed snippet on your storefront before the closing &lt;/body&gt; tag.</p>
+          <p className="text-xs text-muted-foreground">
+            Paste the embed snippet on your storefront before the closing &lt;/body&gt; tag.
+          </p>
         </CardContent>
       </Card>
     </div>
