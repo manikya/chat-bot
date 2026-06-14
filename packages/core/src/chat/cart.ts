@@ -3,7 +3,7 @@ import { generateId } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
-import { getProductBySku } from "../catalog/products";
+import { getProductBySku, getStoreCurrency } from "../catalog/products";
 
 export interface CartItem {
   sku: string;
@@ -63,13 +63,14 @@ export async function getOrCreateCart(
   const existing = await loadCart(tenantId, conversationId, config);
   if (existing) return existing;
   const now = new Date().toISOString();
+  const currency = await getStoreCurrency(tenantId, config);
   const cart: CartState = {
     cartId: generateId("cart_"),
     conversationId,
     tenantId,
     items: [],
     subtotal: 0,
-    currency: "USD",
+    currency,
     updatedAt: now,
   };
   await saveCart(cart, config);
@@ -102,6 +103,7 @@ export async function addToCart(
     });
   }
   cart.subtotal = recalcSubtotal(cart.items);
+  cart.currency = product.currency || cart.currency;
   cart.updatedAt = new Date().toISOString();
   await saveCart(cart, config);
   return { success: true as const, cart, sku };

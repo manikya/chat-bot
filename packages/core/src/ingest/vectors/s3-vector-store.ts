@@ -4,6 +4,7 @@ import {
   ListVectorsCommand,
   PutVectorsCommand,
   QueryVectorsCommand,
+  type QueryVectorsCommandInput,
 } from "@aws-sdk/client-s3vectors";
 import type { CoreConfig } from "../../config";
 import { EMBEDDING_DIMENSIONS, type ChunkMetadata, type ScoredChunk, type VectorChunk } from "../types";
@@ -194,7 +195,7 @@ export class S3VectorStore implements VectorStore {
         indexName,
         topK: options?.topK ?? 10,
         queryVector: { float32: embedding },
-        ...(filter ? { filter } : {}),
+        ...(filter ? { filter: filter as QueryVectorsCommandInput["filter"] } : {}),
         returnMetadata: true,
         returnDistance: true,
       })

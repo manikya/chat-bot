@@ -234,6 +234,14 @@ export const DEMO_SOURCES: KnowledgeSource[] = [
 
 export const DEMO_JOBS: IngestJob[] = [
   {
+    jobId: "job_wp001",
+    sourceId: "src_woo001",
+    type: "woocommerce_sync",
+    status: "completed",
+    stats: { pagesProcessed: 248, chunksCreated: 248, tokensEmbedded: 18420, durationSec: 94 },
+    completedAt: "2026-06-14T15:05:00Z",
+  },
+  {
     jobId: "job_yza567",
     sourceId: "src_vwx234",
     type: "website_sync",

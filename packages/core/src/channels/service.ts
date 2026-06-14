@@ -27,19 +27,24 @@ import {
   subscribePageToApp,
   subscribeWabaToApp,
 } from "./meta-client";
+import {
+  checkInstagramHealth,
+  connectInstagramChannel as connectInstagramChannelInner,
+  disconnectInstagramChannel,
+} from "./instagram";
 import type {
+  ConnectInstagramBody,
   ConnectMetaBody,
   ConnectMessengerBody,
   MessengerCredentials,
   MetaCredentials,
 } from "./types";
+import { assertNotViewer } from "../auth/roles";
 
 const META_CHANNELS = ["whatsapp", "messenger", "instagram"] as const;
 
 function assertCanManageChannels(auth: AuthContext) {
-  if (auth.role === "viewer") {
-    throw new ApiError(ErrorCodes.FORBIDDEN, "Insufficient permissions", 403);
-  }
+  assertNotViewer(auth);
 }
 
 export async function getChannelRecord(tenantId: string, channel: string, config: CoreConfig) {
@@ -205,6 +210,7 @@ export async function ensureFreshMessengerToken(
 export async function listChannels(auth: AuthContext, config: CoreConfig) {
   const whatsapp = await getChannelRecord(auth.tenantId, "whatsapp", config);
   const messenger = await getChannelRecord(auth.tenantId, "messenger", config);
+  const instagram = await getChannelRecord(auth.tenantId, "instagram", config);
   const configRes = await getDocClient(config).send(
     new GetCommand({
       TableName: config.tableName,
@@ -227,7 +233,15 @@ export async function listChannels(auth: AuthContext, config: CoreConfig) {
       pageName: messenger?.pageName as string | undefined,
       connectedAt: messenger?.connectedAt as string | undefined,
     },
-    { channel: "instagram" as const, status: "disconnected" as const },
+    {
+      channel: "instagram" as const,
+      status:
+        instagram?.status === "connected" ? ("connected" as const) : ("disconnected" as const),
+      pageName: instagram?.igUsername
+        ? `@${String(instagram.igUsername)}`
+        : (instagram?.pageName as string | undefined),
+      connectedAt: instagram?.connectedAt as string | undefined,
+    },
     {
       channel: "web" as const,
       status: enabled.includes("web") ? ("connected" as const) : ("disconnected" as const),
@@ -504,6 +518,15 @@ async function connectMessengerChannelInner(
   });
 }
 
+export async function connectInstagramChannel(
+  auth: AuthContext,
+  body: ConnectInstagramBody,
+  config: CoreConfig
+) {
+  assertCanManageChannels(auth);
+  return connectInstagramChannelInner(auth, body, config);
+}
+
 async function connectMetaChannelInner(
   auth: AuthContext,
   body: ConnectMetaBody,
@@ -637,8 +660,10 @@ export async function disconnectMetaChannel(
         ExpressionAttributeValues: { ":disconnected": "disconnected", ":now": now },
       })
     );
+  } else if (channel === "instagram") {
+    return disconnectInstagramChannel(auth, config);
   } else {
-    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Only WhatsApp and Messenger disconnect are supported", 400);
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Only WhatsApp, Messenger, and Instagram disconnect are supported", 400);
   }
 
   return ok({ channel, status: "disconnected" });
@@ -716,6 +741,8 @@ export async function getChannelHealth(auth: AuthContext, config: CoreConfig) {
       }
     }
   }
+
+  health.instagram = await checkInstagramHealth(auth, config, now);
 
   return ok(health);
 }

@@ -3,7 +3,7 @@ const META_OAUTH_RETURN_KEY = "meta_oauth_return";
 const META_OAUTH_FLOW_KEY = "meta_oauth_flow";
 const CALLBACK_PATH = "/channels/meta/callback";
 
-export type MetaOAuthFlow = "whatsapp" | "messenger";
+export type MetaOAuthFlow = "whatsapp" | "messenger" | "instagram";
 
 function callbackUriForOrigin(origin: string): string {
   return `${origin.replace(/\/$/, "")}${CALLBACK_PATH}`;
@@ -85,10 +85,25 @@ export function startMetaMessengerOAuth(returnPath?: string) {
   );
 }
 
+export function startMetaInstagramOAuth(returnPath?: string) {
+  startMetaOAuthWithScopes(
+    [
+      "instagram_manage_messages",
+      "pages_show_list",
+      "pages_manage_metadata",
+      "business_management",
+    ],
+    "instagram",
+    returnPath
+  );
+}
+
 export function consumeMetaOAuthFlow(): MetaOAuthFlow {
   const flow = sessionStorage.getItem(META_OAUTH_FLOW_KEY) ?? "whatsapp";
   sessionStorage.removeItem(META_OAUTH_FLOW_KEY);
-  return flow === "messenger" ? "messenger" : "whatsapp";
+  if (flow === "messenger") return "messenger";
+  if (flow === "instagram") return "instagram";
+  return "whatsapp";
 }
 
 export function consumeMetaOAuthState(receivedState: string | null): string | null {

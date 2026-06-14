@@ -57,6 +57,7 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/channels",
   "POST /api/v1/channels/meta/connect",
   "POST /api/v1/channels/meta/connect-messenger",
+  "POST /api/v1/channels/meta/connect-instagram",
   "POST /api/v1/channels/meta/connect-dev",
   "POST /api/v1/channels/meta/connect-messenger-dev",
   "GET /api/v1/channels/meta/dev-status",

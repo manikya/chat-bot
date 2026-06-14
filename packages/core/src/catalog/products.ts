@@ -4,6 +4,18 @@ import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import type { CatalogProduct } from "../ingest/parsers/catalog-csv";
 
+export async function getStoreCurrency(tenantId: string, config: CoreConfig): Promise<string> {
+  const db = getDocClient(config);
+  const res = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.config() },
+    })
+  );
+  const connector = res.Item?.commerceConnector as { currency?: string } | undefined;
+  return connector?.currency ?? "USD";
+}
+
 export async function listProductItems(tenantId: string, config: CoreConfig) {
   const db = getDocClient(config);
   const res = await db.send(
@@ -27,6 +39,7 @@ export async function upsertProductCache(
 ) {
   const db = getDocClient(config);
   const now = new Date().toISOString();
+  const fallbackCurrency = await getStoreCurrency(tenantId, config);
   for (const product of products) {
     await db.send(
       new PutCommand({
@@ -39,7 +52,7 @@ export async function upsertProductCache(
           name: product.name,
           description: product.description,
           price: product.price,
-          currency: "USD",
+          currency: product.currency ?? fallbackCurrency,
           category: product.category,
           inStock: product.inStock,
           imageUrl: product.imageUrl,

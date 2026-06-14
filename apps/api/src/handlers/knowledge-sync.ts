@@ -9,5 +9,5 @@ export const handler = createHandler(
     if (!sourceId) throw new ApiError(ErrorCodes.VALIDATION_ERROR, "sourceId required", 400);
     return syncKnowledgeSource(auth!, sourceId, loadConfig());
   },
-  { requireAuth: true, successStatus: 202 }
+  { requireAuth: true, minRole: "admin", successStatus: 202 }
 );

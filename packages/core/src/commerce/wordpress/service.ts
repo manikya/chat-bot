@@ -46,6 +46,7 @@ export function wordPressProductToCatalog(product: WordPressProduct): CatalogPro
     name: product.name,
     description: product.rag_text || product.short_description || product.description,
     price: product.price,
+    currency: product.currency || undefined,
     category: product.categories[0] ?? "General",
     imageUrl: product.image ?? undefined,
     imageUrls: images.length ? images : undefined,

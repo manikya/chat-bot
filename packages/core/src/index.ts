@@ -3,6 +3,7 @@ export { ConsoleEmailProvider, createEmailProvider, type EmailProvider } from ".
 export { SmtpEmailProvider } from "./email/smtp";
 export * from "./auth/service";
 export * from "./auth/jwt";
+export { assertMinRole, assertNotViewer, assertOwner } from "./auth/roles";
 export * from "./tenant/service";
 export {
   uploadTenantLogo,
@@ -44,6 +45,8 @@ export {
 export { createVectorStore } from "./ingest/vectors";
 export { createEmbeddingProvider } from "./ingest/embedding";
 export { retrieveKnowledge } from "./ingest/retrieve";
+export { dispatchIngestJob } from "./ingest/dispatch";
+export { runIngestJobByKind, type IngestJobKind } from "./ingest/run-job";
 export { processChat, type ChatRequestBody } from "./chat/service";
 export { runChatOrchestrator } from "./chat/orchestrator";
 export { marketFromTimezone, LK_SUGGESTED_QUESTIONS } from "./chat/locale";
@@ -80,17 +83,21 @@ export { buildWidgetEmbedCode } from "./widget/embed";
 export { verifyMetaWebhookChallenge, verifyMetaWebhookSignature } from "./meta/webhook";
 export { parseWhatsAppWebhookPayload } from "./meta/whatsapp-inbound";
 export { parseMessengerWebhookPayload } from "./meta/messenger-inbound";
+export { parseInstagramWebhookPayload } from "./meta/instagram-inbound";
 export { processWhatsAppInbound } from "./meta/process-inbound";
 export { processMessengerInbound } from "./meta/process-messenger-inbound";
 export { processMessengerEcho } from "./meta/process-messenger-echo";
+export { processInstagramInbound } from "./meta/process-instagram-inbound";
 export { sendWhatsAppReply } from "./meta/whatsapp-outbound";
 export { sendMessengerReply } from "./meta/messenger-outbound";
+export { sendInstagramReply } from "./meta/instagram-outbound";
 export {
   listChannels,
   connectMetaChannel,
   connectMetaChannelWithDevCredentials,
   connectMessengerChannel,
   connectMessengerChannelWithDevCredentials,
+  connectInstagramChannel,
   disconnectMetaChannel,
   getChannelHealth,
   isMetaDevConnectConfigured,
@@ -101,11 +108,14 @@ export {
   ensureFreshMessengerToken,
   getMetaCredentialsForTenant,
 } from "./channels/service";
+export { ensureFreshInstagramToken, resolveTenantByIgUserId } from "./channels/instagram";
 export type {
   ConnectMetaBody,
   ConnectMessengerBody,
+  ConnectInstagramBody,
   MetaCredentials,
   MessengerInboundMessage,
+  InstagramInboundMessage,
   WhatsAppInboundMessage,
 } from "./channels/types";
 export { parseCatalogCsv, type CatalogProduct } from "./ingest/parsers/catalog-csv";

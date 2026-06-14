@@ -123,6 +123,8 @@ export async function updateJob(
   );
 }
 
+const STALE_QUEUED_JOB_MS = 2 * 60 * 1000;
+
 export async function hasActiveJobForSource(tenantId: string, sourceId: string, config: CoreConfig) {
   const db = getDocClient(config);
   const res = await db.send(
@@ -135,11 +137,15 @@ export async function hasActiveJobForSource(tenantId: string, sourceId: string, 
       },
     })
   );
-  return (res.Items ?? []).some(
-    (item) =>
-      item.sourceId === sourceId &&
-      (item.status === "queued" || item.status === "running")
-  );
+  const now = Date.now();
+  return (res.Items ?? []).some((item) => {
+    if (item.sourceId !== sourceId) return false;
+    if (item.status === "running") return true;
+    if (item.status !== "queued") return false;
+    const createdAt = item.createdAt as string | undefined;
+    if (!createdAt) return true;
+    return now - new Date(createdAt).getTime() < STALE_QUEUED_JOB_MS;
+  });
 }
 
 export function jobToResponse(item: Record<string, unknown>): IngestJob {

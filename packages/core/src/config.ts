@@ -53,6 +53,8 @@ export interface CoreConfig {
   paymentWebhookSecret?: string;
   /** Dev only: auto-activate plan on checkout without payment */
   billingSkipPayment: boolean;
+  ingestQueueUrl?: string;
+  ingestStateMachineArn?: string;
 }
 
 function parseMetaSecretsBackend(): MetaSecretsBackend | undefined {
@@ -114,5 +116,7 @@ export function loadConfig(): CoreConfig {
     paymentGatewayCheckoutUrl: process.env.PAYMENT_GATEWAY_CHECKOUT_URL,
     paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET,
     billingSkipPayment: process.env.BILLING_SKIP_PAYMENT === "true",
+    ingestQueueUrl: process.env.INGEST_QUEUE_URL,
+    ingestStateMachineArn: process.env.INGEST_STATE_MACHINE_ARN,
   };
 }

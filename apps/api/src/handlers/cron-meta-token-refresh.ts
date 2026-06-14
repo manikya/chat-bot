@@ -1,5 +1,5 @@
 import { loadConfig, refreshExpiringMetaTokens } from "@commercechat/core";
-import { ok } from "@commercechat/shared";
+import { ApiError, ErrorCodes, ok } from "@commercechat/shared";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { createHandler } from "../lib/handler";
 
@@ -13,11 +13,7 @@ function isAuthorized(event: APIGatewayProxyEventV2, secret?: string): boolean {
 export const handler = createHandler(async (event) => {
   const config = loadConfig();
   if (!isAuthorized(event, config.metaTokenRefreshCronSecret)) {
-    return {
-      statusCode: 403,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ success: false, error: "Forbidden" }),
-    };
+    throw new ApiError(ErrorCodes.FORBIDDEN, "Forbidden", 403);
   }
 
   const result = await refreshExpiringMetaTokens(config);

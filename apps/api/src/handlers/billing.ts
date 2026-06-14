@@ -26,5 +26,5 @@ export const checkoutHandler = createHandler(
     const body = parseBody<{ plan: TenantPlan; successUrl?: string; cancelUrl?: string }>(event);
     return createBillingCheckout(auth!, body, loadConfig());
   },
-  { requireAuth: true }
+  { requireAuth: true, minRole: "owner" }
 );

@@ -3,6 +3,8 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { loadMetaCredentials } from "./credentials";
 import { loadMessengerCredentials } from "./messenger-credentials";
+import { loadInstagramCredentials } from "./instagram-credentials";
+import { ensureFreshInstagramToken } from "./instagram";
 import { ensureFreshMessengerToken, ensureFreshMetaToken } from "./service";
 
 const REFRESH_WITHIN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -16,7 +18,7 @@ export interface MetaTokenRefreshResult {
 
 async function listConnectedMetaChannels(config: CoreConfig) {
   const db = getDocClient(config);
-  const rows: Array<{ tenantId: string; channel: "whatsapp" | "messenger" }> = [];
+  const rows: Array<{ tenantId: string; channel: "whatsapp" | "messenger" | "instagram" }> = [];
   let startKey: Record<string, unknown> | undefined;
 
   do {
@@ -37,7 +39,7 @@ async function listConnectedMetaChannels(config: CoreConfig) {
       const sk = String(item.SK ?? "");
       if (!sk.startsWith("CHANNEL#")) continue;
       const channel = sk.slice("CHANNEL#".length);
-      if (channel !== "whatsapp" && channel !== "messenger") continue;
+      if (channel !== "whatsapp" && channel !== "messenger" && channel !== "instagram") continue;
       const pk = String(item.PK ?? "");
       if (!pk.startsWith("TENANT#")) continue;
       rows.push({ tenantId: pk.slice("TENANT#".length), channel });
@@ -86,13 +88,29 @@ export async function refreshExpiringMetaTokens(
           channel,
           status: refreshed ? "refreshed" : "unchanged",
         });
-      } else {
+      } else if (channel === "messenger") {
         const before = await loadMessengerCredentials(tenantId, config);
         if (!before || !tokenExpiresSoon(before.tokenExpiresAt)) {
           result.details.push({ tenantId, channel, status: "skipped" });
           continue;
         }
         const after = await ensureFreshMessengerToken(tenantId, config);
+        const refreshed = Boolean(
+          after && after.pageAccessToken !== before.pageAccessToken
+        );
+        if (refreshed) result.refreshed += 1;
+        result.details.push({
+          tenantId,
+          channel,
+          status: refreshed ? "refreshed" : "unchanged",
+        });
+      } else {
+        const before = await loadInstagramCredentials(tenantId, config);
+        if (!before || !tokenExpiresSoon(before.tokenExpiresAt)) {
+          result.details.push({ tenantId, channel, status: "skipped" });
+          continue;
+        }
+        const after = await ensureFreshInstagramToken(tenantId, config);
         const refreshed = Boolean(
           after && after.pageAccessToken !== before.pageAccessToken
         );

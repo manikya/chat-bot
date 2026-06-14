@@ -1,6 +1,6 @@
 import type { AuthContext, ChatIntent } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
-import { getProductBySku, searchProductCache } from "../catalog/products";
+import { getProductBySku, getStoreCurrency, searchProductCache } from "../catalog/products";
 import { lookupWordPressOrder } from "../commerce/wordpress/service";
 import { getTenantConfig } from "../tenant/service";
 import { retrieveKnowledge } from "../ingest/retrieve";
@@ -112,6 +112,7 @@ export async function executeTool(
     case "search_products": {
       const query = String(args.query ?? "");
       const limit = Number(args.limit ?? 5);
+      const storeCurrency = await getStoreCurrency(ctx.auth.tenantId, ctx.config);
       const [vectorHits, cacheHits] = await Promise.all([
         retrieveKnowledge(ctx.auth, query, ctx.config, { topK: limit, sourceType: "catalog" }),
         searchProductCache(ctx.auth.tenantId, query, ctx.config, {
@@ -128,7 +129,7 @@ export async function executeTool(
             name: h.chunk.metadata.title ?? "Product",
             description: h.chunk.text.slice(0, 200),
             price: 0,
-            currency: "USD",
+            currency: storeCurrency,
             inStock: true,
             productUrl: h.chunk.metadata.url,
           }));

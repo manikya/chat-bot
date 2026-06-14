@@ -17,8 +17,9 @@ type ProductResult = {
 function formatPrice(price?: number, currency?: string) {
   if (price == null || !Number.isFinite(price)) return undefined;
   const code = currency || "USD";
+  const locale = code === "LKR" ? "en-LK" : "en";
   try {
-    return new Intl.NumberFormat("en", { style: "currency", currency: code }).format(price);
+    return new Intl.NumberFormat(locale, { style: "currency", currency: code }).format(price);
   } catch {
     return `${code} ${price}`;
   }

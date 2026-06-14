@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import {
   TransactWriteCommand,
+  type TransactWriteCommandInput,
   GetCommand,
   PutCommand,
   UpdateCommand,
@@ -75,7 +76,7 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
   const widget = widgetKeyPair();
   const ttl = Math.floor(Date.now() / 1000) + 86400;
 
-  const transactItems: Parameters<typeof TransactWriteCommand>[0]["input"]["TransactItems"] = [
+  const transactItems: NonNullable<TransactWriteCommandInput["TransactItems"]> = [
         {
           Put: {
             TableName: deps.config.tableName,

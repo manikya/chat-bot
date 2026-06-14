@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2, Context } from "aws-lambda";
 import { errors as joseErrors } from "jose";
-import { verifyAccessToken, toAuthContext, loadConfig } from "@commercechat/core";
+import { verifyAccessToken, toAuthContext, loadConfig, assertMinRole } from "@commercechat/core";
 import { ApiError, ErrorCodes } from "@commercechat/shared";
 import { verifyWidgetApiKey } from "@commercechat/core";
 import {
@@ -19,7 +19,12 @@ export type ApiKeyHandler = (
 
 export function createHandler(
   fn: ApiHandler,
-  options?: { requireAuth?: boolean; successStatus?: number; noBody?: boolean }
+  options?: {
+    requireAuth?: boolean;
+    minRole?: "admin" | "owner";
+    successStatus?: number;
+    noBody?: boolean;
+  }
 ) {
   return async (
     event: APIGatewayProxyEventV2,
@@ -44,6 +49,9 @@ export function createHandler(
           throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid token", 401);
         }
         auth = toAuthContext(claims);
+        if (options?.minRole) {
+          assertMinRole(auth, options.minRole);
+        }
       }
       const result = await fn(event, auth);
       let status = options?.successStatus ?? 200;

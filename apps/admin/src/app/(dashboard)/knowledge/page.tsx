@@ -9,6 +9,7 @@ import {
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { pollIngestJob } from "@/lib/poll-job";
+import { formatIngestJobStats, ingestJobTypeLabel } from "@/lib/format-ingest-job";
 import type { IngestJob, KnowledgeSource } from "@commercechat/mock-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+
+function formatProductPrice(price: number, currency = "USD") {
+  const locale = currency === "LKR" ? "en-LK" : "en";
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(price);
+  } catch {
+    return `${currency} ${price}`;
+  }
+}
 
 type PageVoiceStatus = {
   sourceId: string | null;
@@ -35,7 +45,7 @@ export default function KnowledgePage() {
   const [url, setUrl] = useState("https://acme-shoes.com");
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
-  const [products, setProducts] = useState<Array<{ sku: string; name: string; price: number }>>([]);
+  const [products, setProducts] = useState<Array<{ sku: string; name: string; price: number; currency?: string }>>([]);
   const [wpSiteUrl, setWpSiteUrl] = useState("https://");
   const [wpApiKey, setWpApiKey] = useState("");
   const [wpStatus, setWpStatus] = useState<{
@@ -381,7 +391,9 @@ export default function KnowledgePage() {
             {products.map((p) => (
               <div key={p.sku} className="flex justify-between text-sm border-b py-2 last:border-0">
                 <span>{p.name}</span>
-                <span className="text-muted-foreground">{p.sku} · ${p.price}</span>
+                <span className="text-muted-foreground">
+                  {p.sku} · {formatProductPrice(p.price, p.currency)}
+                </span>
               </div>
             ))}
           </CardContent>
@@ -433,18 +445,48 @@ export default function KnowledgePage() {
 
       <Card>
         <CardHeader><CardTitle className="text-base">Recent ingest jobs</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {jobs.map((j) => (
-            <div key={j.jobId} className="flex justify-between text-sm border-b py-2 last:border-0">
-              <span>
-                {j.type} — {j.sourceId}
-                {j.stats?.chunksCreated != null && ` · ${j.stats.chunksCreated} chunks`}
-              </span>
-              <Badge variant={j.status === "completed" ? "success" : j.status === "running" || j.status === "queued" ? "warning" : "secondary"}>
-                {j.status}
-              </Badge>
-            </div>
-          ))}
+        <CardContent className="space-y-0">
+          {jobs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No ingest jobs yet.</p>
+          ) : (
+            jobs.map((j) => {
+              const statLines = formatIngestJobStats(j);
+              const inProgress = j.status === "running" || j.status === "queued";
+              return (
+                <div key={j.jobId} className="flex items-start justify-between gap-4 border-b py-3 text-sm last:border-0">
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-medium">{ingestJobTypeLabel(j.type)}</p>
+                    <p className="truncate text-muted-foreground">{j.sourceId}</p>
+                    {statLines.length > 0 && (
+                      <p className="text-muted-foreground">{statLines.join(" · ")}</p>
+                    )}
+                    {inProgress && j.progressPct != null && j.progressPct > 0 && (
+                      <p className="text-muted-foreground">{j.progressPct}% complete</p>
+                    )}
+                    {j.status === "failed" && j.error && (
+                      <p className="text-xs text-destructive">{j.error}</p>
+                    )}
+                    {j.completedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Finished {new Date(j.completedAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  <Badge
+                    variant={
+                      j.status === "completed"
+                        ? "success"
+                        : inProgress
+                          ? "warning"
+                          : "secondary"
+                    }
+                  >
+                    {j.status}
+                  </Badge>
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
     </div>

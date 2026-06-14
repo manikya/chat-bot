@@ -255,13 +255,15 @@
   }
 
   function formatPrice(price, currency) {
+    var code = currency || "USD";
+    var locale = code === "LKR" ? "en-LK" : undefined;
     try {
-      return new Intl.NumberFormat(undefined, {
+      return new Intl.NumberFormat(locale, {
         style: "currency",
-        currency: currency || "USD",
+        currency: code,
       }).format(Number(price || 0));
     } catch (e) {
-      return (currency || "USD") + " " + price;
+      return code + " " + price;
     }
   }
 

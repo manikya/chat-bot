@@ -6,6 +6,7 @@ export interface CatalogProduct {
   description: string;
   price: number;
   category: string;
+  currency?: string;
   imageUrl?: string;
   imageUrls?: string[];
   sizes?: string;

@@ -53,3 +53,31 @@ export interface MessengerInboundMessage {
   /** Present on API-sent echoes; matches `META_APP_ID` for bot replies. */
   appId?: string;
 }
+
+export interface InstagramCredentials {
+  pageId: string;
+  pageName: string;
+  pageAccessToken: string;
+  igUserId: string;
+  igUsername?: string;
+  tokenExpiresAt?: string;
+  updatedAt: string;
+}
+
+export interface ConnectInstagramBody {
+  code?: string;
+  redirectUri?: string;
+  pageId?: string;
+  pageAccessToken?: string;
+  pageName?: string;
+  igUserId?: string;
+  igUsername?: string;
+}
+
+export interface InstagramInboundMessage {
+  messageId: string;
+  igUserId: string;
+  from: string;
+  text: string;
+  timestamp: string;
+}

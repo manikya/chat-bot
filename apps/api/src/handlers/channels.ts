@@ -3,6 +3,7 @@ import {
   connectMetaChannelWithDevCredentials,
   connectMessengerChannel,
   connectMessengerChannelWithDevCredentials,
+  connectInstagramChannel,
   disconnectMetaChannel,
   getChannelHealth,
   isMetaDevConnectConfigured,
@@ -11,6 +12,7 @@ import {
   loadConfig,
   type ConnectMetaBody,
   type ConnectMessengerBody,
+  type ConnectInstagramBody,
 } from "@commercechat/core";
 import { ApiError, ErrorCodes, ok } from "@commercechat/shared";
 import { createHandler } from "../lib/handler";
@@ -26,7 +28,7 @@ export const connectHandler = createHandler(
     const body = parseBody<ConnectMetaBody>(event);
     return connectMetaChannel(auth!, body, loadConfig());
   },
-  { requireAuth: true }
+  { requireAuth: true, minRole: "admin" }
 );
 
 export const connectMessengerHandler = createHandler(
@@ -34,7 +36,15 @@ export const connectMessengerHandler = createHandler(
     const body = parseBody<ConnectMessengerBody>(event);
     return connectMessengerChannel(auth!, body, loadConfig());
   },
-  { requireAuth: true }
+  { requireAuth: true, minRole: "admin" }
+);
+
+export const connectInstagramHandler = createHandler(
+  async (event, auth) => {
+    const body = parseBody<ConnectInstagramBody>(event);
+    return connectInstagramChannel(auth!, body, loadConfig());
+  },
+  { requireAuth: true, minRole: "admin" }
 );
 
 export const disconnectHandler = createHandler(
@@ -45,7 +55,7 @@ export const disconnectHandler = createHandler(
     }
     return disconnectMetaChannel(auth!, channel, loadConfig());
   },
-  { requireAuth: true, noBody: true, successStatus: 204 }
+  { requireAuth: true, minRole: "admin", noBody: true, successStatus: 204 }
 );
 
 export const healthHandler = createHandler(

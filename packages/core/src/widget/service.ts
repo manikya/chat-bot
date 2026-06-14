@@ -5,8 +5,10 @@ import { runChatOrchestrator } from "../chat/orchestrator";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { buildWidgetEmbedPlaceholder } from "./embed";
+import { assertWidgetChatRateLimit, assertWidgetConfigRateLimit } from "./rate-limit";
 
 export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
+  await assertWidgetConfigRateLimit(tenantId, config);
   const db = getDocClient(config);
   const [profileRes, configRes] = await Promise.all([
     db.send(
@@ -61,6 +63,7 @@ export interface WidgetProductCard {
 }
 
 function buildSuggestedActions(toolResults?: Array<{ tool: string; success: boolean; [key: string]: unknown }>) {
+  if (buildProductCards(toolResults).length > 0) return [];
   const search = toolResults?.find((t) => t.tool === "search_products" && t.success);
   const products = search?.products as Array<{ sku: string; name: string; price: number; currency?: string }> | undefined;
   if (!products?.length) return [];
@@ -73,8 +76,9 @@ function buildSuggestedActions(toolResults?: Array<{ tool: string; success: bool
 
 function formatPrice(price: number, currency?: string) {
   const code = currency || "USD";
+  const locale = code === "LKR" ? "en-LK" : "en";
   try {
-    return new Intl.NumberFormat("en", { style: "currency", currency: code }).format(price);
+    return new Intl.NumberFormat(locale, { style: "currency", currency: code }).format(price);
   } catch {
     return `${code} ${price}`;
   }
@@ -131,6 +135,8 @@ export async function widgetChat(tenantId: string, body: WidgetChatBody, config:
   if (!body.message?.trim()) {
     throw new ApiError(ErrorCodes.VALIDATION_ERROR, "message is required", 400);
   }
+
+  await assertWidgetChatRateLimit(tenantId, body.sessionId.trim(), config);
 
   const auth = {
     tenantId,

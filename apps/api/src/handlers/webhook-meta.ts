@@ -5,9 +5,11 @@ import {
   verifyMetaWebhookSignature,
   parseWhatsAppWebhookPayload,
   parseMessengerWebhookPayload,
+  parseInstagramWebhookPayload,
   processWhatsAppInbound,
   processMessengerInbound,
   processMessengerEcho,
+  processInstagramInbound,
 } from "@commercechat/core";
 import { queryParam } from "../lib/apigw";
 
@@ -77,7 +79,14 @@ export async function handler(
       }
     }
 
-    if (waMessages.length === 0 && messengerMessages.length === 0) {
+    const instagramMessages = parseInstagramWebhookPayload(payload);
+    for (const msg of instagramMessages) {
+      void processInstagramInbound(msg, config).catch((err) => {
+        console.error("[webhook-meta] instagram process error:", err instanceof Error ? err.message : err);
+      });
+    }
+
+    if (waMessages.length === 0 && messengerMessages.length === 0 && instagramMessages.length === 0) {
       console.log("[webhook-meta] non-message event received");
     }
 

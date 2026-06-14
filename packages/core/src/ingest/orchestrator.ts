@@ -21,6 +21,8 @@ import {
   touchWordPressSyncTimestamp,
 } from "../commerce/wordpress/service";
 import { createVectorStore } from "./vectors";
+import { dispatchIngestJob } from "./dispatch";
+import type { IngestJobKind } from "./run-job";
 
 async function getSourceItem(tenantId: string, sourceId: string, config: CoreConfig) {
   const db = getDocClient(config);
@@ -217,8 +219,8 @@ export function scheduleWebsiteIngestJob(
   tenantId: string,
   jobId: string,
   config: CoreConfig
-): void {
-  scheduleIngestJob("website", tenantId, jobId, config, () =>
+): Promise<void> {
+  return scheduleIngestJob("website", tenantId, jobId, config, () =>
     runWebsiteIngestJob(tenantId, jobId, config)
   );
 }
@@ -363,8 +365,8 @@ export function scheduleCatalogIngestJob(
   tenantId: string,
   jobId: string,
   config: CoreConfig
-): void {
-  scheduleIngestJob("catalog", tenantId, jobId, config, () =>
+): Promise<void> {
+  return scheduleIngestJob("catalog", tenantId, jobId, config, () =>
     runCatalogIngestJob(tenantId, jobId, config)
   );
 }
@@ -402,11 +404,17 @@ export async function runWordPressCatalogIngestJob(
     await setSourceStatus(tenantId, sourceId, "syncing", config);
 
     const sourceConfig = (source.config as Record<string, unknown>) ?? {};
-    const since = sourceConfig.lastSyncAt as string | undefined;
-    const products = await fetchWordPressCatalogProducts(tenantId, config, since);
+    // Always full sync: we replace all vectors/products for this source each run.
+    const products = await fetchWordPressCatalogProducts(tenantId, config);
     stats.pagesProcessed = products.length;
 
     await updateJob(tenantId, jobId, { stats: { ...stats }, progressPct: 30 }, config);
+
+    if (products.length === 0) {
+      throw new Error(
+        "No products returned from WooCommerce. Check the store connection and that published products exist."
+      );
+    }
 
     const vectorStore = createVectorStore(config);
     const embedder = createEmbeddingProvider(config);
@@ -513,8 +521,8 @@ export function scheduleWordPressCatalogIngestJob(
   tenantId: string,
   jobId: string,
   config: CoreConfig
-): void {
-  scheduleIngestJob("woocommerce", tenantId, jobId, config, () =>
+): Promise<void> {
+  return scheduleIngestJob("woocommerce", tenantId, jobId, config, () =>
     runWordPressCatalogIngestJob(tenantId, jobId, config)
   );
 }
@@ -570,8 +578,8 @@ export function scheduleFaqIngestJob(
   tenantId: string,
   jobId: string,
   config: CoreConfig
-): void {
-  scheduleIngestJob("faq", tenantId, jobId, config, () =>
+): Promise<void> {
+  return scheduleIngestJob("faq", tenantId, jobId, config, () =>
     runFaqIngestJob(tenantId, jobId, config)
   );
 }
@@ -627,24 +635,32 @@ export function scheduleConversationIngestJob(
   tenantId: string,
   jobId: string,
   config: CoreConfig
-): void {
-  scheduleIngestJob("conversation", tenantId, jobId, config, () =>
+): Promise<void> {
+  return scheduleIngestJob("conversation", tenantId, jobId, config, () =>
     runConversationIngestJob(tenantId, jobId, config)
   );
 }
 
-function scheduleIngestJob(
-  _kind: string,
+async function scheduleIngestJob(
+  kind: IngestJobKind,
   tenantId: string,
   jobId: string,
   config: CoreConfig,
   run: () => Promise<void>
-): void {
+): Promise<void> {
   const key = `${tenantId}:${jobId}`;
   if (inFlight.has(key)) return;
   inFlight.add(key);
 
-  void run()
-    .catch((err) => console.error("[ingest]", jobId, err))
-    .finally(() => inFlight.delete(key));
+  try {
+    const dispatched = await dispatchIngestJob(kind, tenantId, jobId, config);
+    if (!dispatched) {
+      await run();
+    }
+  } catch (err) {
+    console.error("[ingest]", jobId, err);
+    throw err;
+  } finally {
+    inFlight.delete(key);
+  }
 }

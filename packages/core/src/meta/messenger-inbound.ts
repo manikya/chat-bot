@@ -7,6 +7,7 @@ export function parseMessengerWebhookPayload(payload: unknown): MessengerInbound
       id?: string;
       messaging?: Array<{
         sender?: { id?: string };
+        recipient?: { id?: string };
         timestamp?: number;
         message?: {
           mid?: string;

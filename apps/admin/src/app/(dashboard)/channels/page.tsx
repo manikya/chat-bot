@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { ChannelInfo } from "@commercechat/mock-api";
 import { MetaConnectButton } from "@/components/channels/meta-connect-button";
 import { MetaMessengerConnectButton } from "@/components/channels/meta-messenger-connect-button";
+import { MetaInstagramConnectButton } from "@/components/channels/meta-instagram-connect-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,9 +28,11 @@ export default function ChannelsPage() {
     load();
   }, []);
 
-  const disconnect = async (channel: "whatsapp" | "messenger") => {
+  const disconnect = async (channel: "whatsapp" | "messenger" | "instagram") => {
     await api.channels.disconnect(channel);
-    toast.success(`${channel === "whatsapp" ? "WhatsApp" : "Messenger"} disconnected`);
+    const label =
+      channel === "whatsapp" ? "WhatsApp" : channel === "messenger" ? "Messenger" : "Instagram";
+    toast.success(`${label} disconnected`);
     load();
   };
 
@@ -38,7 +41,7 @@ export default function ChannelsPage() {
       <div>
         <h1 className="text-2xl font-bold">Channels</h1>
         <p className="text-muted-foreground">
-          Connect WhatsApp and Facebook Messenger so customers can message your store
+          Connect WhatsApp, Messenger, and Instagram so customers can message your store
         </p>
       </div>
 
@@ -76,6 +79,27 @@ export default function ChannelsPage() {
                 </p>
               )}
 
+              {ch.channel === "instagram" && health.instagram?.detail && (
+                <p
+                  className={
+                    health.instagram.status === "error"
+                      ? "text-xs text-destructive"
+                      : "text-xs text-muted-foreground"
+                  }
+                >
+                  {health.instagram.detail}
+                </p>
+              )}
+
+              {ch.channel === "instagram" && ch.status === "disconnected" && (
+                <MetaInstagramConnectButton returnPath="/channels" />
+              )}
+              {ch.channel === "instagram" && ch.status === "connected" && (
+                <Button variant="outline" size="sm" onClick={() => disconnect("instagram")}>
+                  Disconnect
+                </Button>
+              )}
+
               {ch.channel === "whatsapp" && ch.status === "disconnected" && (
                 <MetaConnectButton returnPath="/channels" />
               )}
@@ -92,10 +116,6 @@ export default function ChannelsPage() {
                 <Button variant="outline" size="sm" onClick={() => disconnect("messenger")}>
                   Disconnect
                 </Button>
-              )}
-
-              {ch.channel === "instagram" && (
-                <p className="text-xs text-muted-foreground">Instagram DMs — coming soon</p>
               )}
             </CardContent>
           </Card>

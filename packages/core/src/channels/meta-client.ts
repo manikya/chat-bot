@@ -302,6 +302,22 @@ export async function listUserPages(config: CoreConfig, accessToken: string) {
   return res.data ?? [];
 }
 
+export interface PageWithInstagram {
+  id: string;
+  name?: string;
+  access_token?: string;
+  instagram_business_account?: { id: string; username?: string };
+}
+
+export async function listUserPagesWithInstagram(config: CoreConfig, accessToken: string) {
+  const res = await graphGet<{ data: PageWithInstagram[] }>(
+    config,
+    "/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}",
+    accessToken
+  );
+  return res.data ?? [];
+}
+
 /** Validate a page token via debug_token (works without pages_read_engagement). */
 export async function validatePageAccessToken(
   config: CoreConfig,
@@ -325,6 +341,18 @@ export async function subscribePageToApp(
   return graphPost<{ success: boolean }>(
     config,
     `/${pageId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks`,
+    pageAccessToken
+  );
+}
+
+export async function subscribeInstagramToApp(
+  config: CoreConfig,
+  igUserId: string,
+  pageAccessToken: string
+) {
+  return graphPost<{ success: boolean }>(
+    config,
+    `/${igUserId}/subscribed_apps?subscribed_fields=messages,messaging_postbacks,messaging_seen`,
     pageAccessToken
   );
 }

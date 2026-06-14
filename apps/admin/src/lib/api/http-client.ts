@@ -270,6 +270,19 @@ export function createHttpApi() {
           method: "POST",
           body: JSON.stringify(body),
         }),
+      connectInstagram: (body: {
+        code?: string;
+        redirectUri?: string;
+        pageId?: string;
+        pageName?: string;
+        pageAccessToken?: string;
+        igUserId?: string;
+        igUsername?: string;
+      }) =>
+        request("/api/v1/channels/meta/connect-instagram", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
       connectMetaDev: () =>
         request<{
           connected: string[];

@@ -229,16 +229,16 @@ export async function syncKnowledgeSource(
   );
 
   if (source.type === "website") {
-    scheduleWebsiteIngestJob(auth.tenantId, jobId, config);
+    await scheduleWebsiteIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "catalog") {
-    scheduleCatalogIngestJob(auth.tenantId, jobId, config);
+    await scheduleCatalogIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "faq") {
-    scheduleFaqIngestJob(auth.tenantId, jobId, config);
+    await scheduleFaqIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "conversation") {
-    scheduleConversationIngestJob(auth.tenantId, jobId, config);
+    await scheduleConversationIngestJob(auth.tenantId, jobId, config);
   } else if (source.type === "woocommerce") {
     const { scheduleWordPressCatalogIngestJob } = await import("../ingest/orchestrator");
-    scheduleWordPressCatalogIngestJob(auth.tenantId, jobId, config);
+    await scheduleWordPressCatalogIngestJob(auth.tenantId, jobId, config);
   } else {
     const { updateJob } = await import("../ingest/jobs");
     await updateJob(

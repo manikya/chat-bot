@@ -134,6 +134,12 @@ class CommerceChat_Connector_Admin
                 </p></div>
             <?php endif; ?>
 
+            <?php if ($widget_on && $api_key !== '' && $cloud_url === '') : ?>
+                <div class="notice notice-warning"><p>
+                    <?php esc_html_e('Widget is enabled but CommerceChat API URL is missing. Enter the full URL below (e.g. https://….execute-api.us-east-1.amazonaws.com) and click Save, or re-connect WooCommerce in CommerceChat Admin.', 'commercechat-connector'); ?>
+                </p></div>
+            <?php endif; ?>
+
             <form method="post" action="options.php">
                 <?php settings_fields('commercechat_connector'); ?>
                 <table class="form-table">

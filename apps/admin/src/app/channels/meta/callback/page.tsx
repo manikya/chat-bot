@@ -14,7 +14,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type PageOption = { id: string; name: string; pageAccessToken: string };
+type PageOption = {
+  id: string;
+  name: string;
+  pageAccessToken: string;
+  igUserId?: string;
+  igUsername?: string;
+};
 
 function MetaOAuthCallbackInner() {
   const router = useRouter();
@@ -22,6 +28,7 @@ function MetaOAuthCallbackInner() {
   const [message, setMessage] = useState("Connecting channel…");
   const [pageOptions, setPageOptions] = useState<PageOption[] | null>(null);
   const [completingPageId, setCompletingPageId] = useState<string | null>(null);
+  const [oauthFlow, setOauthFlow] = useState<"whatsapp" | "messenger" | "instagram">("whatsapp");
 
   useEffect(() => {
     const code = params.get("code");
@@ -47,6 +54,7 @@ function MetaOAuthCallbackInner() {
     }
 
     const flow = consumeMetaOAuthFlow();
+    setOauthFlow(flow);
     const redirectUri = getMetaOAuthRedirectUri();
 
     (async () => {
@@ -71,6 +79,29 @@ function MetaOAuthCallbackInner() {
           return;
         }
 
+        if (flow === "instagram") {
+          const res = await api.channels.connectInstagram({ code, redirectUri });
+          const data = res.data as {
+            needsPageSelection?: boolean;
+            pages?: PageOption[];
+            instagram?: { igUsername?: string; pageName?: string };
+          };
+
+          if (data?.needsPageSelection && data.pages?.length) {
+            setPageOptions(data.pages);
+            setMessage("Select the Page with a linked Instagram account:");
+            return;
+          }
+
+          clearMetaOAuthReturn();
+          const label = data?.instagram?.igUsername
+            ? `@${data.instagram.igUsername}`
+            : data?.instagram?.pageName;
+          toast.success(`Instagram connected${label ? `: ${label}` : ""}`);
+          router.replace(returnPath);
+          return;
+        }
+
         await api.channels.connectMeta({ code, redirectUri });
         clearMetaOAuthReturn();
         toast.success("WhatsApp connected");
@@ -89,6 +120,25 @@ function MetaOAuthCallbackInner() {
   async function completePageSelection(page: PageOption) {
     setCompletingPageId(page.id);
     try {
+      const flow = oauthFlow;
+      if (flow === "instagram") {
+        const res = await api.channels.connectInstagram({
+          pageId: page.id,
+          pageName: page.name,
+          pageAccessToken: page.pageAccessToken,
+          igUserId: page.igUserId,
+          igUsername: page.igUsername,
+        });
+        const data = res.data as { instagram?: { igUsername?: string; pageName?: string } };
+        clearMetaOAuthReturn();
+        const label = data?.instagram?.igUsername
+          ? `@${data.instagram.igUsername}`
+          : data?.instagram?.pageName ?? page.name;
+        toast.success(`Instagram connected: ${label}`);
+        router.replace("/channels");
+        return;
+      }
+
       const res = await api.channels.connectMessenger({
         pageId: page.id,
         pageName: page.name,

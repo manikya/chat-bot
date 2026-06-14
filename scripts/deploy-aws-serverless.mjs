@@ -14,6 +14,7 @@ const INVENTORY_DIR = join(ROOT, "infra/deployments");
 
 const ROUTES = [
   ["GET", "/health", "health"],
+  ["GET", "/widget/v1.js", "widget-bundle"],
   ["GET", "/webhooks/meta", "webhook-meta"],
   ["POST", "/webhooks/meta", "webhook-meta"],
   ["POST", "/webhooks/payment", "webhook-payment"],
@@ -78,6 +79,7 @@ const ROUTES = [
   ["GET", "/api/v1/channels", "channels", "listHandler"],
   ["POST", "/api/v1/channels/meta/connect", "channels", "connectHandler"],
   ["POST", "/api/v1/channels/meta/connect-messenger", "channels", "connectMessengerHandler"],
+  ["POST", "/api/v1/channels/meta/connect-instagram", "channels", "connectInstagramHandler"],
   ["POST", "/api/v1/channels/meta/connect-dev", "channels", "devConnectHandler"],
   ["POST", "/api/v1/channels/meta/connect-messenger-dev", "channels", "messengerDevConnectHandler"],
   ["GET", "/api/v1/channels/meta/dev-status", "channels", "devStatusHandler"],
@@ -441,7 +443,15 @@ function routeKey(method, path) {
   return `${method} ${path}`;
 }
 
-function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFiles }) {
+function buildTemplate({
+  env,
+  region,
+  artifactBucket,
+  artifactPrefix,
+  handlerFiles,
+  withIngestPipeline = false,
+  withIngestStepFunctions = false,
+}) {
   const resources = {};
   const lambdaRole = "LambdaRole";
   const tableName = `commercechat-${env}-storage-main`;
@@ -494,6 +504,99 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
       Tags: resourceTags(env, "storage", "storage", "customer"),
     },
   };
+
+  // S3 Vectors bucket is created by scripts/create-s3-vectors-bucket.mjs before deploy
+  // (CFN AWS::S3Vectors::VectorBucket fails with 409 if the bucket already exists).
+
+  if (withIngestPipeline) {
+    resources.IngestDeadLetterQueue = {
+      Type: "AWS::SQS::Queue",
+      Properties: {
+        QueueName: `commercechat-${env}-ingest-dlq`,
+        MessageRetentionPeriod: 1209600,
+        Tags: resourceTags(env, "ingest", "knowledge-ingest", "customer"),
+      },
+    };
+
+    resources.IngestQueue = {
+      Type: "AWS::SQS::Queue",
+      Properties: {
+        QueueName: `commercechat-${env}-ingest`,
+        VisibilityTimeout: 900,
+        RedrivePolicy: {
+          deadLetterTargetArn: { "Fn::GetAtt": ["IngestDeadLetterQueue", "Arn"] },
+          maxReceiveCount: 3,
+        },
+        Tags: resourceTags(env, "ingest", "knowledge-ingest", "customer"),
+      },
+    };
+
+    if (withIngestStepFunctions) {
+      resources.IngestStateMachineRole = {
+      Type: "AWS::IAM::Role",
+      Properties: {
+        RoleName: { "Fn::Sub": `commercechat-${env}-ingest-sfn-role-\${AWS::Region}` },
+        AssumeRolePolicyDocument: {
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Principal: { Service: "states.amazonaws.com" },
+              Action: "sts:AssumeRole",
+            },
+          ],
+        },
+        Policies: [
+          {
+            PolicyName: "invoke-ingest-worker",
+            PolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Action: ["lambda:InvokeFunction"],
+                  Resource: {
+                    "Fn::Sub": `arn:aws:lambda:\${AWS::Region}:\${AWS::AccountId}:function:commercechat-${env}-ingest-worker`,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        Tags: resourceTags(env, "ingest", "knowledge-ingest", "internal"),
+      },
+    };
+    }
+  }
+
+  const ingestPolicyStatements = withIngestPipeline
+    ? [
+        {
+          Effect: "Allow",
+          Action: [
+            "sqs:ReceiveMessage",
+            "sqs:DeleteMessage",
+            "sqs:GetQueueAttributes",
+            "sqs:SendMessage",
+          ],
+          Resource: [
+            { "Fn::GetAtt": ["IngestQueue", "Arn"] },
+            { "Fn::GetAtt": ["IngestDeadLetterQueue", "Arn"] },
+          ],
+        },
+        ...(withIngestStepFunctions
+          ? [
+              {
+                Effect: "Allow",
+                Action: ["states:StartExecution"],
+                Resource: {
+                  "Fn::Sub": `arn:aws:states:\${AWS::Region}:\${AWS::AccountId}:stateMachine:commercechat-${env}-ingest`,
+                },
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   resources[lambdaRole] = {
     Type: "AWS::IAM::Role",
@@ -575,6 +678,7 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
                 ],
                 Resource: { "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:commercechat/*" },
               },
+              ...ingestPolicyStatements,
             ],
           },
         },
@@ -611,6 +715,10 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
   for (const [, , file, exportName = "handler"] of ROUTES) {
     functionDefs.set(`${file}:${exportName}`, { file, exportName });
   }
+  functionDefs.set("ingest-worker:handler", { file: "ingest-worker", exportName: "handler" });
+  if (!withIngestPipeline) {
+    functionDefs.delete("ingest-worker:handler");
+  }
 
   for (const { file: handlerName, exportName } of functionDefs.values()) {
     if (!handlerFiles.includes(handlerName)) {
@@ -621,11 +729,17 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
     const fnId = logicalId("Fn", suffix);
     const logId = logicalId("Log", suffix);
     const timeout =
-      handlerName.includes("knowledge") || handlerName === "chat-api" || handlerName === "widget"
+      handlerName.includes("knowledge") ||
+      handlerName === "chat-api" ||
+      handlerName === "widget" ||
+      handlerName === "ingest-worker"
         ? 60
         : 20;
     const memory =
-      handlerName.includes("knowledge") || handlerName === "chat-api" || handlerName === "widget"
+      handlerName.includes("knowledge") ||
+      handlerName === "chat-api" ||
+      handlerName === "widget" ||
+      handlerName === "ingest-worker"
         ? 1024
         : 512;
 
@@ -681,9 +795,77 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
             SKIP_EMAIL_VERIFICATION: { Ref: "SkipEmailVerification" },
             S3_VECTORS_BUCKET: vectorBucketName,
             DATA_DIR: "/tmp/commercechat",
+            ...(handlerName !== "ingest-worker" && withIngestPipeline
+              ? {
+                  INGEST_QUEUE_URL: { Ref: "IngestQueue" },
+                  ...(withIngestStepFunctions
+                    ? { INGEST_STATE_MACHINE_ARN: { Ref: "IngestStateMachine" } }
+                    : {}),
+                }
+              : {}),
           },
         },
         Tags: resourceTags(env, cls.component, cls.costGroup, cls.dataClass),
+      },
+    };
+  }
+
+  const ingestWorkerFnId = logicalId("Fn", "ingest-worker");
+
+  if (withIngestPipeline && withIngestStepFunctions) {
+    resources.IngestStateMachine = {
+      Type: "AWS::StepFunctions::StateMachine",
+      DependsOn: [ingestWorkerFnId],
+      Properties: {
+        StateMachineName: `commercechat-${env}-ingest`,
+        RoleArn: { "Fn::GetAtt": ["IngestStateMachineRole", "Arn"] },
+        DefinitionString: {
+          "Fn::Sub": [
+            JSON.stringify({
+              Comment: "CommerceChat knowledge ingest",
+              StartAt: "RunIngestJob",
+              States: {
+                RunIngestJob: {
+                  Type: "Task",
+                  Resource: "arn:aws:states:::lambda:invoke",
+                  OutputPath: "$.Payload",
+                  Parameters: {
+                    FunctionName: "${IngestWorkerArn}",
+                    Payload: {
+                      "kind.$": "$.kind",
+                      "tenantId.$": "$.tenantId",
+                      "jobId.$": "$.jobId",
+                    },
+                  },
+                  Retry: [
+                    {
+                      ErrorEquals: ["States.ALL"],
+                      IntervalSeconds: 5,
+                      MaxAttempts: 2,
+                      BackoffRate: 2,
+                    },
+                  ],
+                  End: true,
+                },
+              },
+            }),
+            { IngestWorkerArn: { "Fn::GetAtt": [ingestWorkerFnId, "Arn"] } },
+          ],
+        },
+        Tags: resourceTags(env, "ingest", "knowledge-ingest", "internal"),
+      },
+    };
+  }
+
+  if (withIngestPipeline && handlerFiles.includes("ingest-worker")) {
+    resources.IngestWorkerEventSourceMapping = {
+      Type: "AWS::Lambda::EventSourceMapping",
+      DependsOn: [ingestWorkerFnId],
+      Properties: {
+        BatchSize: 1,
+        Enabled: true,
+        EventSourceArn: { "Fn::GetAtt": ["IngestQueue", "Arn"] },
+        FunctionName: { Ref: ingestWorkerFnId },
       },
     };
   }
@@ -896,6 +1078,8 @@ async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const preflightOnly = process.argv.includes("--preflight-only");
   const deleteFailedStack = process.argv.includes("--delete-failed-stack");
+  const withIngestPipeline = process.argv.includes("--with-ingest-pipeline");
+  const withIngestStepFunctions = process.argv.includes("--with-ingest-step-functions");
 
   if (!existsSync(credentialsCsv)) throw new Error(`Credentials CSV not found: ${credentialsCsv}`);
   loadLocalApiEnv();
@@ -1013,6 +1197,11 @@ async function main() {
     sh("npm", ["run", "build:lambdas"], { cwd: ROOT, stdio: "inherit" });
 
     const vectorBucketName = `commercechat-${env}-vectors`;
+    if (!withIngestPipeline) {
+      console.log("Ingest SQS skipped (pass --with-ingest-pipeline).");
+    } else if (!withIngestStepFunctions) {
+      console.log("Ingest Step Functions skipped (pass --with-ingest-step-functions when States IAM is attached).");
+    }
     console.log(`Ensuring S3 Vectors bucket ${vectorBucketName}...`);
     try {
       sh("node", ["scripts/create-s3-vectors-bucket.mjs", `--env=${env}`, `--region=${region}`], {
@@ -1022,8 +1211,7 @@ async function main() {
       });
     } catch {
       console.warn(
-        `Vector bucket not created — RAG ingest will fail until ${vectorBucketName} exists. ` +
-          "Add s3vectors permissions from infra/aws-deploy-iam-policy.json or create the bucket in the AWS console."
+        `Vector bucket pre-create skipped — CloudFormation will create ${vectorBucketName} when IAM allows AWS::S3Vectors::VectorBucket.`
       );
     }
 
@@ -1037,7 +1225,15 @@ async function main() {
 
     mkdirSync(OUT_DIR, { recursive: true });
     zipHandlers(handlerFiles, artifactDir);
-    const template = buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFiles });
+    const template = buildTemplate({
+      env,
+      region,
+      artifactBucket,
+      artifactPrefix,
+      handlerFiles,
+      withIngestPipeline,
+      withIngestStepFunctions,
+    });
     writeFileSync(templatePath, `${JSON.stringify(template, null, 2)}\n`);
 
     if (dryRun) {
