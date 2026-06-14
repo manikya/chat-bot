@@ -65,6 +65,8 @@ export {
   createBillingCheckout,
   confirmBillingCheckout,
   applyPlanToTenant,
+  cancelBillingSubscription,
+  reactivateBillingSubscription,
   verifyPaymentWebhookSecret,
 } from "./billing/service";
 export { createLLMProvider } from "./llm/provider";

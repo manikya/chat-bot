@@ -55,6 +55,8 @@ import {
   subscriptionHandler as billingSubscriptionHandler,
   overviewHandler as billingOverviewHandler,
   checkoutHandler as billingCheckoutHandler,
+  cancelHandler as billingCancelHandler,
+  reactivateHandler as billingReactivateHandler,
 } from "../handlers/billing";
 import {
   listHandler as channelsListHandler,
@@ -86,6 +88,8 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/billing/subscription", handler: billingSubscriptionHandler },
   { method: "GET", path: "/api/v1/billing/overview", handler: billingOverviewHandler },
   { method: "POST", path: "/api/v1/billing/checkout", handler: billingCheckoutHandler },
+  { method: "POST", path: "/api/v1/billing/cancel", handler: billingCancelHandler },
+  { method: "POST", path: "/api/v1/billing/reactivate", handler: billingReactivateHandler },
   { method: "POST", path: "/auth/signup", handler: signupHandler },
   { method: "POST", path: "/auth/login", handler: loginHandler },
   { method: "GET", path: "/auth/me", handler: meHandler },

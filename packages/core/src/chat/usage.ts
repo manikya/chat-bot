@@ -108,6 +108,31 @@ export async function incrementUsage(
   );
 }
 
+export async function incrementIngestJobs(tenantId: string, config: CoreConfig) {
+  const period = currentPeriod();
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.usage(period) },
+      UpdateExpression:
+        "SET #period = if_not_exists(#period, :period), #updatedAt = :u ADD #ingestJobs :one",
+      ExpressionAttributeNames: {
+        "#period": "period",
+        "#updatedAt": "updatedAt",
+        "#ingestJobs": "ingestJobs",
+      },
+      ExpressionAttributeValues: {
+        ":period": period,
+        ":u": now,
+        ":one": 1,
+      },
+    })
+  );
+}
+
 export async function checkMessageQuota(tenantId: string, config: CoreConfig) {
   const db = getDocClient(config);
   const [usage, limitsRes] = await Promise.all([

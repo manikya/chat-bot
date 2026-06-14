@@ -1,9 +1,11 @@
 import {
+  cancelBillingSubscription,
   createBillingCheckout,
   getBillingOverview,
   getBillingSubscription,
   listBillingPlans,
   loadConfig,
+  reactivateBillingSubscription,
 } from "@commercechat/core";
 import type { TenantPlan } from "@commercechat/shared";
 import { createHandler } from "../lib/handler";
@@ -26,5 +28,15 @@ export const checkoutHandler = createHandler(
     const body = parseBody<{ plan: TenantPlan; successUrl?: string; cancelUrl?: string }>(event);
     return createBillingCheckout(auth!, body, loadConfig());
   },
+  { requireAuth: true, minRole: "owner" }
+);
+
+export const cancelHandler = createHandler(
+  async (_event, auth) => cancelBillingSubscription(auth!, loadConfig()),
+  { requireAuth: true, minRole: "owner" }
+);
+
+export const reactivateHandler = createHandler(
+  async (_event, auth) => reactivateBillingSubscription(auth!, loadConfig()),
   { requireAuth: true, minRole: "owner" }
 );

@@ -444,6 +444,13 @@ export function createHttpApi() {
           method: "POST",
           body: JSON.stringify(body),
         }),
+      cancel: () =>
+        request<{ cancelAtPeriodEnd: boolean; currentPeriodEnd: string | null }>(
+          "/api/v1/billing/cancel",
+          { method: "POST" }
+        ),
+      reactivate: () =>
+        request<{ cancelAtPeriodEnd: boolean }>("/api/v1/billing/reactivate", { method: "POST" }),
     },
     widget: {
       getConfig: () =>

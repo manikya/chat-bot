@@ -69,6 +69,8 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/billing/subscription",
   "GET /api/v1/billing/overview",
   "POST /api/v1/billing/checkout",
+  "POST /api/v1/billing/cancel",
+  "POST /api/v1/billing/reactivate",
   "POST /webhooks/payment",
 ] as const;
 

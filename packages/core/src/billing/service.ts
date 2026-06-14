@@ -9,11 +9,14 @@ import {
   type TenantPlan,
 } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
-import { getMonthlyUsage } from "../chat/usage";
+import { getMonthlyUsage, incrementIngestJobs } from "../chat/usage";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
+import { createVectorStore } from "../ingest/vectors";
 import { getTenantLimits } from "../tenant/service";
 import { BILLING_PLANS, getBillingPlan, isPlanUpgrade } from "./plans";
+
+export { incrementIngestJobs };
 
 const CHECKOUT_TTL_SEC = 24 * 60 * 60;
 
@@ -27,6 +30,30 @@ function addMonths(iso: string, months: number): string {
   const d = new Date(iso);
   d.setUTCMonth(d.getUTCMonth() + months);
   return d.toISOString();
+}
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString();
+}
+
+function trialDaysRemaining(periodEnd: string | undefined | null): number | null {
+  if (!periodEnd) return null;
+  const ms = new Date(periodEnd).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
+}
+
+function planFeatureFlags(planId: TenantPlan) {
+  switch (planId) {
+    case "pro":
+      return { conversationIngest: true, socialIngest: false, humanHandoff: false };
+    case "business":
+    case "enterprise":
+      return { conversationIngest: true, socialIngest: true, humanHandoff: true };
+    default:
+      return { conversationIngest: false, socialIngest: false, humanHandoff: false };
+  }
 }
 
 function buildGatewayRedirectUrl(
@@ -97,30 +124,99 @@ export async function listBillingPlans() {
   return ok({ plans: BILLING_PLANS });
 }
 
+export async function provisionTrialTenant(tenantId: string, config: CoreConfig) {
+  const plan = getBillingPlan("trial");
+  if (!plan) throw new ApiError(ErrorCodes.NOT_FOUND, "Trial plan missing", 500);
+
+  const now = new Date().toISOString();
+  const trialEnd = addDays(now, plan.trialDays ?? 14);
+  const db = getDocClient(config);
+
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.profile() },
+      UpdateExpression:
+        "SET #plan = :plan, #status = :status, billingPeriodStart = :start, billingPeriodEnd = :end, trialEndsAt = :end, cancelAtPeriodEnd = :cancel, updatedAt = :u",
+      ExpressionAttributeNames: { "#plan": "plan", "#status": "status" },
+      ExpressionAttributeValues: {
+        ":plan": "trial",
+        ":status": "trial",
+        ":start": now,
+        ":end": trialEnd,
+        ":cancel": false,
+        ":u": now,
+      },
+    })
+  );
+
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.tenantPk(tenantId),
+        SK: Keys.limits(),
+        ...plan.limits,
+        updatedAt: now,
+      },
+    })
+  );
+}
+
+async function expireTrialIfNeeded(tenantId: string, profile: Record<string, unknown>, config: CoreConfig) {
+  if (profile.plan !== "trial" || profile.status !== "trial") return profile;
+
+  const periodEnd = profile.billingPeriodEnd as string | undefined;
+  if (!periodEnd || new Date(periodEnd).getTime() > Date.now()) return profile;
+
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.profile() },
+      UpdateExpression: "SET #status = :s, updatedAt = :u",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: { ":s": "suspended", ":u": now },
+    })
+  );
+
+  return { ...profile, status: "suspended" };
+}
+
 export async function getBillingSubscription(auth: AuthContext, config: CoreConfig) {
-  const profile = await getProfile(auth.tenantId, config);
+  let profile = await getProfile(auth.tenantId, config);
+  profile = await expireTrialIfNeeded(auth.tenantId, profile, config);
+
+  const periodEnd = (profile.billingPeriodEnd as string | undefined) ?? null;
+  const plan = profile.plan as TenantPlan;
+
   return ok({
-    plan: profile.plan as TenantPlan,
+    plan,
     status: profile.status as string,
-    currentPeriodEnd: (profile.billingPeriodEnd as string | undefined) ?? null,
+    currentPeriodEnd: periodEnd,
     cancelAtPeriodEnd: Boolean(profile.cancelAtPeriodEnd),
     billingPeriodStart: (profile.billingPeriodStart as string | undefined) ?? null,
+    trialDaysRemaining: plan === "trial" ? trialDaysRemaining(periodEnd) : null,
   });
 }
 
 export async function getBillingOverview(auth: AuthContext, config: CoreConfig) {
-  const [subscriptionRes, limitsRes, usage, sources, teamMembers] = await Promise.all([
+  const [subscriptionRes, limitsRes, usage, sources, teamMembers, vectorCount] = await Promise.all([
     getBillingSubscription(auth, config),
     getTenantLimits(auth, config),
     getMonthlyUsage(auth.tenantId, config),
     countSources(auth.tenantId, config),
     countTeamMembers(auth.tenantId, config),
+    createVectorStore(config).countByTenant(auth.tenantId),
   ]);
 
   const limits = limitsRes.data!;
   const maxMessages = Number(limits.maxMessages);
   const maxSources = Number(limits.maxSources);
   const maxTeamMembers = Number(limits.maxTeamMembers);
+  const maxVectors = Number(limits.maxVectors);
+  const currentPlan = getBillingPlan(subscriptionRes.data!.plan as TenantPlan);
 
   return ok({
     subscription: subscriptionRes.data,
@@ -138,6 +234,7 @@ export async function getBillingOverview(auth: AuthContext, config: CoreConfig) 
     resources: {
       sources,
       teamMembers,
+      vectors: vectorCount,
       messagesRemaining: Math.max(0, maxMessages - usage.messages),
     },
     utilization: {
@@ -145,7 +242,16 @@ export async function getBillingOverview(auth: AuthContext, config: CoreConfig) 
       sourcesPct: maxSources > 0 ? Math.min(100, Math.round((sources / maxSources) * 100)) : 0,
       teamPct:
         maxTeamMembers > 0 ? Math.min(100, Math.round((teamMembers / maxTeamMembers) * 100)) : 0,
+      vectorsPct: maxVectors > 0 ? Math.min(100, Math.round((vectorCount / maxVectors) * 100)) : 0,
     },
+    planDetails: currentPlan
+      ? {
+          name: currentPlan.name,
+          features: currentPlan.features,
+          priceLkr: currentPlan.priceLkr,
+          priceUsd: currentPlan.priceUsd,
+        }
+      : null,
   });
 }
 
@@ -156,9 +262,11 @@ export async function applyPlanToTenant(tenantId: string, planId: TenantPlan, co
   }
 
   const now = new Date().toISOString();
-  const periodEnd = addMonths(now, 1);
+  const periodEnd =
+    planId === "trial" ? addDays(now, plan.trialDays ?? 14) : addMonths(now, 1);
   const db = getDocClient(config);
   const { limits } = plan;
+  const flags = planFeatureFlags(planId);
 
   await db.send(
     new UpdateCommand({
@@ -197,7 +305,82 @@ export async function applyPlanToTenant(tenantId: string, planId: TenantPlan, co
     })
   );
 
+  const configRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.config() },
+    })
+  );
+  if (configRes.Item) {
+    const existingFlags = (configRes.Item.featureFlags as Record<string, boolean>) ?? {};
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.config() },
+        UpdateExpression: "SET featureFlags = :f, updatedAt = :u",
+        ExpressionAttributeValues: {
+          ":f": { ...existingFlags, ...flags },
+          ":u": now,
+        },
+      })
+    );
+  }
+
   return { plan: planId, status: planId === "trial" ? "trial" : "active", currentPeriodEnd: periodEnd };
+}
+
+export async function cancelBillingSubscription(auth: AuthContext, config: CoreConfig) {
+  assertOwner(auth);
+  const profile = await getProfile(auth.tenantId, config);
+  const plan = profile.plan as TenantPlan;
+
+  if (plan === "trial") {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Trial accounts expire automatically — upgrade to continue", 400);
+  }
+  if (profile.status !== "active") {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Only active subscriptions can be cancelled", 400);
+  }
+  if (profile.cancelAtPeriodEnd) {
+    return ok({ cancelAtPeriodEnd: true, currentPeriodEnd: profile.billingPeriodEnd ?? null });
+  }
+
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.profile() },
+      UpdateExpression: "SET cancelAtPeriodEnd = :c, updatedAt = :u",
+      ExpressionAttributeValues: { ":c": true, ":u": now },
+    })
+  );
+
+  return ok({
+    cancelAtPeriodEnd: true,
+    currentPeriodEnd: (profile.billingPeriodEnd as string | undefined) ?? null,
+  });
+}
+
+export async function reactivateBillingSubscription(auth: AuthContext, config: CoreConfig) {
+  assertOwner(auth);
+  const profile = await getProfile(auth.tenantId, config);
+
+  if (!profile.cancelAtPeriodEnd) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Subscription is not scheduled for cancellation", 400);
+  }
+
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.profile() },
+      UpdateExpression: "SET cancelAtPeriodEnd = :c, updatedAt = :u",
+      ExpressionAttributeValues: { ":c": false, ":u": now },
+    })
+  );
+
+  return ok({ cancelAtPeriodEnd: false });
 }
 
 async function getCheckoutRecord(checkoutId: string, config: CoreConfig) {

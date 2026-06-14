@@ -10,12 +10,14 @@ function Meter({
   max,
   pct,
   unit = "",
+  showRemaining = true,
 }: {
   label: string;
   used: number;
   max: number;
   pct: number;
   unit?: string;
+  showRemaining?: boolean;
 }) {
   const remaining = Math.max(0, max - used);
   const warn = pct >= 80;
@@ -32,7 +34,9 @@ function Meter({
         </span>
       </div>
       <Progress value={pct} className={critical ? "[&>div]:bg-destructive" : warn ? "[&>div]:bg-amber-500" : undefined} />
-      <p className="text-xs text-muted-foreground">{remaining.toLocaleString()} remaining this period</p>
+      {showRemaining && (
+        <p className="text-xs text-muted-foreground">{remaining.toLocaleString()} remaining this period</p>
+      )}
     </div>
   );
 }
@@ -59,12 +63,23 @@ export function UsageMeters({ overview }: { overview: BillingOverview }) {
           pct={utilization.sourcesPct}
         />
         <Meter
+          label="Vectors (embeddings)"
+          used={resources.vectors}
+          max={limits.maxVectors}
+          pct={utilization.vectorsPct}
+        />
+        <Meter
           label="Team members"
           used={resources.teamMembers}
           max={limits.maxTeamMembers}
           pct={utilization.teamPct}
         />
-        <div className="grid gap-4 border-t pt-4 sm:grid-cols-3">
+        <div className="grid gap-4 border-t pt-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Ingest jobs</p>
+            <p className="text-lg font-semibold">{usage.ingestJobs.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">completed this period</p>
+          </div>
           <div>
             <p className="text-xs text-muted-foreground">Input tokens</p>
             <p className="text-lg font-semibold">{usage.inputTokens.toLocaleString()}</p>

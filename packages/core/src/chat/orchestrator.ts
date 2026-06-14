@@ -126,7 +126,9 @@ export async function runChatOrchestrator(
   if (!text) throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Message is required", 400);
 
   await assertChannelEnabled(auth.tenantId, input.channel, config);
-  await reserveMessageQuota(auth.tenantId, config);
+  if (input.channel !== "test") {
+    await reserveMessageQuota(auth.tenantId, config);
+  }
 
   const { storeName, timezone, config: tenantConfig } = await loadTenantContext(auth, config);
   const conversation = await resolveConversation(

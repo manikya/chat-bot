@@ -19,7 +19,8 @@ import {
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
-import { defaultPlanLimits, defaultTenantConfig } from "../tenant/defaults";
+import { getBillingPlan } from "../billing/plans";
+import { defaultTenantConfig } from "../tenant/defaults";
 import type { EmailProvider } from "../email/provider";
 import { hashPassword, validatePassword, verifyPassword } from "./password";
 import { signAccessToken } from "./jwt";
@@ -75,6 +76,15 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
   const verifyHash = tokenHash(verifyToken);
   const widget = widgetKeyPair();
   const ttl = Math.floor(Date.now() / 1000) + 86400;
+  const trialPlan = getBillingPlan("trial");
+  const trialLimits = trialPlan?.limits ?? {
+    maxMessages: 2000,
+    maxSources: 3,
+    maxVectors: 10000,
+    maxTeamMembers: 5,
+    enabledChannels: ["web", "whatsapp", "instagram", "messenger"],
+  };
+  const trialEnd = new Date(Date.now() + (trialPlan?.trialDays ?? 14) * 24 * 60 * 60 * 1000).toISOString();
 
   const transactItems: NonNullable<TransactWriteCommandInput["TransactItems"]> = [
         {
@@ -91,6 +101,10 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
               timezone: input.timezone,
               onboardingStep: "profile",
               widgetApiKeyPrefix: widget.prefix,
+              billingPeriodStart: now,
+              billingPeriodEnd: trialEnd,
+              trialEndsAt: trialEnd,
+              cancelAtPeriodEnd: false,
               createdAt: now,
               updatedAt: now,
             },
@@ -110,7 +124,7 @@ export async function signup(input: SignupInput, deps: AuthDeps) {
         {
           Put: {
             TableName: deps.config.tableName,
-            Item: { PK: Keys.tenantPk(tenantId), SK: Keys.limits(), ...defaultPlanLimits() },
+            Item: { PK: Keys.tenantPk(tenantId), SK: Keys.limits(), ...trialLimits, updatedAt: now },
           },
         },
         {

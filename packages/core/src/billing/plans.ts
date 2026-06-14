@@ -1,5 +1,4 @@
 import type { PlanLimits, TenantPlan } from "@commercechat/shared";
-import { defaultPlanLimits } from "../tenant/defaults";
 
 export interface BillingPlan {
   id: TenantPlan;
@@ -14,6 +13,14 @@ export interface BillingPlan {
   highlighted?: boolean;
   contactSales?: boolean;
 }
+
+const TRIAL_LIMITS: PlanLimits = {
+  maxMessages: 2_000,
+  maxSources: 3,
+  maxVectors: 10_000,
+  maxTeamMembers: 5,
+  enabledChannels: ["web", "whatsapp", "instagram", "messenger"],
+};
 
 const STARTER_LIMITS: PlanLimits = {
   maxMessages: 2_000,
@@ -50,12 +57,14 @@ export const BILLING_PLANS: BillingPlan[] = [
     priceUsd: 0,
     interval: "month",
     trialDays: 14,
-    limits: defaultPlanLimits(),
+    limits: TRIAL_LIMITS,
     features: [
       "2,000 messages / month",
-      "Web + WhatsApp",
+      "All channels during trial",
       "3 knowledge sources",
+      "10,000 vectors",
       "Up to 5 team members",
+      "14-day free trial",
     ],
   },
   {

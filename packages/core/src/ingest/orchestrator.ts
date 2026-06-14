@@ -22,7 +22,16 @@ import {
 } from "../commerce/wordpress/service";
 import { createVectorStore } from "./vectors";
 import { dispatchIngestJob } from "./dispatch";
+import { incrementIngestJobs } from "../chat/usage";
 import type { IngestJobKind } from "./run-job";
+
+async function recordIngestJobCompleted(tenantId: string, config: CoreConfig) {
+  try {
+    await incrementIngestJobs(tenantId, config);
+  } catch {
+    // usage tracking is best-effort
+  }
+}
 
 async function getSourceItem(tenantId: string, sourceId: string, config: CoreConfig) {
   const db = getDocClient(config);
@@ -165,6 +174,7 @@ export async function runWebsiteIngestJob(
       },
       config
     );
+    await recordIngestJobCompleted(tenantId, config);
 
     const db = getDocClient(config);
     await db.send(
@@ -307,6 +317,7 @@ export async function runCatalogIngestJob(
       },
       config
     );
+    await recordIngestJobCompleted(tenantId, config);
 
     const db = getDocClient(config);
     await db.send(
@@ -460,6 +471,7 @@ export async function runWordPressCatalogIngestJob(
       },
       config
     );
+    await recordIngestJobCompleted(tenantId, config);
 
     const db = getDocClient(config);
     await db.send(
@@ -555,6 +567,7 @@ export async function runFaqIngestJob(
       },
       config
     );
+    await recordIngestJobCompleted(tenantId, config);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     stats.durationSec = Math.round((Date.now() - started) / 1000);
@@ -612,6 +625,7 @@ export async function runConversationIngestJob(
       },
       config
     );
+    await recordIngestJobCompleted(tenantId, config);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     stats.durationSec = Math.round((Date.now() - started) / 1000);

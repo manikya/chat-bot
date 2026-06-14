@@ -43,6 +43,14 @@ export default function UsagePage() {
           <p>Max sources: {overview.limits.maxSources.toLocaleString()}</p>
           <p>Max vectors: {overview.limits.maxVectors.toLocaleString()}</p>
           <p>Max team: {overview.limits.maxTeamMembers}</p>
+          <p className="sm:col-span-2">
+            Channels: {overview.limits.enabledChannels.join(", ")}
+          </p>
+          {overview.subscription.trialDaysRemaining != null && (
+            <p className="text-amber-700">
+              Trial: {overview.subscription.trialDaysRemaining} days left
+            </p>
+          )}
         </CardContent>
       </Card>
 

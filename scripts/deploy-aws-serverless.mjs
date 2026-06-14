@@ -22,6 +22,8 @@ const ROUTES = [
   ["GET", "/api/v1/billing/subscription", "billing", "subscriptionHandler"],
   ["GET", "/api/v1/billing/overview", "billing", "overviewHandler"],
   ["POST", "/api/v1/billing/checkout", "billing", "checkoutHandler"],
+  ["POST", "/api/v1/billing/cancel", "billing", "cancelHandler"],
+  ["POST", "/api/v1/billing/reactivate", "billing", "reactivateHandler"],
   ["POST", "/auth/signup", "auth-signup"],
   ["POST", "/auth/login", "auth-login"],
   ["GET", "/auth/me", "auth-me"],

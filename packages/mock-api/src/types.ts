@@ -118,6 +118,14 @@ export interface BillingSubscription {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   billingPeriodStart: string | null;
+  trialDaysRemaining: number | null;
+}
+
+export interface BillingPlanDetails {
+  name: string;
+  features: string[];
+  priceLkr: number;
+  priceUsd: number;
 }
 
 export interface BillingCheckoutSession {
@@ -140,13 +148,16 @@ export interface BillingOverview {
   resources: {
     sources: number;
     teamMembers: number;
+    vectors: number;
     messagesRemaining: number;
   };
   utilization: {
     messagesPct: number;
     sourcesPct: number;
     teamPct: number;
+    vectorsPct: number;
   };
+  planDetails: BillingPlanDetails | null;
 }
 
 export interface ChannelInfo {
