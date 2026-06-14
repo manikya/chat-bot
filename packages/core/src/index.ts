@@ -11,7 +11,11 @@ export {
   logoPublicUrl,
 } from "./tenant/logo";
 export { isS3AssetsEnabled } from "./storage/s3";
-export { isSecretsManagerEnabled } from "./secrets/client";
+export {
+  isSecretsManagerBackend as isSecretsManagerEnabled,
+  resolveMetaSecretsBackend,
+  type MetaSecretsBackend,
+} from "./secrets/backend";
 export {
   canSendFreeFormMessage,
   assertCanSendFreeFormMessage,

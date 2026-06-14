@@ -1,45 +1,19 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { CoreConfig } from "../../config";
-import { deleteSecret, getJsonSecret, isSecretsManagerEnabled, putJsonSecret } from "../../secrets/client";
+import { deleteTenantSecret, loadTenantSecret, saveTenantSecret } from "../../secrets/backend";
 import type { WordPressCredentials } from "./types";
 
-function secretId(config: CoreConfig, tenantId: string): string {
-  const prefix = config.metaSecretsPrefix ?? "commercechat";
-  return `${prefix}/${tenantId}/wordpress`;
-}
+const NAMESPACE = "wordpress";
 
 function filePath(config: CoreConfig, tenantId: string): string {
-  const dir = join(config.dataDir, "wordpress");
-  mkdirSync(dir, { recursive: true });
-  return join(dir, `${tenantId}.json`);
+  return join(config.dataDir, "wordpress", `${tenantId}.json`);
 }
 
 export async function loadWordPressCredentials(
   tenantId: string,
   config: CoreConfig
 ): Promise<WordPressCredentials | null> {
-  if (isSecretsManagerEnabled(config)) {
-    const fromSm = await getJsonSecret<WordPressCredentials>(config, secretId(config, tenantId));
-    if (fromSm) return fromSm;
-
-    const path = filePath(config, tenantId);
-    if (existsSync(path)) {
-      const fromFile = JSON.parse(readFileSync(path, "utf8")) as WordPressCredentials;
-      await putJsonSecret(config, secretId(config, tenantId), fromFile);
-      unlinkSync(path);
-      return fromFile;
-    }
-    return null;
-  }
-
-  const path = filePath(config, tenantId);
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as WordPressCredentials;
-  } catch {
-    return null;
-  }
+  return loadTenantSecret<WordPressCredentials>(config, tenantId, NAMESPACE, filePath(config, tenantId));
 }
 
 export async function saveWordPressCredentials(
@@ -47,20 +21,12 @@ export async function saveWordPressCredentials(
   creds: WordPressCredentials,
   config: CoreConfig
 ): Promise<void> {
-  if (isSecretsManagerEnabled(config)) {
-    await putJsonSecret(config, secretId(config, tenantId), creds);
-    return;
-  }
-  writeFileSync(filePath(config, tenantId), JSON.stringify(creds, null, 2), "utf8");
+  await saveTenantSecret(config, tenantId, NAMESPACE, filePath(config, tenantId), creds);
 }
 
 export async function deleteWordPressCredentials(
   tenantId: string,
   config: CoreConfig
 ): Promise<void> {
-  if (isSecretsManagerEnabled(config)) {
-    await deleteSecret(config, secretId(config, tenantId));
-  }
-  const path = filePath(config, tenantId);
-  if (existsSync(path)) unlinkSync(path);
+  await deleteTenantSecret(config, tenantId, NAMESPACE, filePath(config, tenantId));
 }

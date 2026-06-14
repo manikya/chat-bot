@@ -116,6 +116,17 @@
       "Resource": "arn:aws:iam::*:role/commercechat-*"
     },
     {
+      "Sid": "S3VectorsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3vectors:CreateVectorBucket",
+        "s3vectors:GetVectorBucket",
+        "s3vectors:ListVectorBuckets",
+        "s3vectors:DeleteVectorBucket"
+      ],
+      "Resource": "arn:aws:s3vectors:*:*:bucket/commercechat-*"
+    },
+    {
       "Sid": "ReadCallerIdentity",
       "Effect": "Allow",
       "Action": "sts:GetCallerIdentity",

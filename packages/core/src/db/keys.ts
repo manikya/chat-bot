@@ -36,4 +36,5 @@ export const Keys = {
   checkoutPk: (checkoutId: string) => `CHECKOUT#${checkoutId}`,
   checkoutMeta: () => "META",
   checkout: (checkoutId: string) => `CHECKOUT#${checkoutId}`,
+  tenantSecret: (namespace: string) => `SECRET#${namespace}`,
 };

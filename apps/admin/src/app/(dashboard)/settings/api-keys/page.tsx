@@ -15,7 +15,7 @@ export default function ApiKeysPage() {
   const regenerate = async () => {
     const res = await api.tenant.regenerateWidgetKey();
     setKey(res.data.apiKey);
-    setEmbed((res.data as { embedCode?: string }).embedCode ?? null);
+    setEmbed(res.data.embedCode ?? null);
     toast.success("New API key generated — copy it now");
   };
 

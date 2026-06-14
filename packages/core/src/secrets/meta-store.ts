@@ -1,14 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { CoreConfig } from "../config";
 import type { MessengerCredentials, MetaCredentials } from "../channels/types";
-import { deleteSecret, getJsonSecret, isSecretsManagerEnabled, putJsonSecret } from "./client";
+import { deleteTenantSecret, loadTenantSecret, saveTenantSecret } from "./backend";
 
 export type MetaSecretKind = "whatsapp" | "messenger";
 
-function secretId(config: CoreConfig, tenantId: string, kind: MetaSecretKind): string {
-  const prefix = config.metaSecretsPrefix ?? "commercechat";
-  return `${prefix}/${tenantId}/meta/${kind}`;
+function namespace(kind: MetaSecretKind): string {
+  return `meta/${kind}`;
 }
 
 function filePath(config: CoreConfig, tenantId: string, kind: MetaSecretKind): string {
@@ -16,86 +14,11 @@ function filePath(config: CoreConfig, tenantId: string, kind: MetaSecretKind): s
   return join(config.dataDir, "meta", filename);
 }
 
-function ensureMetaDataDir(config: CoreConfig): void {
-  mkdirSync(join(config.dataDir, "meta"), { recursive: true });
-}
-
-function readFileJson<T>(path: string): T | null {
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function loadJson<T>(
-  config: CoreConfig,
-  tenantId: string,
-  kind: MetaSecretKind
-): Promise<T | null> {
-  if (isSecretsManagerEnabled(config)) {
-    const fromSm = await getJsonSecret<T>(config, secretId(config, tenantId, kind));
-    if (fromSm) return fromSm;
-
-    const path = filePath(config, tenantId, kind);
-    const fromFile = readFileJson<T>(path);
-    if (fromFile) {
-      await putJsonSecret(config, secretId(config, tenantId, kind), fromFile);
-      try {
-        unlinkSync(path);
-      } catch {
-        // file may be on read-only fs (e.g. Lambda)
-      }
-      console.log(`[meta-secrets] migrated ${kind} credentials to Secrets Manager for`, tenantId);
-      return fromFile;
-    }
-    return null;
-  }
-
-  return readFileJson<T>(filePath(config, tenantId, kind));
-}
-
-async function saveJson(
-  config: CoreConfig,
-  tenantId: string,
-  kind: MetaSecretKind,
-  value: unknown
-): Promise<void> {
-  if (isSecretsManagerEnabled(config)) {
-    await putJsonSecret(config, secretId(config, tenantId, kind), value);
-    const path = filePath(config, tenantId, kind);
-    if (existsSync(path)) {
-      try {
-        unlinkSync(path);
-      } catch {
-        // ignore read-only fs
-      }
-    }
-    return;
-  }
-
-  ensureMetaDataDir(config);
-  writeFileSync(filePath(config, tenantId, kind), JSON.stringify(value, null, 2), "utf8");
-}
-
-async function deleteJson(
-  config: CoreConfig,
-  tenantId: string,
-  kind: MetaSecretKind
-): Promise<void> {
-  if (isSecretsManagerEnabled(config)) {
-    await deleteSecret(config, secretId(config, tenantId, kind));
-  }
-  const path = filePath(config, tenantId, kind);
-  if (existsSync(path)) unlinkSync(path);
-}
-
 export function loadMetaCredentialsFromStore(
   tenantId: string,
   config: CoreConfig
 ): Promise<MetaCredentials | null> {
-  return loadJson<MetaCredentials>(config, tenantId, "whatsapp");
+  return loadTenantSecret<MetaCredentials>(config, tenantId, namespace("whatsapp"), filePath(config, tenantId, "whatsapp"));
 }
 
 export function saveMetaCredentialsToStore(
@@ -103,21 +26,26 @@ export function saveMetaCredentialsToStore(
   creds: MetaCredentials,
   config: CoreConfig
 ): Promise<void> {
-  return saveJson(config, tenantId, "whatsapp", creds);
+  return saveTenantSecret(config, tenantId, namespace("whatsapp"), filePath(config, tenantId, "whatsapp"), creds);
 }
 
 export function deleteMetaCredentialsFromStore(
   tenantId: string,
   config: CoreConfig
 ): Promise<void> {
-  return deleteJson(config, tenantId, "whatsapp");
+  return deleteTenantSecret(config, tenantId, namespace("whatsapp"), filePath(config, tenantId, "whatsapp"));
 }
 
 export function loadMessengerCredentialsFromStore(
   tenantId: string,
   config: CoreConfig
 ): Promise<MessengerCredentials | null> {
-  return loadJson<MessengerCredentials>(config, tenantId, "messenger");
+  return loadTenantSecret<MessengerCredentials>(
+    config,
+    tenantId,
+    namespace("messenger"),
+    filePath(config, tenantId, "messenger")
+  );
 }
 
 export function saveMessengerCredentialsToStore(
@@ -125,12 +53,23 @@ export function saveMessengerCredentialsToStore(
   creds: MessengerCredentials,
   config: CoreConfig
 ): Promise<void> {
-  return saveJson(config, tenantId, "messenger", creds);
+  return saveTenantSecret(
+    config,
+    tenantId,
+    namespace("messenger"),
+    filePath(config, tenantId, "messenger"),
+    creds
+  );
 }
 
 export function deleteMessengerCredentialsFromStore(
   tenantId: string,
   config: CoreConfig
 ): Promise<void> {
-  return deleteJson(config, tenantId, "messenger");
+  return deleteTenantSecret(
+    config,
+    tenantId,
+    namespace("messenger"),
+    filePath(config, tenantId, "messenger")
+  );
 }

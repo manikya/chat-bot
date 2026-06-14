@@ -52,5 +52,5 @@ export function mapSignupApiError(err: unknown): { fieldErrors: SignupFieldError
     return { fieldErrors: { password: message } };
   }
 
-  return { formError: message };
+  return { fieldErrors: {}, formError: message };
 }

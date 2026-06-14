@@ -1,3 +1,5 @@
+export type MetaSecretsBackend = "file" | "dynamodb" | "secrets-manager";
+
 export interface CoreConfig {
   tableName: string;
   jwtSecret: string;
@@ -8,6 +10,8 @@ export interface CoreConfig {
   awsRegion: string;
   dynamoEndpoint?: string;
   dataDir: string;
+  s3VectorsBucketName?: string;
+  s3VectorsEndpoint?: string;
   openaiApiKey?: string;
   embeddingModel: string;
   llmModel: string;
@@ -39,6 +43,7 @@ export interface CoreConfig {
   secretsEndpoint?: string;
   secretsAccessKeyId?: string;
   secretsSecretAccessKey?: string;
+  metaSecretsBackend?: MetaSecretsBackend;
   metaSecretsUseSecretsManager: boolean;
   metaSecretsPrefix: string;
   metaTokenRefreshCronSecret?: string;
@@ -48,6 +53,12 @@ export interface CoreConfig {
   paymentWebhookSecret?: string;
   /** Dev only: auto-activate plan on checkout without payment */
   billingSkipPayment: boolean;
+}
+
+function parseMetaSecretsBackend(): MetaSecretsBackend | undefined {
+  const raw = process.env.META_SECRETS_BACKEND?.trim().toLowerCase();
+  if (raw === "dynamodb" || raw === "secrets-manager" || raw === "file") return raw;
+  return undefined;
 }
 
 export function loadConfig(): CoreConfig {
@@ -61,6 +72,8 @@ export function loadConfig(): CoreConfig {
     awsRegion: process.env.AWS_REGION ?? process.env.AWS_REGION_NAME ?? "us-east-1",
     dynamoEndpoint: process.env.DYNAMODB_ENDPOINT,
     dataDir: process.env.DATA_DIR ?? ".data",
+    s3VectorsBucketName: process.env.S3_VECTORS_BUCKET,
+    s3VectorsEndpoint: process.env.S3_VECTORS_ENDPOINT,
     openaiApiKey: process.env.OPENAI_API_KEY,
     embeddingModel: process.env.EMBEDDING_MODEL ?? "text-embedding-3-small",
     llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
@@ -94,6 +107,7 @@ export function loadConfig(): CoreConfig {
     secretsEndpoint: process.env.SECRETS_MANAGER_ENDPOINT,
     secretsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    metaSecretsBackend: parseMetaSecretsBackend(),
     metaSecretsUseSecretsManager: process.env.META_SECRETS_USE_SECRETS_MANAGER === "true",
     metaSecretsPrefix: process.env.META_SECRETS_PREFIX ?? "commercechat",
     metaTokenRefreshCronSecret: process.env.META_TOKEN_REFRESH_CRON_SECRET,

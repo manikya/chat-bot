@@ -7,10 +7,6 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import type { CoreConfig } from "../config";
 
-export function isSecretsManagerEnabled(config: CoreConfig): boolean {
-  return config.metaSecretsUseSecretsManager;
-}
-
 export function getSecretsManagerClient(config: CoreConfig) {
   // LocalStack only — on Lambda/real AWS use the execution role (includes session token).
   if (config.secretsEndpoint) {

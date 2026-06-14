@@ -50,7 +50,7 @@ export function WooCommerceConnectCard({ defaultSiteUrl, compact, onConnected }:
     try {
       await api.commerce.connectWordPress({ siteUrl: siteUrl.trim(), apiKey });
       const sync = await api.commerce.syncWordPress();
-      await pollIngestJob(sync.data.jobId);
+      await pollIngestJob(sync.data.jobId, () => {});
       setConnected(true);
       setSiteLabel(siteUrl.trim());
       setApiKey("");

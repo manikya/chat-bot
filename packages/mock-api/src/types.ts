@@ -223,6 +223,7 @@ export interface TeamMember {
 
 export interface OnboardingState {
   currentStep: OnboardingStep;
+  estimatedMinutesRemaining?: number;
   steps: Array<{
     step: OnboardingStep;
     status: "completed" | "in_progress" | "pending";

@@ -21,6 +21,7 @@ infra/deployments/*-error-*
 .env
 .env.*
 !.env.example
+!.env.aws.example
 
 # OS / editor
 .DS_Store

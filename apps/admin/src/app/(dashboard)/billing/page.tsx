@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Check, CreditCard, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
-import type { BillingOverview, BillingPlan, TenantPlan } from "@commercechat/mock-api";
+import type { BillingCheckoutSession, BillingOverview, BillingPlan, TenantPlan } from "@commercechat/mock-api";
 import { UsageMeters } from "@/components/billing/usage-meters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

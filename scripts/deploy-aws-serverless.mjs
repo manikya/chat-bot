@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 const ROOT = resolve(new URL("..", import.meta.url).pathname);
 const API_DIR = join(ROOT, "apps/api");
 const LOCAL_API_ENV = join(API_DIR, ".env");
+const LOCAL_API_ENV_AWS = join(API_DIR, ".env.aws");
 const BUILD_DIR = join(API_DIR, "dist/handlers");
 const OUT_DIR = join(ROOT, ".aws-deploy");
 const INVENTORY_DIR = join(ROOT, "infra/deployments");
@@ -121,10 +122,10 @@ function metaOAuthRedirectForAdminUrl(adminUrl) {
   return adminUrl ? `${adminUrl.replace(/\/$/, "")}/channels/meta/callback` : "";
 }
 
-/** Load apps/api/.env for local deploy secrets (SMTP, Meta, OpenAI) — file is gitignored. */
-function loadLocalApiEnv() {
-  if (!existsSync(LOCAL_API_ENV)) return;
-  for (const line of readFileSync(LOCAL_API_ENV, "utf8").split(/\r?\n/)) {
+/** Load apps/api/.env (+ optional .env.aws overrides) for deploy secrets. */
+function loadEnvFile(path, override = false) {
+  if (!existsSync(path)) return;
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const eq = trimmed.indexOf("=");
@@ -137,8 +138,13 @@ function loadLocalApiEnv() {
     ) {
       value = value.slice(1, -1);
     }
-    if (process.env[key] === undefined) process.env[key] = value;
+    if (override || process.env[key] === undefined) process.env[key] = value;
   }
+}
+
+function loadLocalApiEnv() {
+  loadEnvFile(LOCAL_API_ENV, false);
+  loadEnvFile(LOCAL_API_ENV_AWS, true);
 }
 
 function readDeployedLambdaEnv(stackName, awsEnv) {
@@ -441,6 +447,7 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
   const tableName = `commercechat-${env}-storage-main`;
   const assetsBucket = `commercechat-${env}-assets-\${AWS::AccountId}-\${AWS::Region}`;
   const dataBucket = `commercechat-${env}-data-\${AWS::AccountId}-\${AWS::Region}`;
+  const vectorBucketName = `commercechat-${env}-vectors`;
 
   resources.MainTable = {
     Type: "AWS::DynamoDB::Table",
@@ -535,6 +542,25 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
                   { "Fn::Sub": "${AssetsBucket.Arn}/*" },
                   { "Fn::GetAtt": ["DataBucket", "Arn"] },
                   { "Fn::Sub": "${DataBucket.Arn}/*" },
+                ],
+              },
+              {
+                Effect: "Allow",
+                Action: [
+                  "s3vectors:CreateIndex",
+                  "s3vectors:GetIndex",
+                  "s3vectors:ListIndexes",
+                  "s3vectors:PutVectors",
+                  "s3vectors:QueryVectors",
+                  "s3vectors:GetVectors",
+                  "s3vectors:DeleteVectors",
+                  "s3vectors:ListVectors",
+                ],
+                Resource: [
+                  { "Fn::Sub": `arn:aws:s3vectors:\${AWS::Region}:\${AWS::AccountId}:bucket/${vectorBucketName}` },
+                  {
+                    "Fn::Sub": `arn:aws:s3vectors:\${AWS::Region}:\${AWS::AccountId}:bucket/${vectorBucketName}/index/*`,
+                  },
                 ],
               },
               {
@@ -649,10 +675,11 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
             SMTP_USER: { Ref: "SmtpUser" },
             SMTP_PASS: { Ref: "SmtpPass" },
             SMTP_FROM: { Ref: "SmtpFrom" },
-            META_SECRETS_USE_SECRETS_MANAGER: "true",
+            META_SECRETS_BACKEND: "dynamodb",
             PAYMENT_WEBHOOK_SECRET: { Ref: "PaymentWebhookSecret" },
             BILLING_SKIP_PAYMENT: { Ref: "BillingSkipPayment" },
             SKIP_EMAIL_VERIFICATION: { Ref: "SkipEmailVerification" },
+            S3_VECTORS_BUCKET: vectorBucketName,
             DATA_DIR: "/tmp/commercechat",
           },
         },
@@ -731,6 +758,7 @@ function buildTemplate({ env, region, artifactBucket, artifactPrefix, handlerFil
       TableName: { Value: { Ref: "MainTable" } },
       AssetsBucketName: { Value: { Ref: "AssetsBucket" } },
       DataBucketName: { Value: { Ref: "DataBucket" } },
+      S3VectorsBucketName: { Value: vectorBucketName },
       DeploymentArtifactBucket: { Value: artifactBucket },
     },
   };
@@ -983,6 +1011,21 @@ async function main() {
 
     console.log(`Building Lambda bundles for ${env}...`);
     sh("npm", ["run", "build:lambdas"], { cwd: ROOT, stdio: "inherit" });
+
+    const vectorBucketName = `commercechat-${env}-vectors`;
+    console.log(`Ensuring S3 Vectors bucket ${vectorBucketName}...`);
+    try {
+      sh("node", ["scripts/create-s3-vectors-bucket.mjs", `--env=${env}`, `--region=${region}`], {
+        cwd: ROOT,
+        stdio: "inherit",
+        env: awsEnv,
+      });
+    } catch {
+      console.warn(
+        `Vector bucket not created — RAG ingest will fail until ${vectorBucketName} exists. ` +
+          "Add s3vectors permissions from infra/aws-deploy-iam-policy.json or create the bucket in the AWS console."
+      );
+    }
 
     artifactPrefix = `serverless/${Date.now()}`;
     const artifactDir = join(OUT_DIR, "artifacts", artifactPrefix);

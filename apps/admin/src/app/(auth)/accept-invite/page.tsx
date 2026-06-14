@@ -35,8 +35,9 @@ function AcceptInviteForm() {
         password,
         ...(name.trim() ? { name: name.trim() } : {}),
       });
-      setSession(res.data as LoginResult);
-      toast.success(`Welcome to ${res.data.tenant.storeName}!`);
+      const session = res.data;
+      setSession(session);
+      toast.success(`Welcome to ${session.tenant.storeName}!`);
       router.push("/dashboard");
     } catch (err) {
       const msg =

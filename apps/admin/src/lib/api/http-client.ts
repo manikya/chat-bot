@@ -1,5 +1,23 @@
-import type { ApiResponse } from "@commercechat/mock-api";
-import type { TenantConfig } from "@commercechat/mock-api";
+import type {
+  ApiResponse,
+  BillingCheckoutSession,
+  BillingOverview,
+  BillingPlan,
+  ChannelInfo,
+  Conversation,
+  ConversationDetail,
+  DashboardStats,
+  IngestJob,
+  KnowledgeSource,
+  LoginResult,
+  Message,
+  OnboardingState,
+  PlanLimits,
+  TeamMember,
+  Tenant,
+  TenantConfig,
+  Usage,
+} from "@commercechat/mock-api";
 import { notifySessionExpired } from "@/lib/auth/session-expired";
 
 export const TOKEN_KEY = "cc_access_token";
@@ -136,10 +154,11 @@ export async function request<T>(
 export function createHttpApi() {
   return {
     auth: {
-      signup: (body) => request("/auth/signup", { method: "POST", body: JSON.stringify(body) }),
-      login: async (email, password) =>
-        request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-      me: () => request("/auth/me"),
+      signup: (body: Record<string, unknown>) =>
+        request<LoginResult>("/auth/signup", { method: "POST", body: JSON.stringify(body) }),
+      login: async (email: string, password: string) =>
+        request<LoginResult>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+      me: () => request<LoginResult>("/auth/me"),
       refresh: async () => {
         const ok = await performTokenRefresh();
         if (!ok) throw { code: "UNAUTHORIZED", message: "Unable to refresh session" };
@@ -162,7 +181,7 @@ export function createHttpApi() {
       resetPassword: (token: string, password: string) =>
         request("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
       acceptInvite: (body: { token: string; password: string; name?: string }) =>
-        request("/auth/accept-invite", { method: "POST", body: JSON.stringify(body) }),
+        request<LoginResult>("/auth/accept-invite", { method: "POST", body: JSON.stringify(body) }),
       logout: async () => {
         const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
         try {
@@ -181,41 +200,56 @@ export function createHttpApi() {
       },
     },
     tenant: {
-      getMe: () => request("/api/v1/tenants/me"),
+      getMe: () => request<Tenant>("/api/v1/tenants/me"),
       updateMe: (patch: { storeName?: string; timezone?: string; websiteUrl?: string }) =>
-        request("/api/v1/tenants/me", { method: "PATCH", body: JSON.stringify(patch) }),
+        request<Tenant>("/api/v1/tenants/me", { method: "PATCH", body: JSON.stringify(patch) }),
       uploadLogo: (file: File) => {
         const form = new FormData();
         form.append("file", file);
-        return request("/api/v1/tenants/me/logo", { method: "POST", body: form });
+        return request<{ logoUrl: string }>("/api/v1/tenants/me/logo", { method: "POST", body: form });
       },
       presignLogo: (contentType: string) =>
-        request("/api/v1/tenants/me/logo/presign", {
+        request<{ uploadUrl: string; key: string }>("/api/v1/tenants/me/logo/presign", {
           method: "POST",
           body: JSON.stringify({ contentType }),
         }),
       completeLogo: (key: string) =>
-        request("/api/v1/tenants/me/logo/complete", {
+        request<{ logoUrl: string }>("/api/v1/tenants/me/logo/complete", {
           method: "POST",
           body: JSON.stringify({ key }),
         }),
-      getConfig: () => request("/api/v1/tenants/me/config"),
+      getConfig: () => request<TenantConfig>("/api/v1/tenants/me/config"),
       updateConfig: (patch: Partial<TenantConfig>) =>
-        request("/api/v1/tenants/me/config", { method: "PATCH", body: JSON.stringify(patch) }),
-      getLimits: () => request("/api/v1/tenants/me/limits"),
-      getUsage: () => request("/api/v1/tenants/me/usage"),
+        request<TenantConfig>("/api/v1/tenants/me/config", { method: "PATCH", body: JSON.stringify(patch) }),
+      getLimits: () => request<PlanLimits>("/api/v1/tenants/me/limits"),
+      getUsage: () => request<Usage>("/api/v1/tenants/me/usage"),
       regenerateWidgetKey: () =>
-        request("/api/v1/tenants/me/widget/regenerate-key", { method: "POST", body: JSON.stringify({}) }),
+        request<{ apiKey: string; prefix: string; createdAt: string; embedCode: string }>(
+          "/api/v1/tenants/me/widget/regenerate-key",
+          { method: "POST", body: JSON.stringify({}) }
+        ),
     },
     onboarding: {
-      getState: () => request("/api/v1/onboarding"),
-      advanceStep: (step, skipped) =>
-        request("/api/v1/onboarding/step", { method: "PATCH", body: JSON.stringify({ step, skipped }) }),
-      testChat: (message) =>
-        request("/api/v1/onboarding/test-chat", { method: "POST", body: JSON.stringify({ message }) }),
+      getState: () => request<OnboardingState>("/api/v1/onboarding"),
+      advanceStep: (step: string, skipped?: boolean) =>
+        request<OnboardingState>("/api/v1/onboarding/step", {
+          method: "PATCH",
+          body: JSON.stringify({ step, skipped }),
+        }),
+      testChat: (message: string) =>
+        request<{
+          reply: { type: string; content: string };
+          testMessageCount: number;
+          canAdvanceToWidget: boolean;
+          intent?: string;
+          toolResults?: Array<{ tool: string; success: boolean }>;
+        }>("/api/v1/onboarding/test-chat", {
+          method: "POST",
+          body: JSON.stringify({ message }),
+        }),
     },
     channels: {
-      list: () => request("/api/v1/channels"),
+      list: () => request<{ channels: ChannelInfo[] }>("/api/v1/channels"),
       connectMeta: (body: {
         code?: string;
         redirectUri?: string;
@@ -237,66 +271,117 @@ export function createHttpApi() {
           body: JSON.stringify(body),
         }),
       connectMetaDev: () =>
-        request("/api/v1/channels/meta/connect-dev", { method: "POST", body: JSON.stringify({}) }),
+        request<{
+          connected: string[];
+          whatsapp: { phoneNumberId: string; displayPhone?: string; wabaId: string; status: string };
+        }>("/api/v1/channels/meta/connect-dev", { method: "POST", body: JSON.stringify({}) }),
       connectMessengerDev: () =>
-        request("/api/v1/channels/meta/connect-messenger-dev", {
+        request<{
+          connected: string[];
+          messenger: { pageId: string; pageName: string; status: string };
+        }>("/api/v1/channels/meta/connect-messenger-dev", {
           method: "POST",
           body: JSON.stringify({}),
         }),
-      metaDevStatus: () => request("/api/v1/channels/meta/dev-status"),
-      disconnect: (channel) => request(`/api/v1/channels/meta/${channel}`, { method: "DELETE" }),
-      health: () => request("/api/v1/channels/meta/health"),
+      metaDevStatus: () =>
+        request<{
+          devConnectAvailable: boolean;
+          messengerDevConnectAvailable: boolean;
+          oauthRedirectUri?: string;
+        }>("/api/v1/channels/meta/dev-status"),
+      disconnect: (channel: string) =>
+        request<{ disconnected: boolean }>(`/api/v1/channels/meta/${channel}`, { method: "DELETE" }),
+      health: () => request<Record<string, { status: string; detail?: string }>>("/api/v1/channels/meta/health"),
     },
     conversations: {
-      list: (params) => {
+      list: (params?: { channel?: string }) => {
         const q = params?.channel ? `?channel=${params.channel}` : "";
-        return request(`/api/v1/conversations${q}`);
+        return request<{ items: Conversation[] }>(`/api/v1/conversations${q}`);
       },
-      get: (id) => request(`/api/v1/conversations/${id}`),
-      getMessages: (id) => request(`/api/v1/conversations/${id}/messages`),
+      get: (id: string) => request<ConversationDetail>(`/api/v1/conversations/${id}`),
+      getMessages: (id: string) => request<{ items: Message[] }>(`/api/v1/conversations/${id}/messages`),
     },
     knowledge: {
-      listSources: () => request("/api/v1/knowledge/sources"),
-      createSource: (body) =>
-        request("/api/v1/knowledge/sources", { method: "POST", body: JSON.stringify(body) }),
+      listSources: () => request<{ items: KnowledgeSource[] }>("/api/v1/knowledge/sources"),
+      createSource: (body: { type: string; name: string; config?: Record<string, unknown> }) =>
+        request<KnowledgeSource>("/api/v1/knowledge/sources", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
       createCatalogSource: (file: File, name = "Product catalog") => {
         const form = new FormData();
         form.append("type", "catalog");
         form.append("name", name);
         form.append("file", file);
-        return request("/api/v1/knowledge/sources", { method: "POST", body: form });
+        return request<KnowledgeSource>("/api/v1/knowledge/sources", { method: "POST", body: form });
       },
-      syncSource: (sourceId) =>
-        request(`/api/v1/knowledge/sources/${sourceId}/sync`, { method: "POST", body: JSON.stringify({}) }),
-      listJobs: () => request("/api/v1/knowledge/jobs"),
-      getJob: (jobId: string) => request(`/api/v1/knowledge/jobs/${jobId}`),
-      deleteSource: (sourceId) => request(`/api/v1/knowledge/sources/${sourceId}`, { method: "DELETE" }),
-      listFaq: () => request("/api/v1/knowledge/faq"),
+      syncSource: (sourceId: string) =>
+        request<{ jobId: string; sourceId: string; status: string; type?: string }>(
+          `/api/v1/knowledge/sources/${sourceId}/sync`,
+          { method: "POST", body: JSON.stringify({}) }
+        ),
+      listJobs: () => request<{ items: IngestJob[] }>("/api/v1/knowledge/jobs"),
+      getJob: (jobId: string) => request<IngestJob>(`/api/v1/knowledge/jobs/${jobId}`),
+      deleteSource: (sourceId: string) =>
+        request<{ sourceId: string; deleted: boolean }>(
+          `/api/v1/knowledge/sources/${sourceId}`,
+          { method: "DELETE" }
+        ),
+      listFaq: () =>
+        request<{ sourceId: string | null; items: Array<{ question: string; answer: string }> }>(
+          "/api/v1/knowledge/faq"
+        ),
       ingestFaq: (items: Array<{ question: string; answer: string }>, append = false) =>
-        request("/api/v1/knowledge/faq", {
+        request<{
+          sourceId: string;
+          itemCount: number;
+          items: Array<{ question: string; answer: string }>;
+          status: string;
+        }>("/api/v1/knowledge/faq", {
           method: "POST",
           body: JSON.stringify({ items, append }),
         }),
       detectPlatform: (url: string) =>
-        request("/api/v1/knowledge/detect-platform", {
+        request<{
+          platform: "woocommerce" | "shopify" | "generic";
+          normalizedUrl: string;
+          signals: string[];
+          commerceChatPluginInstalled: boolean;
+        }>("/api/v1/knowledge/detect-platform", {
           method: "POST",
           body: JSON.stringify({ url }),
         }),
-      getPageVoice: () => request("/api/v1/knowledge/page-voice"),
+      getPageVoice: () =>
+        request<{
+          sourceId: string | null;
+          learningPaused: boolean;
+          pairCount: number;
+          vectorCount: number;
+          lastCaptureAt: string | null;
+          lastSyncAt: string | null;
+          platform: string;
+          preview: Array<{ customerText: string; ownerText: string; capturedAt: string }>;
+        }>("/api/v1/knowledge/page-voice"),
       updatePageVoice: (body: { learningPaused?: boolean }) =>
         request("/api/v1/knowledge/page-voice", {
           method: "PATCH",
           body: JSON.stringify(body),
         }),
       syncPageVoice: () =>
-        request("/api/v1/knowledge/page-voice/sync", {
-          method: "POST",
-          body: JSON.stringify({}),
-        }),
+        request<{ jobId: string; sourceId: string; status: string; type?: string }>(
+          "/api/v1/knowledge/page-voice/sync",
+          { method: "POST", body: JSON.stringify({}) }
+        ),
       uploadPageVoice: (file: File) => {
         const form = new FormData();
         form.append("file", file);
-        return request("/api/v1/knowledge/page-voice/upload", { method: "POST", body: form });
+        return request<{
+          pairCount: number;
+          added: number;
+          sourceId: string;
+          jobId?: string;
+          status: string;
+        }>("/api/v1/knowledge/page-voice/upload", { method: "POST", body: form });
       },
     },
     commerce: {
@@ -305,42 +390,66 @@ export function createHttpApi() {
         if (params?.q) search.set("q", params.q);
         if (params?.limit != null) search.set("limit", String(params.limit));
         const qs = search.toString();
-        return request(`/api/v1/commerce/products${qs ? `?${qs}` : ""}`);
+        return request<{ items: Array<{ sku: string; name: string; price: number }> }>(
+          `/api/v1/commerce/products${qs ? `?${qs}` : ""}`
+        );
       },
-      wordpressStatus: () => request("/api/v1/commerce/wordpress/status"),
+      wordpressStatus: () =>
+        request<{ connected: boolean; siteUrl?: string; lastSyncAt?: string }>(
+          "/api/v1/commerce/wordpress/status"
+        ),
       connectWordPress: (body: { siteUrl: string; apiKey: string }) =>
         request("/api/v1/commerce/wordpress/connect", {
           method: "POST",
           body: JSON.stringify(body),
         }),
       syncWordPress: () =>
-        request("/api/v1/commerce/wordpress/sync", { method: "POST", body: JSON.stringify({}) }),
+        request<{ jobId: string; sourceId: string; status: string; type?: string }>(
+          "/api/v1/commerce/wordpress/sync",
+          { method: "POST", body: JSON.stringify({}) }
+        ),
       disconnectWordPress: () =>
         request("/api/v1/commerce/wordpress", { method: "DELETE" }),
     },
     team: {
-      list: () => request("/api/v1/team"),
-      invite: (body) => request("/auth/invite", { method: "POST", body: JSON.stringify(body) }),
+      list: () => request<{ items: TeamMember[] }>("/api/v1/team"),
+      invite: (body: { email: string; role: string; name?: string }) =>
+        request<{ invited: boolean }>("/auth/invite", { method: "POST", body: JSON.stringify(body) }),
       remove: (userId: string) => request(`/api/v1/team/${userId}`, { method: "DELETE" }),
       updateRole: (userId: string, role: string) =>
         request(`/api/v1/team/${userId}`, { method: "PATCH", body: JSON.stringify({ role }) }),
     },
     dashboard: {
-      getStats: () => request("/api/v1/dashboard/stats"),
+      getStats: () => request<DashboardStats>("/api/v1/dashboard/stats"),
     },
     billing: {
-      getPlans: () => request("/api/v1/billing/plans"),
-      getSubscription: () => request("/api/v1/billing/subscription"),
-      getOverview: () => request("/api/v1/billing/overview"),
+      getPlans: () => request<{ plans: BillingPlan[] }>("/api/v1/billing/plans"),
+      getSubscription: () => request<BillingOverview["subscription"]>("/api/v1/billing/subscription"),
+      getOverview: () => request<BillingOverview>("/api/v1/billing/overview"),
       checkout: (body: { plan: string; successUrl?: string; cancelUrl?: string }) =>
-        request("/api/v1/billing/checkout", { method: "POST", body: JSON.stringify(body) }),
+        request<BillingCheckoutSession>("/api/v1/billing/checkout", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
     },
     widget: {
-      getConfig: () => request("/api/v1/widget/config"),
+      getConfig: () =>
+        request<{
+          storeName?: string;
+          greeting?: string;
+          primaryColor: string;
+          position?: string;
+          suggestedQuestions?: string[];
+          enabled?: boolean;
+          embedCode: string;
+        }>("/api/v1/widget/config"),
     },
     chat: {
-      send: (message) =>
-        request("/api/v1/chat", { method: "POST", body: JSON.stringify({ message, channel: "test" }) }),
+      send: (message: string) =>
+        request<{ conversationId: string; reply: { type: string; content: string } }>(
+          "/api/v1/chat",
+          { method: "POST", body: JSON.stringify({ message, channel: "test" }) }
+        ),
     },
   };
 }
