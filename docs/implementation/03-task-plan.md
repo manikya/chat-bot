@@ -4,7 +4,7 @@
 **Version:** 1.0  
 **Timeline:** MVP ~10 weeks (2.5 FTE)  
 **Related:** [phases/01-phase-mvp.md](../phases/01-phase-mvp.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
-**Last progress update:** 2026-06-14
+**Last progress update:** 2026-06-15
 
 ---
 
@@ -13,12 +13,12 @@
 | Sprint | Status | Done |
 |--------|--------|------|
 | **Sprint 1 — Foundation** | ~98% | Auth, tenant, JWT, onboarding, logo S3 presign; **not done:** CDK |
-| **Sprint 2 — Knowledge** | ~95% | Crawl, CSV, FAQ, page-voice ingest UI, vector quota guard; **AWS:** Step Functions + SQS ingest |
+| **Sprint 2 — Knowledge** | ~98% | Crawl, CSV, FAQ, page-voice, vector quota; **AWS:** S3 Vectors + Step Functions + catalog → data S3 |
 | **Sprint 3 — Chat** | ~95% | Orchestrator, tools, usage metering, message quota, suspended tenants |
 | **Sprint 4 — Meta** | ~75% | WhatsApp + Messenger + Instagram connect/webhooks; **not done:** App Review, prod domains |
-| **Sprint 5 — Widget** | ~95% | SSE stream, carousel cards, rate limits; **not done:** widget CloudFront CDN |
+| **Sprint 5 — Widget** | ~100% | SSE, carousel, rate limits, CloudFront CDN (`deploy:widget`) |
 | **Sprint 7 — Billing** | ~60% | Plans, trial lifecycle cron, cancel/reactivate, limit enforcement; **not done:** payment gateway |
-| **Infra (Week 0)** | ~75% | `deploy:aws:full`, IAM bootstrap, EventBridge crons, admin CloudFront; **not done:** CI, custom domain |
+| **Infra (Week 0)** | ~80% | `deploy:aws:full`, IAM bootstrap, EventBridge crons, admin + widget CloudFront; **not done:** CI, custom domain |
 
 **~75 real API routes** · **0 mock routes** · See [06-api-implementation-status.md](06-api-implementation-status.md).
 
@@ -100,7 +100,7 @@
 | 2.12 | Admin: ingest job progress UI | FE | M | 2.7 |
 
 **Sprint 2 exit criteria:**
-- [x] Website crawl → chunks → vectors searchable *(local FileVectorStore)*
+- [x] Website crawl → chunks → vectors searchable *(S3 Vectors on AWS dev; local needs `S3_VECTORS_BUCKET`)*
 - [x] Catalog upload → product search via RAG
 - [x] Admin can trigger sync and see job status
 

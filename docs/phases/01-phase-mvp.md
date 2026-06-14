@@ -87,10 +87,10 @@
 ### Week 3–4: Channels + Ingest
 
 ```
-✓ Knowledge source CRUD + website crawl + catalog CSV ingest (local `FileVectorStore`)
-○ Meta webhook receives WhatsApp messages
-○ Tenant resolved from phone_number_id
-○ S3 Vectors in production (local file-backed vectors today)
+✓ Knowledge source CRUD + website crawl + catalog CSV ingest (S3 Vectors on AWS dev)
+✓ Meta webhook receives WhatsApp/Messenger messages (dev + ngrok; prod domain pending)
+✓ Tenant resolved from phone_number_id / page_id / ig_user_id
+✓ S3 Vectors in production (`commercechat-dev-vectors`)
 ```
 
 ### Week 5–6: AI core

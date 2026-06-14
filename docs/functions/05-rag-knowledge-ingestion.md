@@ -9,6 +9,17 @@
 
 Ingest merchant knowledge from websites, social content, conversation exports, and product catalogs; chunk, embed, and index into per-tenant S3 Vectors for retrieval during chat.
 
+### Implementation status (AWS dev, 2026-06-15)
+
+| Component | Shipped | Notes |
+|-----------|---------|-------|
+| Vector store | `S3VectorStore` | Bucket `commercechat-{env}-vectors`; per-tenant index `tenant-{id}` |
+| Async ingest | Step Functions + SQS | `commercechat-dev-ingest` → `ingest-worker` Lambda |
+| Catalog CSV | Data S3 bucket | `S3_DATA_BUCKET/catalog/{tenantId}/{sourceId}.csv` (shared across Lambdas) |
+| FAQ | Sync on POST | `POST /api/v1/knowledge/faq` embeds inline (no job queue) |
+| Website crawl | Local + AWS | Crawl output still local `/tmp` on AWS — **persist to data S3 next** |
+| Verify | `test-s3-vectors-ingest.mjs` | FAQ + catalog pipeline; 5/5 on dev |
+
 ---
 
 ## 2. Supported sources

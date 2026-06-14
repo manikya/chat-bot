@@ -32,7 +32,11 @@ Built to `apps/api/dist/handlers/<name>.cjs` via `npm run build:lambdas`.
 | `knowledge-jobs` | `knowledge-jobs.cjs` | `GET /api/v1/knowledge/jobs`, `GET /api/v1/knowledge/jobs/{jobId}` |
 | `jwt-authorizer` | `jwt-authorizer.cjs` | API Gateway authorizer |
 
-**Status (2026-06-14):** 40+ handler bundles · **75 API routes** on AWS dev. Deploy via `npm run deploy:aws:full` (IAM + ingest + Step Functions + cron) or `npm run deploy:aws` (API only). Admin UI via `npm run deploy:admin`. Inventories under `infra/deployments/`.
+**Status (2026-06-15):** 40+ handler bundles · **~74 API routes** on AWS dev (widget script on CDN, not API GW when `WIDGET_CDN_URL` set).
+
+**AWS dev URLs:** API `https://fimfx57xwl.execute-api.us-east-1.amazonaws.com` · Admin `https://d3g8dfkodwqrza.cloudfront.net` · Widget `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js` · Vectors `commercechat-dev-vectors`
+
+Deploy via `npm run deploy:aws:full` or individual scripts below. Inventories under `infra/deployments/`.
 
 | npm script | What it does |
 |------------|--------------|

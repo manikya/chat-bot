@@ -1,11 +1,13 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-14  
+**Last updated:** 2026-06-15  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)  
 **AWS dev API:** `https://fimfx57xwl.execute-api.us-east-1.amazonaws.com`  
 **AWS dev admin:** `https://d3g8dfkodwqrza.cloudfront.net`  
-**AWS dev ingest SFN:** `commercechat-dev-ingest`
+**AWS dev widget CDN:** `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js`  
+**AWS dev ingest SFN:** `commercechat-dev-ingest`  
+**AWS dev vectors:** `commercechat-dev-vectors`
 
 ---
 
@@ -38,8 +40,11 @@
 | 2026-06-14 | Rich product cards (carousel) in widget; conversation ingest UI (page-voice, Pro+ gate) |
 | 2026-06-14 | AWS: Step Functions ingest, EventBridge crons, `deploy:aws:full`, `ensure-deploy-iam` |
 | 2026-06-14 | E2E script `apps/api/scripts/test-billing-limits.mjs` (11 checks on dev API) |
+| 2026-06-15 | Widget CDN: `commercechat-dev-widget` CloudFront, `WIDGET_CDN_URL`, embed uses CDN |
+| 2026-06-15 | S3 Vectors on AWS: catalog CSV → data S3 bucket → ingest worker → `commercechat-dev-vectors` |
+| 2026-06-15 | E2E `apps/api/scripts/test-s3-vectors-ingest.mjs` (FAQ sync + catalog pipeline, 5/5 on dev) |
 
-**Git (local `main`):** AWS dev API + admin + ingest Step Functions + billing cron schedules.
+**Git (local `main`):** widget CDN + S3 Vectors ingest verified on AWS dev.
 
 ---
 
@@ -165,7 +170,7 @@ _None — core auth + team invite flow complete._
 
 ### Phase 2
 
-MFA (TOTP + email OTP), production widget CDN (CloudFront for `v1.js`), full payment gateway adapter (Sri Lankan provider — Stripe deferred), analytics dashboard, 80% quota warning emails.
+MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — Stripe deferred), analytics dashboard, 80% quota warning emails, custom domains (`api.*`, `app.*`).
 
 ---
 
@@ -178,19 +183,19 @@ MFA (TOTP + email OTP), production widget CDN (CloudFront for `v1.js`), full pay
 | 1 | **Payment gateway** | Checkout stub exists; wire Sri Lankan provider + `POST /webhooks/payment` for paid plans |
 | 2 | **Meta production** | Custom domain for webhooks/OAuth; submit App Review for WhatsApp live |
 | 3 | **Instagram DM E2E** | Handler + OAuth shipped; validate on AWS dev with real IG test account |
-| 4 | **Widget CDN** | `npm run deploy:widget` or `--with-widget-cdn` on full deploy |
-| 5 | **S3 Vectors on AWS** | Ingest worker uses `S3_VECTORS_BUCKET`; verify with `test-s3-vectors-ingest.mjs` |
+| 4 | **CI/CD** | GitHub Actions → `deploy:aws:full` + `deploy:admin` on merge to `main` |
+| 5 | **Custom domains** | `api.commercechat.com`, `app.*`, `cdn.*` — ACM + Route 53 |
 
 ### Medium term
 
 | Item | Notes |
 |------|-------|
-| **CI/CD** | GitHub Actions → `deploy:aws:full` + `deploy:admin` on merge to `main` |
-| **Custom domains** | `api.*`, `app.*`, ACM + Route 53 |
 | **MFA** | TOTP + email OTP per [13-custom-auth.md](../functions/13-custom-auth.md) |
 | **Analytics** | Conversation aggregates + admin charts (Phase 2) |
 | **Quota emails** | 80% usage warning via Resend |
 | **WAF + budgets** | Pre-launch hardening per [aws-serverless-deployment.md](../../infra/aws-serverless-deployment.md) |
+| **Website crawl on AWS** | Persist crawled pages to data S3 (same pattern as catalog CSV) |
+| **WordPress plugin** | Use `widgetScriptUrl` from bootstrap when `WIDGET_CDN_URL` is set |
 
 ### Already done (remove from backlog)
 
@@ -292,5 +297,6 @@ npm run dev:ngrok:ui          # tunnel :3000 — admin + /webhooks/* proxy to AP
 cd apps/api && node scripts/test-dashboard-widget.mjs
 cd apps/api && node scripts/test-chat.mjs
 cd apps/api && node scripts/test-usage-widget-conversations.mjs
-cd apps/api && node scripts/test-billing-limits.mjs   # plan limits + SSE + billing cron guard
+cd apps/api && node scripts/test-billing-limits.mjs
+cd apps/api && node scripts/test-s3-vectors-ingest.mjs   # S3 Vectors + ingest pipeline on dev
 ```

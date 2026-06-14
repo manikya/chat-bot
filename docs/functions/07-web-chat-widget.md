@@ -21,7 +21,7 @@ Provide an embeddable JavaScript chat widget merchants add to their storefront, 
 | Bot formatting | `formatBotText()` | `**bold**`, lists, `\n` → `<br>` |
 | Product UI | Carousel cards (up to 5) | Multi-image dots; `search_products` tool |
 | Rate limits | Per-plan | `WIDGET_CHAT_RATE_LIMITS` / config limits in `billing/plans.ts` |
-| CDN | CloudFront (`npm run deploy:widget`) | `WIDGET_CDN_URL` on API Lambdas; embed uses CDN for script |
+| CDN | CloudFront (`npm run deploy:widget`) | Dev: `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js` |
 | Demo | `http://localhost:3001/widget/demo.html?key=...` | Must use HTTP (CORS blocks `file://`) |
 
 ---
