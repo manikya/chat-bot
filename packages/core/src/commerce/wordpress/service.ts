@@ -158,7 +158,10 @@ export async function connectWordPressStore(
   await registerStoreApiKey(auth.tenantId, creds.apiKey, config);
 
   try {
-    await pushWordPressCloudConfig(creds, config.apiPublicUrl, config);
+    const widgetScriptUrl = config.widgetCdnUrl
+      ? `${config.widgetCdnUrl.replace(/\/$/, "")}/widget/v1.js`
+      : undefined;
+    await pushWordPressCloudConfig(creds, config.apiPublicUrl, widgetScriptUrl, config);
   } catch {
     /* Store may block outbound from CommerceChat; widget URL can be set in WP admin */
   }

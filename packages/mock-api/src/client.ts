@@ -4,6 +4,7 @@ import {
   DEMO_CONVERSATION_DETAILS,
   DEMO_CONVERSATIONS,
   DEMO_DASHBOARD,
+  DEMO_ANALYTICS,
   DEMO_JOBS,
   DEMO_LIMITS,
   DEMO_LOGIN,
@@ -23,6 +24,7 @@ import type {
   ChannelInfo,
   Conversation,
   ConversationDetail,
+  ConversationAnalytics,
   DashboardStats,
   IngestJob,
   KnowledgeSource,
@@ -482,6 +484,17 @@ export function createMockApi() {
       async getStats() {
         await delay(400);
         return ok(DEMO_DASHBOARD);
+      },
+    },
+
+    analytics: {
+      async get(params?: { from?: string; to?: string }) {
+        await delay(400);
+        return ok({
+          ...DEMO_ANALYTICS,
+          from: params?.from ?? DEMO_ANALYTICS.from,
+          to: params?.to ?? DEMO_ANALYTICS.to,
+        });
       },
     },
 

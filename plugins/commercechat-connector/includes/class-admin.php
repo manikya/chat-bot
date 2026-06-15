@@ -92,6 +92,10 @@ class CommerceChat_Connector_Admin
                 return $value === '1' ? '1' : '0';
             },
         ]);
+        register_setting('commercechat_connector', 'commercechat_widget_script_url', [
+            'type' => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+        ]);
     }
 
     private static function generate_api_key(): string

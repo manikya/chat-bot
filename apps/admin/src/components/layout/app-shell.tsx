@@ -7,6 +7,7 @@ import {
   BookOpen,
   Hash,
   LayoutDashboard,
+  LineChart,
   LogOut,
   MessageSquare,
   Radio,
@@ -23,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/analytics", label: "Analytics", icon: LineChart },
   { href: "/conversations", label: "Conversations", icon: MessageSquare },
   { href: "/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/bot", label: "Bot config", icon: Bot },

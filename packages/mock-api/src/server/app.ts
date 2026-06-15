@@ -6,6 +6,7 @@ import {
   DEMO_CONVERSATION_DETAILS,
   DEMO_CONVERSATIONS,
   DEMO_DASHBOARD,
+  DEMO_ANALYTICS,
   DEMO_JOBS,
   DEMO_LIMITS,
   DEMO_LOGIN,
@@ -314,6 +315,18 @@ export function createMockServerApp() {
   });
 
   app.get("/api/v1/dashboard/stats", async () => json(ok(DEMO_DASHBOARD)));
+
+  app.get("/api/v1/analytics", async (c) => {
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+    return json(
+      ok({
+        ...DEMO_ANALYTICS,
+        from: from ?? DEMO_ANALYTICS.from,
+        to: to ?? DEMO_ANALYTICS.to,
+      })
+    );
+  });
 
   app.get("/api/v1/widget/config", async (c) => {
     const session = store.resolve(getToken(c));

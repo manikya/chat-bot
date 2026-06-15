@@ -133,6 +133,12 @@ class CommerceChat_Connector_REST_API
         update_option('commercechat_cloud_api_url', untrailingslashit($url));
         update_option('commercechat_widget_enabled', '1');
 
+        $script = isset($body['widgetScriptUrl']) ? esc_url_raw((string) $body['widgetScriptUrl']) : '';
+        if ($script !== '') {
+            update_option('commercechat_widget_script_url', untrailingslashit($script));
+            delete_transient('commercechat_bootstrap_script_url');
+        }
+
         return new WP_REST_Response(['ok' => true], 200);
     }
 }

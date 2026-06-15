@@ -79,6 +79,7 @@ const BASE_ROUTES = [
   ["DELETE", "/api/v1/team/{userId}", "team-member", "deleteHandler"],
   ["PATCH", "/api/v1/team/{userId}", "team-member", "patchHandler"],
   ["GET", "/api/v1/dashboard/stats", "dashboard-stats"],
+  ["GET", "/api/v1/analytics", "analytics"],
   ["GET", "/api/v1/channels", "channels", "listHandler"],
   ["POST", "/api/v1/channels/meta/connect", "channels", "connectHandler"],
   ["POST", "/api/v1/channels/meta/connect-messenger", "channels", "connectMessengerHandler"],

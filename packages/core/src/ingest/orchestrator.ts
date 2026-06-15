@@ -9,6 +9,7 @@ import { chunkCatalogProducts, toCatalogVectorChunks } from "./chunker/catalog";
 import { chunkWebsiteSections, countTokens, toVectorChunks } from "./chunker/website";
 import { parseCatalogCsv } from "./parsers/catalog-csv";
 import { readCatalogFile } from "./storage/catalog-file";
+import { saveWebsiteCrawl } from "./storage/website-crawl-file";
 import { crawlWebsite } from "./crawler/website";
 import { createEmbeddingProvider } from "./embedding";
 import { getJobItem, updateJob } from "./jobs";
@@ -124,6 +125,8 @@ export async function runWebsiteIngestJob(
 
     stats.pagesProcessed = pages.length;
     stats.errors = crawlErrors;
+
+    await saveWebsiteCrawl(config, tenantId, sourceId, pages);
 
     for (const page of pages) {
       const pageTitle = extractPageTitle(page.html, page.url);

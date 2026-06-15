@@ -65,4 +65,12 @@ export class SmtpEmailProvider implements EmailProvider {
       `<p>Hi ${name},</p><p>You've been invited to join a store on CommerceChat.</p><p><a href="${url}">Accept invite</a></p><p>Or copy this link: ${url}</p>`
     );
   }
+
+  async sendRawEmail(to: string, subject: string, text: string) {
+    const html = text
+      .split("\n")
+      .map((line) => (line.trim() === "" ? "<br/>" : `<p>${line}</p>`))
+      .join("");
+    await this.send(to, subject, text, html);
+  }
 }

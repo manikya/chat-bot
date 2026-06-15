@@ -4,6 +4,7 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { createVectorStore } from "../ingest/vectors";
+import { maybeSendMessageQuotaWarning } from "../billing/quota-email";
 import { getTenantLimits } from "../tenant/service";
 
 export const QUOTA_EXCEEDED_USER_MESSAGE =
@@ -223,6 +224,8 @@ export async function reserveMessageQuota(tenantId: string, config: CoreConfig) 
     }
     throw err;
   }
+
+  await maybeSendMessageQuotaWarning(tenantId, config);
 }
 
 export async function assertChannelEnabled(tenantId: string, channel: string, config: CoreConfig) {

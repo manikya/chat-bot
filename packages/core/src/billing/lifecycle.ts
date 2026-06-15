@@ -97,7 +97,7 @@ async function sendBillingEmail(
   const provider = createEmailProvider(config);
   if (!provider) return false;
   try {
-    await provider.send({ to, subject, text });
+    await provider.sendRawEmail(to, subject, text);
     return true;
   } catch (err) {
     console.warn("[billing-lifecycle] email failed", to, err);

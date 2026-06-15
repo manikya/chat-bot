@@ -5,6 +5,7 @@ export interface EmailProvider {
   sendVerifyEmail(to: string, token: string, appUrl: string): Promise<void>;
   sendPasswordReset(to: string, token: string, appUrl: string): Promise<void>;
   sendTeamInvite(to: string, token: string, appUrl: string, name: string): Promise<void>;
+  sendRawEmail(to: string, subject: string, text: string): Promise<void>;
 }
 
 export class ConsoleEmailProvider implements EmailProvider {
@@ -25,6 +26,10 @@ export class ConsoleEmailProvider implements EmailProvider {
         url: `${appUrl}/accept-invite?token=${token}`,
       })
     );
+  }
+
+  async sendRawEmail(to: string, subject: string, text: string) {
+    console.log(JSON.stringify({ type: "raw-email", to, subject, text }));
   }
 }
 

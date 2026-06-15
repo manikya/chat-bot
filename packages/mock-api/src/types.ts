@@ -253,6 +253,27 @@ export interface DashboardStats {
   quotaPercent: number;
 }
 
+export interface ConversationAnalytics {
+  from: string;
+  to: string;
+  summary: {
+    messagesTotal: number;
+    conversationsTotal: number;
+    conversationsActive: number;
+    cartsStarted: number;
+    checkoutLinks: number;
+  };
+  messagesByDay: Array<{ date: string; messages: number }>;
+  channelBreakdown: Array<{ channel: string; count: number }>;
+  intentBreakdown: Array<{ intent: string; count: number }>;
+  topProducts: Array<{ label: string; count: number }>;
+  funnel: {
+    conversations: number;
+    withCart: number;
+    checkoutLinks: number;
+  };
+}
+
 export interface CartItem {
   sku: string;
   name: string;

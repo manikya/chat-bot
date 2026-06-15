@@ -2,6 +2,7 @@ import type {
   ChannelInfo,
   Conversation,
   ConversationDetail,
+  ConversationAnalytics,
   DashboardStats,
   IngestJob,
   KnowledgeSource,
@@ -289,6 +290,48 @@ export const DEMO_DASHBOARD: DashboardStats = {
     instagram: "disconnected",
   },
   quotaPercent: 17,
+};
+
+export const DEMO_ANALYTICS: ConversationAnalytics = {
+  from: "2026-05-10",
+  to: "2026-06-08",
+  summary: {
+    messagesTotal: 342,
+    conversationsTotal: 89,
+    conversationsActive: 5,
+    cartsStarted: 24,
+    checkoutLinks: 11,
+  },
+  messagesByDay: [
+    { date: "2026-06-02", messages: 12 },
+    { date: "2026-06-03", messages: 18 },
+    { date: "2026-06-04", messages: 9 },
+    { date: "2026-06-05", messages: 22 },
+    { date: "2026-06-06", messages: 15 },
+    { date: "2026-06-07", messages: 28 },
+    { date: "2026-06-08", messages: 28 },
+  ],
+  channelBreakdown: [
+    { channel: "web", count: 198 },
+    { channel: "whatsapp", count: 112 },
+    { channel: "messenger", count: 32 },
+  ],
+  intentBreakdown: [
+    { intent: "product_search", count: 94 },
+    { intent: "order_status", count: 41 },
+    { intent: "faq", count: 38 },
+    { intent: "checkout", count: 22 },
+  ],
+  topProducts: [
+    { label: "blue running shoes", count: 18 },
+    { label: "wireless earbuds", count: 14 },
+    { label: "gift card", count: 9 },
+  ],
+  funnel: {
+    conversations: 89,
+    withCart: 24,
+    checkoutLinks: 11,
+  },
 };
 
 export const DEMO_ONBOARDING: OnboardingState = {

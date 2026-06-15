@@ -80,11 +80,18 @@ async function wpFetch<T>(
 export async function pushWordPressCloudConfig(
   creds: WordPressCredentials,
   apiPublicUrl: string,
+  widgetScriptUrl: string | undefined,
   config: CoreConfig
 ): Promise<void> {
+  const body: { apiPublicUrl: string; widgetScriptUrl?: string } = {
+    apiPublicUrl: apiPublicUrl.replace(/\/$/, ""),
+  };
+  if (widgetScriptUrl) {
+    body.widgetScriptUrl = widgetScriptUrl.replace(/\/$/, "");
+  }
   await wpRequest<{ ok: boolean }>(creds, "/register-cloud", config, {
     method: "POST",
-    body: { apiPublicUrl: apiPublicUrl.replace(/\/$/, "") },
+    body,
   });
 }
 

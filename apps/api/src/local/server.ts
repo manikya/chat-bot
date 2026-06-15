@@ -46,6 +46,7 @@ import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key
 import { handler as conversationsHandler } from "../handlers/conversations";
 import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler, streamHandler as widgetStreamHandler } from "../handlers/widget";
 import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
+import { handler as analyticsHandler } from "../handlers/analytics";
 import { handler as webhookMetaHandler } from "../handlers/webhook-meta";
 import { handler as cronMetaTokenRefreshHandler } from "../handlers/cron-meta-token-refresh";
 import { handler as cronBillingLifecycleHandler } from "../handlers/cron-billing-lifecycle";
@@ -139,6 +140,7 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/team", handler: teamHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },
+  { method: "GET", path: "/api/v1/analytics", handler: analyticsHandler },
   { method: "GET", path: "/api/v1/channels", handler: channelsListHandler },
   { method: "POST", path: "/api/v1/channels/meta/connect", handler: channelsConnectHandler },
   { method: "POST", path: "/api/v1/channels/meta/connect-messenger", handler: channelsConnectMessengerHandler },
