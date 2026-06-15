@@ -80,6 +80,11 @@ export async function processMessengerInbound(
       config
     );
 
+    if (result.handledBy === "human") {
+      console.log("[messenger] human handling — no bot reply for", inbound.from);
+      return;
+    }
+
     const productElements = buildMessengerProductElements(result);
     if (productElements.length) {
       await sendMessengerReply(tenantId, inbound.from, result.reply.content, config);

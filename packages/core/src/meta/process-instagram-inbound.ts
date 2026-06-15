@@ -77,6 +77,11 @@ export async function processInstagramInbound(
       config
     );
 
+    if (result.handledBy === "human") {
+      console.log("[instagram] human handling — no bot reply for", inbound.from);
+      return;
+    }
+
     const productElements = buildMessengerProductElements(result);
     if (productElements.length) {
       await sendInstagramReply(tenantId, inbound.from, result.reply.content, config);

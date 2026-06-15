@@ -308,12 +308,40 @@ export function createHttpApi() {
       health: () => request<Record<string, { status: string; detail?: string }>>("/api/v1/channels/meta/health"),
     },
     conversations: {
-      list: (params?: { channel?: string }) => {
-        const q = params?.channel ? `?channel=${params.channel}` : "";
-        return request<{ items: Conversation[] }>(`/api/v1/conversations${q}`);
+      list: (params?: { channel?: string; handlingMode?: "bot" | "human" }) => {
+        const search = new URLSearchParams();
+        if (params?.channel) search.set("channel", params.channel);
+        if (params?.handlingMode) search.set("handlingMode", params.handlingMode);
+        const qs = search.toString();
+        return request<{ items: Conversation[] }>(`/api/v1/conversations${qs ? `?${qs}` : ""}`);
       },
       get: (id: string) => request<ConversationDetail>(`/api/v1/conversations/${id}`),
       getMessages: (id: string) => request<{ items: Message[] }>(`/api/v1/conversations/${id}/messages`),
+      setHandling: (
+        id: string,
+        body: { mode: "bot" | "human"; notifyCustomer?: boolean; assignedToUserId?: string | null }
+      ) =>
+        request<{
+          conversationId: string;
+          handlingMode: "bot" | "human";
+          assignedToUserId: string | null;
+          handoffAt: string | null;
+          manualReplySupported: boolean;
+        }>(`/api/v1/conversations/${id}/handling`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        }),
+      reply: (id: string, content: string) =>
+        request<{
+          conversationId: string;
+          messageId: string;
+          content: string;
+          channel: string;
+          handlingMode: "human";
+        }>(`/api/v1/conversations/${id}/reply`, {
+          method: "POST",
+          body: JSON.stringify({ content }),
+        }),
     },
     knowledge: {
       listSources: () => request<{ items: KnowledgeSource[] }>("/api/v1/knowledge/sources"),

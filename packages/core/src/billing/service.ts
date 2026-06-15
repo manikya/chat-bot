@@ -47,8 +47,9 @@ function trialDaysRemaining(periodEnd: string | undefined | null): number | null
 
 function planFeatureFlags(planId: TenantPlan) {
   switch (planId) {
+    case "trial":
     case "pro":
-      return { conversationIngest: true, socialIngest: false, humanHandoff: false };
+      return { conversationIngest: true, socialIngest: false, humanHandoff: true };
     case "business":
     case "enterprise":
       return { conversationIngest: true, socialIngest: true, humanHandoff: true };

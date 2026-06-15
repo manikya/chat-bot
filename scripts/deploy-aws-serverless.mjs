@@ -48,6 +48,8 @@ const BASE_ROUTES = [
   ["GET", "/api/v1/conversations", "conversations"],
   ["GET", "/api/v1/conversations/{conversationId}", "conversations"],
   ["GET", "/api/v1/conversations/{conversationId}/messages", "conversations"],
+  ["PATCH", "/api/v1/conversations/{conversationId}/handling", "conversations"],
+  ["POST", "/api/v1/conversations/{conversationId}/reply", "conversations"],
   ["GET", "/api/v1/widget/config", "widget", "configHandler"],
   ["POST", "/api/v1/widget/chat", "widget", "chatHandler"],
   ["POST", "/api/v1/widget/chat/stream", "widget", "streamHandler"],

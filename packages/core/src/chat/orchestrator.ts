@@ -20,6 +20,7 @@ import { buildSystemPrompt } from "./prompts";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 import { assertTenantOperational } from "../tenant/status";
+import { notifyAgentInboundMessage, getHandlingMode } from "./agent-notify";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -133,6 +134,27 @@ export async function runChatOrchestrator(
     input.externalUserId,
     config
   );
+
+  const handlingMode = getHandlingMode(conversation);
+  if (handlingMode === "human") {
+    await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
+      awaitingAgent: true,
+    });
+    await notifyAgentInboundMessage(auth.tenantId, conversation, text, config);
+
+    const webAck =
+      input.channel === "web"
+        ? "Thanks — our team has been notified and will reply shortly."
+        : "";
+
+    return {
+      conversationId: conversation.conversationId,
+      reply: { type: "text", content: webAck },
+      handledBy: "human",
+      handlingMode: "human",
+      usage: { inputTokens: 0, outputTokens: 0 },
+    };
+  }
 
   const history = await loadMessageHistory(auth.tenantId, conversation.conversationId, config);
   const isFirstMessage = history.length === 0;
@@ -267,5 +289,7 @@ export async function runChatOrchestrator(
     })),
     intent,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+    handledBy: "bot",
+    handlingMode: "bot",
   };
 }

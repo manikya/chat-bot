@@ -1,6 +1,6 @@
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { generateId } from "@commercechat/shared";
-import type { ChatIntent } from "@commercechat/shared";
+import type { ChatIntent, ConversationHandlingMode } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
@@ -12,6 +12,9 @@ export interface ConversationState {
   externalUserId: string;
   cartId?: string;
   status: string;
+  handlingMode?: ConversationHandlingMode;
+  assignedToUserId?: string;
+  handoffAt?: string;
   messageCount: number;
   lastInboundAt?: string;
   lastOutboundAt?: string;
@@ -62,6 +65,7 @@ export async function resolveConversation(
     channel,
     externalUserId,
     status: "active",
+    handlingMode: "bot",
     messageCount: 0,
     createdAt: now,
     updatedAt: now,
@@ -190,7 +194,13 @@ export function customerDisplayName(conv: ConversationState): string {
 export async function listTenantConversations(
   tenantId: string,
   config: CoreConfig,
-  options?: { channel?: string; status?: string; limit?: number; cursor?: string }
+  options?: {
+    channel?: string;
+    status?: string;
+    handlingMode?: ConversationHandlingMode;
+    limit?: number;
+    cursor?: string;
+  }
 ) {
   const db = getDocClient(config);
   const limit = Math.min(options?.limit ?? 20, 50);
@@ -227,6 +237,9 @@ export async function listTenantConversations(
   if (options?.status) {
     items = items.filter((c) => c.status === options.status);
   }
+  if (options?.handlingMode) {
+    items = items.filter((c) => (c.handlingMode ?? "bot") === options.handlingMode);
+  }
 
   items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const page = items.slice(0, limit);
@@ -243,6 +256,8 @@ export async function listTenantConversations(
       externalUserId: c.externalUserId,
       customerName: customerDisplayName(c),
       status: c.status,
+      handlingMode: c.handlingMode ?? "bot",
+      assignedToUserId: c.assignedToUserId ?? null,
       messageCount: c.messageCount,
       lastInboundAt: c.lastInboundAt ?? c.createdAt,
       updatedAt: c.updatedAt,

@@ -7,10 +7,17 @@ import {
   listConversationMessages,
   listTenantConversations,
 } from "../chat/conversation";
+import { conversationHandlingDto } from "../chat/handling";
 
 export async function listConversations(
   auth: AuthContext,
-  query: { channel?: string; status?: string; limit?: number; cursor?: string },
+  query: {
+    channel?: string;
+    status?: string;
+    handlingMode?: "bot" | "human";
+    limit?: number;
+    cursor?: string;
+  },
   config: CoreConfig
 ) {
   const data = await listTenantConversations(auth.tenantId, config, query);
@@ -36,6 +43,7 @@ export async function getConversationDetail(
     messageCount: conv.messageCount,
     lastInboundAt: conv.lastInboundAt ?? conv.createdAt,
     updatedAt: conv.updatedAt,
+    ...conversationHandlingDto(conv),
     cart: cart?.items.length
       ? { items: cart.items, subtotal: cart.subtotal, currency: cart.currency }
       : undefined,

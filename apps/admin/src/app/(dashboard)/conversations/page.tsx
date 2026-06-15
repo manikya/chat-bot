@@ -14,10 +14,16 @@ const CHANNELS = ["all", "whatsapp", "web", "messenger", "instagram"] as const;
 export default function ConversationsPage() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [filter, setFilter] = useState<string>("all");
+  const [handlingFilter, setHandlingFilter] = useState<"all" | "human">("all");
 
   useEffect(() => {
-    api.conversations.list({ channel: filter === "all" ? undefined : filter }).then((r) => setItems(r.data.items));
-  }, [filter]);
+    api.conversations
+      .list({
+        channel: filter === "all" ? undefined : filter,
+        handlingMode: handlingFilter === "human" ? "human" : undefined,
+      })
+      .then((r) => setItems(r.data.items));
+  }, [filter, handlingFilter]);
 
   return (
     <div className="space-y-6">
@@ -26,12 +32,27 @@ export default function ConversationsPage() {
         <p className="text-muted-foreground">Customer chats across WhatsApp, Messenger, and your website</p>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         {CHANNELS.map((ch) => (
           <Button key={ch} variant={filter === ch ? "default" : "outline"} size="sm" onClick={() => setFilter(ch)}>
             {ch === "all" ? "All" : ch}
           </Button>
         ))}
+        <span className="text-muted-foreground text-sm mx-1">|</span>
+        <Button
+          variant={handlingFilter === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setHandlingFilter("all")}
+        >
+          All handling
+        </Button>
+        <Button
+          variant={handlingFilter === "human" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setHandlingFilter("human")}
+        >
+          Needs agent
+        </Button>
       </div>
 
       <Card>
@@ -44,6 +65,7 @@ export default function ConversationsPage() {
               <TableRow>
                 <TableHead>Customer</TableHead>
                 <TableHead>Channel</TableHead>
+                <TableHead>Handling</TableHead>
                 <TableHead>Messages</TableHead>
                 <TableHead>Last activity</TableHead>
                 <TableHead></TableHead>
@@ -54,6 +76,11 @@ export default function ConversationsPage() {
                 <TableRow key={c.conversationId}>
                   <TableCell className="font-medium">{c.customerName ?? c.externalUserId}</TableCell>
                   <TableCell><Badge variant="secondary">{c.channel}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant={c.handlingMode === "human" ? "default" : "outline"}>
+                      {c.handlingMode === "human" ? "Human" : "Bot"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>{c.messageCount}</TableCell>
                   <TableCell className="text-muted-foreground">{new Date(c.updatedAt).toLocaleString()}</TableCell>
                   <TableCell>

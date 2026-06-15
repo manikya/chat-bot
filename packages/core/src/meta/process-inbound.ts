@@ -81,6 +81,11 @@ export async function processWhatsAppInbound(
       config
     );
 
+    if (result.handledBy === "human") {
+      console.log("[whatsapp] human handling — no bot reply for", inbound.from);
+      return;
+    }
+
     await sendWhatsAppReply(
       tenantId,
       inbound.phoneNumberId,

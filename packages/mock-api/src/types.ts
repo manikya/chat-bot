@@ -176,6 +176,9 @@ export interface Conversation {
   externalUserId: string;
   customerName?: string;
   status: string;
+  handlingMode?: "bot" | "human";
+  assignedToUserId?: string | null;
+  manualReplySupported?: boolean;
   messageCount: number;
   lastInboundAt: string;
   updatedAt: string;
@@ -191,6 +194,9 @@ export interface Message {
   metadata?: {
     llmModel?: string;
     toolCalls?: string[];
+    manual?: boolean;
+    handoff?: boolean;
+    sentByUserId?: string;
   };
 }
 

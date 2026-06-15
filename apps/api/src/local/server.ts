@@ -187,6 +187,18 @@ const PATTERN_ROUTES: Array<{
     handler: conversationsHandler,
   },
   {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/conversations\/([^/]+)\/handling$/,
+    paramNames: ["conversationId"],
+    handler: conversationsHandler,
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/conversations\/([^/]+)\/reply$/,
+    paramNames: ["conversationId"],
+    handler: conversationsHandler,
+  },
+  {
     method: "GET",
     pattern: /^\/api\/v1\/conversations\/([^/]+)$/,
     paramNames: ["conversationId"],

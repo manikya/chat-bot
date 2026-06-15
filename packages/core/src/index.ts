@@ -50,6 +50,12 @@ export { dispatchIngestJob } from "./ingest/dispatch";
 export { runIngestJobByKind, type IngestJobKind } from "./ingest/run-job";
 export { processChat, type ChatRequestBody } from "./chat/service";
 export { runChatOrchestrator } from "./chat/orchestrator";
+export {
+  updateConversationHandling,
+  sendManualConversationReply,
+  conversationHandlingDto,
+} from "./chat/handling";
+export type { UpdateHandlingBody, ManualReplyBody } from "./chat/handling";
 export { marketFromTimezone, LK_SUGGESTED_QUESTIONS } from "./chat/locale";
 export {
   getTenantUsage,

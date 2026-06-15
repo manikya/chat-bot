@@ -104,6 +104,9 @@ export interface OnboardingTestChatResult {
 
 export type ChatIntent = "faq" | "product" | "checkout" | "greeting" | "unknown";
 
+/** Who replies to the customer — bot automation or a human agent (admin / future mobile app). */
+export type ConversationHandlingMode = "bot" | "human";
+
 export interface ChatReply {
   type: "text";
   content: string;
@@ -121,6 +124,9 @@ export interface ChatResult {
   toolResults?: ChatToolResult[];
   intent?: ChatIntent;
   usage?: { inputTokens: number; outputTokens: number };
+  /** Set when inbound was stored but the bot did not auto-reply (human handling). */
+  handledBy?: "bot" | "human";
+  handlingMode?: ConversationHandlingMode;
 }
 
 export type KnowledgeSourceType = "website" | "catalog" | "faq" | "conversation" | "social";
