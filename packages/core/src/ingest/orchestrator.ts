@@ -21,6 +21,10 @@ import {
   fetchWordPressCatalogProducts,
   touchWordPressSyncTimestamp,
 } from "../commerce/wordpress/service";
+import {
+  fetchShopifyCatalogProducts,
+  touchShopifySyncTimestamp,
+} from "../commerce/shopify/service";
 import { createVectorStore } from "./vectors";
 import { dispatchIngestJob } from "./dispatch";
 import { incrementIngestJobs } from "../chat/usage";
@@ -539,6 +543,162 @@ export function scheduleWordPressCatalogIngestJob(
 ): Promise<void> {
   return scheduleIngestJob("woocommerce", tenantId, jobId, config, () =>
     runWordPressCatalogIngestJob(tenantId, jobId, config)
+  );
+}
+
+export async function runShopifyCatalogIngestJob(
+  tenantId: string,
+  jobId: string,
+  config: CoreConfig
+): Promise<void> {
+  const started = Date.now();
+  const stats: IngestJobStats = {
+    pagesProcessed: 0,
+    chunksCreated: 0,
+    tokensEmbedded: 0,
+    errors: [],
+  };
+
+  let sourceId = "";
+
+  try {
+    const jobItem = await getJobItem(tenantId, jobId, config);
+    sourceId = jobItem.sourceId as string;
+
+    const source = await getSourceItem(tenantId, sourceId, config);
+    if (!source || source.status === "deleted") {
+      throw new Error("Source not found");
+    }
+
+    const auth = { tenantId } as AuthContext;
+    const limitsRes = await getTenantLimits(auth, config);
+    const maxVectors = Number(limitsRes.data!.maxVectors);
+
+    const now = new Date().toISOString();
+    await updateJob(tenantId, jobId, { status: "running", startedAt: now, progressPct: 10 }, config);
+    await setSourceStatus(tenantId, sourceId, "syncing", config);
+
+    const sourceConfig = (source.config as Record<string, unknown>) ?? {};
+    const products = await fetchShopifyCatalogProducts(tenantId, config);
+    stats.pagesProcessed = products.length;
+
+    await updateJob(tenantId, jobId, { stats: { ...stats }, progressPct: 30 }, config);
+
+    if (products.length === 0) {
+      throw new Error(
+        "No products returned from Shopify. Check the store connection and that active products exist."
+      );
+    }
+
+    const vectorStore = createVectorStore(config);
+    const embedder = createEmbeddingProvider(config);
+    await vectorStore.deleteBySource(tenantId, sourceId);
+    await deleteProductsForSource(tenantId, sourceId, config);
+
+    const syncedAt = new Date().toISOString();
+    const drafts = chunkCatalogProducts(sourceId, products, syncedAt);
+
+    const vectorCount = await vectorStore.countByTenant(tenantId);
+    if (vectorCount + drafts.length > maxVectors) {
+      throw new Error(`Plan vector limit exceeded (max ${maxVectors})`);
+    }
+
+    const texts = drafts.map((d) => d.text);
+    const embeddings = await embedder.embed(texts);
+    stats.tokensEmbedded = countTokens(texts);
+
+    await updateJob(
+      tenantId,
+      jobId,
+      { stats: { ...stats, chunksCreated: drafts.length }, progressPct: 70 },
+      config
+    );
+
+    const vectorChunks = toCatalogVectorChunks(sourceId, drafts, embeddings);
+    await vectorStore.upsert(tenantId, vectorChunks);
+    await upsertProductCache(tenantId, sourceId, products, config);
+
+    stats.chunksCreated = vectorChunks.length;
+    stats.durationSec = Math.round((Date.now() - started) / 1000);
+    const completedAt = new Date().toISOString();
+
+    await updateJob(
+      tenantId,
+      jobId,
+      {
+        status: "completed",
+        stats,
+        progressPct: 100,
+        completedAt,
+        error: null,
+      },
+      config
+    );
+    await recordIngestJobCompleted(tenantId, config);
+
+    const db = getDocClient(config);
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(tenantId), SK: Keys.source(sourceId) },
+        UpdateExpression:
+          "SET #status = :s, #lastSyncAt = :l, #lastJobId = :j, #chunkCount = :c, #vectorCount = :v, #updatedAt = :u, #config = :cfg",
+        ExpressionAttributeNames: {
+          "#status": "status",
+          "#lastSyncAt": "lastSyncAt",
+          "#lastJobId": "lastJobId",
+          "#chunkCount": "chunkCount",
+          "#vectorCount": "vectorCount",
+          "#updatedAt": "updatedAt",
+          "#config": "config",
+        },
+        ExpressionAttributeValues: {
+          ":s": "active",
+          ":l": completedAt,
+          ":j": jobId,
+          ":c": stats.chunksCreated,
+          ":v": stats.chunksCreated,
+          ":u": completedAt,
+          ":cfg": {
+            ...sourceConfig,
+            productCount: products.length,
+            lastSyncAt: completedAt,
+            lastIngestAt: completedAt,
+          },
+        },
+      })
+    );
+
+    await touchShopifySyncTimestamp({ tenantId } as AuthContext, config);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    stats.durationSec = Math.round((Date.now() - started) / 1000);
+    await updateJob(
+      tenantId,
+      jobId,
+      {
+        status: "failed",
+        stats,
+        progressPct: 100,
+        error: message,
+        completedAt: new Date().toISOString(),
+      },
+      config
+    );
+
+    if (sourceId) {
+      await setSourceStatus(tenantId, sourceId, "error", config);
+    }
+  }
+}
+
+export function scheduleShopifyCatalogIngestJob(
+  tenantId: string,
+  jobId: string,
+  config: CoreConfig
+): Promise<void> {
+  return scheduleIngestJob("shopify", tenantId, jobId, config, () =>
+    runShopifyCatalogIngestJob(tenantId, jobId, config)
   );
 }
 

@@ -1,0 +1,19 @@
+# Shopify CLI app config — run `shopify app dev` from this directory after linking your Partner app.
+name = "CommerceChat"
+client_id = "YOUR_SHOPIFY_API_KEY"
+application_url = "https://your-tunnel.example.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,read_orders,write_script_tags"
+
+[auth]
+redirect_urls = [
+  "https://your-tunnel.example.com/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-10"
+
+[pos]
+embedded = false

@@ -37,6 +37,14 @@ import {
   syncHandler as wordpressSyncHandler,
   widgetBootstrapHandler as wordpressWidgetBootstrapHandler,
 } from "../handlers/commerce-wordpress";
+import {
+  connectHandler as shopifyConnectHandler,
+  connectStoreHandler as shopifyConnectStoreHandler,
+  disconnectHandler as shopifyDisconnectHandler,
+  statusHandler as shopifyStatusHandler,
+  syncHandler as shopifySyncHandler,
+  widgetBootstrapHandler as shopifyWidgetBootstrapHandler,
+} from "../handlers/commerce-shopify";
 import { handler as teamHandler } from "../handlers/team";
 import { deleteHandler as teamDeleteHandler, patchHandler as teamPatchHandler } from "../handlers/team-member";
 import { presignHandler as logoPresignHandler, completeHandler as logoCompleteHandler } from "../handlers/tenant-logo-presign";
@@ -138,6 +146,12 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/commerce/wordpress/sync", handler: wordpressSyncHandler },
   { method: "DELETE", path: "/api/v1/commerce/wordpress", handler: wordpressDisconnectHandler },
   { method: "GET", path: "/api/v1/commerce/wordpress/widget-bootstrap", handler: wordpressWidgetBootstrapHandler },
+  { method: "GET", path: "/api/v1/commerce/shopify/status", handler: shopifyStatusHandler },
+  { method: "POST", path: "/api/v1/commerce/shopify/connect", handler: shopifyConnectHandler },
+  { method: "POST", path: "/api/v1/commerce/shopify/connect-store", handler: shopifyConnectStoreHandler },
+  { method: "POST", path: "/api/v1/commerce/shopify/sync", handler: shopifySyncHandler },
+  { method: "DELETE", path: "/api/v1/commerce/shopify", handler: shopifyDisconnectHandler },
+  { method: "GET", path: "/api/v1/commerce/shopify/widget-bootstrap", handler: shopifyWidgetBootstrapHandler },
   { method: "GET", path: "/api/v1/team", handler: teamHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },

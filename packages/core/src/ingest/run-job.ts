@@ -5,12 +5,14 @@ import {
   runFaqIngestJob,
   runWebsiteIngestJob,
   runWordPressCatalogIngestJob,
+  runShopifyCatalogIngestJob,
 } from "./orchestrator";
 
 export type IngestJobKind =
   | "website"
   | "catalog"
   | "woocommerce"
+  | "shopify"
   | "faq"
   | "conversation";
 
@@ -29,6 +31,9 @@ export async function runIngestJobByKind(
       return;
     case "woocommerce":
       await runWordPressCatalogIngestJob(tenantId, jobId, config);
+      return;
+    case "shopify":
+      await runShopifyCatalogIngestJob(tenantId, jobId, config);
       return;
     case "faq":
       await runFaqIngestJob(tenantId, jobId, config);

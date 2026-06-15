@@ -464,6 +464,22 @@ export function createHttpApi() {
         ),
       disconnectWordPress: () =>
         request("/api/v1/commerce/wordpress", { method: "DELETE" }),
+      shopifyStatus: () =>
+        request<{ connected: boolean; shopDomain?: string; lastSyncAt?: string; sourceId?: string }>(
+          "/api/v1/commerce/shopify/status"
+        ),
+      connectShopify: (body: { shopDomain: string; accessToken: string }) =>
+        request("/api/v1/commerce/shopify/connect", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      syncShopify: () =>
+        request<{ jobId: string; sourceId: string; status: string; type?: string }>(
+          "/api/v1/commerce/shopify/sync",
+          { method: "POST", body: JSON.stringify({}) }
+        ),
+      disconnectShopify: () =>
+        request("/api/v1/commerce/shopify", { method: "DELETE" }),
     },
     team: {
       list: () => request<{ items: TeamMember[] }>("/api/v1/team"),

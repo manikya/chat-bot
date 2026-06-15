@@ -33,6 +33,14 @@ export {
   lookupWordPressOrder,
 } from "./commerce/wordpress/service";
 export type { ConnectWordPressBody } from "./commerce/wordpress/types";
+export {
+  connectShopifyStore,
+  disconnectShopifyStore,
+  getShopifyConnectorStatus,
+  getShopifyWidgetBootstrap,
+  normalizeShopDomain,
+} from "./commerce/shopify/service";
+export type { ConnectShopifyBody } from "./commerce/shopify/types";
 export * from "./onboarding/service";
 export * from "./knowledge/service";
 export { detectStorePlatform, type StorePlatform, type StorePlatformDetection } from "./knowledge/platform-detect";

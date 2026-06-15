@@ -4,6 +4,8 @@ export function ingestJobTypeLabel(type: string): string {
   switch (type) {
     case "woocommerce_sync":
       return "WooCommerce sync";
+    case "shopify_sync":
+      return "Shopify sync";
     case "catalog_sync":
       return "Catalog sync";
     case "website_sync":
@@ -26,7 +28,7 @@ export function formatIngestJobStats(job: IngestJob): string[] {
   const terminal = job.status === "completed" || job.status === "failed";
 
   if (stats.pagesProcessed != null && (stats.pagesProcessed > 0 || terminal)) {
-    if (job.type === "woocommerce_sync" || job.type === "catalog_sync") {
+    if (job.type === "woocommerce_sync" || job.type === "shopify_sync" || job.type === "catalog_sync") {
       lines.push(`${stats.pagesProcessed} products`);
     } else if (job.type === "website_sync") {
       lines.push(`${stats.pagesProcessed} pages`);
