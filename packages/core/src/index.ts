@@ -94,6 +94,11 @@ export {
   revokeStoreApiKey,
 } from "./auth/api-key";
 export { getWordPressWidgetBootstrap } from "./commerce/wordpress/service";
+export {
+  registerPushDevice,
+  unregisterPushDevice,
+  type RegisterPushDeviceBody,
+} from "./devices/service";
 export * from "./conversations/service";
 export * from "./widget/service";
 export type { WidgetChatBody } from "./widget/service";

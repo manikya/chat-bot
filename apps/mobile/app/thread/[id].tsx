@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -12,10 +12,10 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
 import type { ConversationDetail, Message } from "@commercechat/mock-api";
 import { Ionicons } from "@expo/vector-icons";
 import { ChatBubble } from "../../src/components/ChatBubble";
+import { ScreenErrorBoundary } from "../../src/components/ScreenErrorBoundary";
 import { api } from "../../src/lib/api";
 import { useAuth } from "../../src/lib/auth";
 import { colors } from "../../src/theme/colors";
@@ -23,7 +23,8 @@ import { colors } from "../../src/theme/colors";
 const META = new Set(["whatsapp", "messenger", "instagram"]);
 
 export default function ThreadScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string | string[] }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const router = useRouter();
   const { user } = useAuth();
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
@@ -31,13 +32,13 @@ export default function ThreadScreen() {
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<FlatList<Message>>(null);
 
   const canAct = user?.role === "owner" || user?.role === "admin";
   const isHuman = detail?.handlingMode === "human";
-  const canReply =
-    canAct &&
-    isHuman &&
-    (detail?.manualReplySupported ?? (detail ? META.has(detail.channel) : false));
+  const manualSupported =
+    detail?.manualReplySupported ?? (detail ? META.has(detail.channel) : false);
+  const canReply = canAct && isHuman && manualSupported;
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -49,18 +50,28 @@ export default function ThreadScreen() {
     setMessages(m.data.items);
   }, [id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      reload().catch(() => setError("Failed to load thread"));
-    }, [reload])
-  );
+  useEffect(() => {
+    reload().catch(() => setError("Failed to load thread"));
+  }, [reload]);
+
+  useEffect(() => {
+    if (!messages.length) return;
+    const t = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: false });
+    }, 100);
+    return () => clearTimeout(t);
+  }, [messages]);
 
   async function setMode(mode: "bot" | "human", notifyCustomer?: boolean) {
     if (!id) return;
     setBusy(true);
     setError(null);
     try {
-      await api.conversations.setHandling(id, { mode, notifyCustomer });
+      await api.conversations.setHandling(id, {
+        mode,
+        notifyCustomer,
+        assignedToUserId: mode === "human" ? user?.userId : undefined,
+      });
       await reload();
     } catch (e) {
       setError((e as { message?: string }).message ?? "Action failed");
@@ -95,6 +106,7 @@ export default function ThreadScreen() {
   const title = detail.customerName ?? "Customer";
 
   return (
+    <ScreenErrorBoundary label="thread">
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back}>
@@ -131,8 +143,8 @@ export default function ThreadScreen() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
       >
         <FlatList
           style={styles.list}
@@ -140,12 +152,25 @@ export default function ThreadScreen() {
           data={messages}
           keyExtractor={(m) => m.messageId}
           renderItem={({ item }) => <ChatBubble message={item} />}
+          ref={listRef}
         />
 
         {canAct && !isHuman && (
           <Pressable style={styles.banner} onPress={() => setMode("human", true)} disabled={busy}>
-            <Text style={styles.bannerText}>Take over this chat to reply manually</Text>
+            <Text style={styles.bannerText}>
+              {manualSupported
+                ? "Take over this chat to reply manually"
+                : "Take over (view only — manual reply not supported on this channel)"}
+            </Text>
           </Pressable>
+        )}
+
+        {canAct && isHuman && !manualSupported && (
+          <View style={styles.infoBar}>
+            <Text style={styles.infoText}>
+              Human mode — manual send is only available for WhatsApp, Messenger, and Instagram.
+            </Text>
+          </View>
         )}
 
         {canReply && (
@@ -170,6 +195,7 @@ export default function ThreadScreen() {
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ScreenErrorBoundary>
   );
 }
 
@@ -199,6 +225,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bannerText: { color: "#fff", fontSize: 14, fontWeight: "500" },
+  infoBar: { backgroundColor: "#E8F5E9", paddingHorizontal: 12, paddingVertical: 10 },
+  infoText: { color: colors.primaryDark, fontSize: 13, textAlign: "center" },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",

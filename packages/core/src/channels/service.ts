@@ -329,7 +329,10 @@ async function persistMessengerConnection(
   await putPageRouting(creds.pageId, auth.tenantId, config);
 
   try {
-    await subscribePageToApp(config, creds.pageId, creds.pageAccessToken);
+    const subscribed = await subscribePageToApp(config, creds.pageId, creds.pageAccessToken);
+    if (!subscribed?.success) {
+      console.warn("[channels] Page subscribe returned false for", creds.pageId);
+    }
   } catch (err) {
     console.warn("[channels] Page subscribe warning:", err instanceof Error ? err.message : err);
   }
@@ -720,10 +723,20 @@ export async function getChannelHealth(auth: AuthContext, config: CoreConfig) {
     } else {
       try {
         await validatePageAccessToken(config, creds.pageAccessToken, creds.pageId);
+        try {
+          await subscribePageToApp(config, creds.pageId, creds.pageAccessToken);
+        } catch (subscribeErr) {
+          console.warn(
+            "[channels] Page re-subscribe on health check failed:",
+            subscribeErr instanceof Error ? subscribeErr.message : subscribeErr
+          );
+        }
         health.messenger = {
           status: "healthy",
           lastCheck: now,
-          detail: creds.pageName ? `page=${creds.pageName}` : `page_id=${creds.pageId}`,
+          detail: creds.pageName
+            ? `page=${creds.pageName} (${creds.pageId})`
+            : `page_id=${creds.pageId}`,
         };
         const db = getDocClient(config);
         await db.send(

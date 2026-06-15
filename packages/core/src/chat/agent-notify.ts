@@ -4,6 +4,7 @@ import type { CoreConfig } from "../config";
 import { createEmailProvider } from "../email/provider";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
+import { sendAgentPushAlerts } from "../push/agent-alerts";
 import type { ConversationState } from "./conversation";
 import { customerDisplayName } from "./conversation";
 
@@ -62,30 +63,48 @@ export async function notifyAgentInboundMessage(
   const send = await shouldSendAgentNotify(tenantId, conversation.conversationId, config);
   if (!send) return;
 
-  const ownerEmail = await getTenantOwnerEmail(tenantId, config);
-  if (!ownerEmail) return;
-
   const appUrl = config.appUrl.replace(/\/$/, "");
   const customer = customerDisplayName(conversation);
   const preview = messagePreview.slice(0, 280);
   const threadUrl = `${appUrl}/conversations/${conversation.conversationId}`;
 
-  const provider = createEmailProvider(config);
-  await provider.sendRawEmail(
-    ownerEmail,
-    `CommerceChat — new message from ${customer} (${conversation.channel})`,
-    [
-      `A customer sent a message while this conversation is assigned to your team.`,
-      ``,
-      `Channel: ${conversation.channel}`,
-      `Customer: ${customer}`,
-      ``,
-      `"${preview}"`,
-      ``,
-      `Open the conversation to reply:`,
-      threadUrl,
-    ].join("\n")
-  );
+  const ownerEmail = await getTenantOwnerEmail(tenantId, config);
+  if (ownerEmail) {
+    const provider = createEmailProvider(config);
+    await provider.sendRawEmail(
+      ownerEmail,
+      `CommerceChat — new message from ${customer} (${conversation.channel})`,
+      [
+        `A customer sent a message while this conversation is assigned to your team.`,
+        ``,
+        `Channel: ${conversation.channel}`,
+        `Customer: ${customer}`,
+        ``,
+        `"${preview}"`,
+        ``,
+        `Open the conversation to reply:`,
+        threadUrl,
+      ].join("\n")
+    );
+  }
+
+  try {
+    const push = await sendAgentPushAlerts(
+      tenantId,
+      {
+        title: `${customer} (${conversation.channel})`,
+        body: preview,
+        conversationId: conversation.conversationId,
+        channel: conversation.channel,
+      },
+      config
+    );
+    if (push.sent > 0) {
+      console.log("[agent-notify] push sent", push.sent, "tenant", tenantId);
+    }
+  } catch (err) {
+    console.warn("[agent-notify] push failed", err instanceof Error ? err.message : err);
+  }
 }
 
 export function getHandlingMode(

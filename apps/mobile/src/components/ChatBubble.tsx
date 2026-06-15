@@ -1,6 +1,7 @@
 import type { Message } from "@commercechat/mock-api";
 import { StyleSheet, Text, View } from "react-native";
 import { colors } from "../theme/colors";
+import { MessageText } from "./MessageText";
 
 export function ChatBubble({ message }: { message: Message }) {
   const outbound = message.direction === "outbound";
@@ -15,7 +16,7 @@ export function ChatBubble({ message }: { message: Message }) {
           outbound ? (manual ? styles.bubbleManual : styles.bubbleOut) : styles.bubbleIn,
         ]}
       >
-        <Text style={styles.text}>{message.content}</Text>
+        <MessageText content={message.content} style={styles.text} />
         <View style={styles.meta}>
           {manual && <Text style={styles.tag}>You</Text>}
           {handoff && <Text style={styles.tag}>Handoff</Text>}

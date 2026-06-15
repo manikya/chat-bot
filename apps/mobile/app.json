@@ -7,13 +7,14 @@
     "icon": "./assets/icon.png",
     "scheme": "commercechat",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.commercechat.agent"
     },
     "android": {
       "package": "com.commercechat.agent",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#075E54",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -21,9 +22,24 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       }
     },
-    "plugins": ["expo-router", "expo-secure-store"],
-    "experiments": {
-      "typedRoutes": true
-    }
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#075E54"
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "08905f0b-6051-4fab-9bac-acdf0b297b82"
+      }
+    },
+    "owner": "manikyasenarathna"
   }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -11,8 +11,8 @@ import {
 import { Redirect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { Conversation } from "@commercechat/mock-api";
-import { useFocusEffect } from "@react-navigation/native";
 import { ConversationRow } from "../src/components/ConversationRow";
+import { ScreenErrorBoundary } from "../src/components/ScreenErrorBoundary";
 import { useAuth } from "../src/lib/auth";
 import { api } from "../src/lib/api";
 import { colors } from "../src/theme/colors";
@@ -32,14 +32,13 @@ export default function InboxScreen() {
     setItems(res.data.items);
   }, [filter]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      load()
-        .catch(() => setItems([]))
-        .finally(() => setLoading(false));
-    }, [load])
-  );
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    setLoading(true);
+    load()
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [load, isAuthenticated]);
 
   if (!isLoading && !isAuthenticated) return <Redirect href="/login" />;
 
@@ -53,6 +52,7 @@ export default function InboxScreen() {
   }
 
   return (
+    <ScreenErrorBoundary label="inbox">
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <View>
@@ -104,6 +104,7 @@ export default function InboxScreen() {
         />
       )}
     </SafeAreaView>
+    </ScreenErrorBoundary>
   );
 }
 

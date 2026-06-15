@@ -4,7 +4,7 @@ import type { CartState } from "./cart";
 import { formatMoney, languageRulesForMarket, marketFromTimezone, type ChatMarket } from "./locale";
 
 function channelRules(channel?: string): string {
-  if (channel === "messenger" || channel === "whatsapp") {
+  if (channel === "messenger" || channel === "whatsapp" || channel === "instagram") {
     return "\n- Use plain text only — no markdown (no * or ** around product names)\n- Keep replies brief for mobile chat";
   }
   return "";

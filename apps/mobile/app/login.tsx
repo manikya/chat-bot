@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -39,47 +40,57 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
       >
-        <View style={styles.header}>
-          <Text style={styles.logo}>CommerceChat</Text>
-          <Text style={styles.sub}>Agent inbox</Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <Text style={styles.logo}>CommerceChat</Text>
+            <Text style={styles.sub}>Agent inbox</Text>
+          </View>
 
-        <View style={styles.card}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@store.com"
-            placeholderTextColor={colors.textMuted}
-          />
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            placeholderTextColor={colors.textMuted}
-          />
-          {error && <Text style={styles.error}>{error}</Text>}
-          <Pressable
-            style={[styles.button, busy && styles.buttonDisabled]}
-            onPress={onSubmit}
-            disabled={busy || !email || !password}
-          >
-            {busy ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Sign in</Text>
-            )}
-          </Pressable>
-        </View>
+          <View style={styles.card}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@store.com"
+              placeholderTextColor={colors.textMuted}
+            />
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              secureTextEntry
+              autoComplete="password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              placeholderTextColor={colors.textMuted}
+              onSubmitEditing={onSubmit}
+            />
+            {error && <Text style={styles.error}>{error}</Text>}
+            <Pressable
+              style={[styles.button, busy && styles.buttonDisabled]}
+              onPress={onSubmit}
+              disabled={busy || !email || !password}
+            >
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Sign in</Text>
+              )}
+            </Pressable>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -87,7 +98,8 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.primary },
-  container: { flex: 1, justifyContent: "center", padding: 24 },
+  container: { flex: 1 },
+  scroll: { flexGrow: 1, justifyContent: "center", padding: 24, paddingBottom: 40 },
   header: { marginBottom: 32, alignItems: "center" },
   logo: { fontSize: 28, fontWeight: "700", color: "#fff" },
   sub: { fontSize: 15, color: "rgba(255,255,255,0.85)", marginTop: 6 },

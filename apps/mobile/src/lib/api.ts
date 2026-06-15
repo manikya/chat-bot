@@ -8,9 +8,19 @@ import type {
   User,
 } from "@commercechat/mock-api";
 import * as SecureStore from "expo-secure-store";
-import { clearTokens, getAccessToken, getRefreshToken, setTokens, TOKEN_KEY } from "./tokens";
+import {
+  clearSessionProfile,
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  saveSessionProfile,
+  setTokens,
+  TOKEN_KEY,
+} from "./tokens";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3001";
+const DEFAULT_API_URL = "https://fimfx57xwl.execute-api.us-east-1.amazonaws.com";
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_API_URL;
 
 const NO_REFRESH = new Set([
   "/auth/login",
@@ -19,6 +29,10 @@ const NO_REFRESH = new Set([
 ]);
 
 let refreshInFlight: Promise<boolean> | null = null;
+
+export async function refreshAccessToken(): Promise<boolean> {
+  return performTokenRefresh();
+}
 
 async function performTokenRefresh(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
@@ -76,6 +90,7 @@ async function request<T>(path: string, options: RequestInit & { _retry?: boolea
       const refreshed = await performTokenRefresh();
       if (refreshed) return request<T>(path, { ...fetchOptions, _retry: true });
       await clearTokens();
+      await clearSessionProfile();
     }
     throw error;
   }
@@ -91,10 +106,22 @@ export const api = {
         body: JSON.stringify({ email, password }),
       });
       await setTokens(res.data.accessToken, res.data.refreshToken);
+      await saveSessionProfile(res.data.user, res.data.tenant);
       return res;
     },
+    async restoreSession() {
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) return false;
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        return refreshAccessToken();
+      }
+      return true;
+    },
     async me() {
-      return request<{ user: User; tenant: Tenant }>("/auth/me");
+      const res = await request<{ user: User; tenant: Tenant }>("/auth/me");
+      await saveSessionProfile(res.data.user, res.data.tenant);
+      return res;
     },
     async logout() {
       const refreshToken = await getRefreshToken();
@@ -109,6 +136,7 @@ export const api = {
         /* ignore */
       }
       await clearTokens();
+      await clearSessionProfile();
     },
   },
   conversations: {
@@ -127,7 +155,7 @@ export const api = {
     },
     setHandling(
       id: string,
-      body: { mode: "bot" | "human"; notifyCustomer?: boolean }
+      body: { mode: "bot" | "human"; notifyCustomer?: boolean; assignedToUserId?: string }
     ) {
       return request<{
         conversationId: string;
@@ -142,6 +170,20 @@ export const api = {
       return request<{ messageId: string; content: string }>(`/api/v1/conversations/${id}/reply`, {
         method: "POST",
         body: JSON.stringify({ content }),
+      });
+    },
+  },
+  devices: {
+    register(expoPushToken: string, platform: string) {
+      return request<{ registered: boolean; deviceKey: string }>("/api/v1/devices/register", {
+        method: "POST",
+        body: JSON.stringify({ expoPushToken, platform }),
+      });
+    },
+    unregister(expoPushToken: string) {
+      return request<{ unregistered: boolean }>("/api/v1/devices/register", {
+        method: "DELETE",
+        body: JSON.stringify({ expoPushToken }),
       });
     },
   },

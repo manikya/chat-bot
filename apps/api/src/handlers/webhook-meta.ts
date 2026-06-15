@@ -59,31 +59,56 @@ export async function handler(
       return { statusCode: 400, body: JSON.stringify({ success: false, error: "Invalid JSON" }) };
     }
 
+    const payloadObject =
+      payload && typeof payload === "object" && "object" in payload
+        ? String((payload as { object?: string }).object)
+        : "unknown";
+
     const waMessages = parseWhatsAppWebhookPayload(payload);
-    for (const msg of waMessages) {
-      void processWhatsAppInbound(msg, config).catch((err) => {
-        console.error("[webhook-meta] whatsapp process error:", err instanceof Error ? err.message : err);
-      });
-    }
-
     const messengerMessages = parseMessengerWebhookPayload(payload);
-    for (const msg of messengerMessages) {
-      if (msg.isEcho) {
-        void processMessengerEcho(msg, config).catch((err) => {
-          console.error("[webhook-meta] messenger echo error:", err instanceof Error ? err.message : err);
-        });
-      } else {
-        void processMessengerInbound(msg, config).catch((err) => {
-          console.error("[webhook-meta] messenger process error:", err instanceof Error ? err.message : err);
-        });
-      }
+    const instagramMessages = parseInstagramWebhookPayload(payload);
+
+    console.log("[webhook-meta] received", {
+      object: payloadObject,
+      whatsapp: waMessages.length,
+      messenger: messengerMessages.length,
+      instagram: instagramMessages.length,
+      messengerPageIds: [...new Set(messengerMessages.map((m) => m.pageId))],
+    });
+
+    const tasks: Promise<void>[] = [];
+
+    for (const msg of waMessages) {
+      tasks.push(
+        processWhatsAppInbound(msg, config).catch((err) => {
+          console.error("[webhook-meta] whatsapp process error:", err instanceof Error ? err.message : err);
+        })
+      );
     }
 
-    const instagramMessages = parseInstagramWebhookPayload(payload);
+    for (const msg of messengerMessages) {
+      tasks.push(
+        (msg.isEcho ? processMessengerEcho(msg, config) : processMessengerInbound(msg, config)).catch(
+          (err) => {
+            console.error(
+              "[webhook-meta] messenger process error:",
+              err instanceof Error ? err.message : err
+            );
+          }
+        )
+      );
+    }
+
     for (const msg of instagramMessages) {
-      void processInstagramInbound(msg, config).catch((err) => {
-        console.error("[webhook-meta] instagram process error:", err instanceof Error ? err.message : err);
-      });
+      tasks.push(
+        processInstagramInbound(msg, config).catch((err) => {
+          console.error("[webhook-meta] instagram process error:", err instanceof Error ? err.message : err);
+        })
+      );
+    }
+
+    if (tasks.length) {
+      await Promise.all(tasks);
     }
 
     if (waMessages.length === 0 && messengerMessages.length === 0 && instagramMessages.length === 0) {
