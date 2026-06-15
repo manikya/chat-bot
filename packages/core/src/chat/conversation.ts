@@ -5,11 +5,24 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 
+export type ConversationProfileLookupStatus = "ok" | "unavailable";
+
+export interface ConversationProfilePatch {
+  customerName?: string;
+  profilePicUrl?: string;
+  profileLookupStatus?: ConversationProfileLookupStatus;
+  profileLookupAt?: string;
+}
+
 export interface ConversationState {
   conversationId: string;
   tenantId: string;
   channel: string;
   externalUserId: string;
+  customerName?: string;
+  profilePicUrl?: string;
+  profileLookupStatus?: ConversationProfileLookupStatus;
+  profileLookupAt?: string;
   cartId?: string;
   status: string;
   handlingMode?: ConversationHandlingMode;
@@ -183,12 +196,71 @@ export function historyToChatMessages(messages: StoredMessage[]) {
   }));
 }
 
+function messengerFallbackLabel(psid: string): string {
+  const digits = psid.replace(/\D/g, "");
+  const tail = (digits.length >= 4 ? digits : psid).slice(-4);
+  return `Messenger user •••${tail}`;
+}
+
 export function customerDisplayName(conv: ConversationState): string {
+  if (conv.customerName?.trim()) return conv.customerName.trim();
   if (conv.channel === "web" || conv.channel === "test") {
     const suffix = conv.externalUserId.replace(/^onboarding-/, "").slice(-6);
     return `Visitor ${suffix}`;
   }
+  if (conv.channel === "messenger") {
+    return messengerFallbackLabel(conv.externalUserId);
+  }
   return conv.externalUserId;
+}
+
+export async function updateConversationProfile(
+  tenantId: string,
+  conversation: Pick<ConversationState, "channel" | "externalUserId">,
+  patch: ConversationProfilePatch,
+  config: CoreConfig
+) {
+  const db = getDocClient(config);
+  const now = patch.profileLookupAt ?? new Date().toISOString();
+  const names: Record<string, string> = {
+    "#updatedAt": "updatedAt",
+    "#profileLookupAt": "profileLookupAt",
+    "#profileLookupStatus": "profileLookupStatus",
+  };
+  const values: Record<string, unknown> = {
+    ":updatedAt": now,
+    ":profileLookupAt": now,
+    ":profileLookupStatus": patch.profileLookupStatus ?? "unavailable",
+  };
+  const setParts = [
+    "#updatedAt = :updatedAt",
+    "#profileLookupAt = :profileLookupAt",
+    "#profileLookupStatus = :profileLookupStatus",
+  ];
+
+  if (patch.customerName !== undefined) {
+    names["#customerName"] = "customerName";
+    values[":customerName"] = patch.customerName;
+    setParts.push("#customerName = :customerName");
+  }
+  if (patch.profilePicUrl !== undefined) {
+    names["#profilePicUrl"] = "profilePicUrl";
+    values[":profilePicUrl"] = patch.profilePicUrl;
+    setParts.push("#profilePicUrl = :profilePicUrl");
+  }
+
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: {
+        PK: Keys.tenantPk(tenantId),
+        SK: Keys.conversation(conversation.channel, conversation.externalUserId),
+      },
+      UpdateExpression: `SET ${setParts.join(", ")}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    })
+  );
 }
 
 export async function listTenantConversations(

@@ -333,6 +333,40 @@ export async function validatePageAccessToken(
   return debug;
 }
 
+export interface MessengerUserProfile {
+  firstName?: string;
+  lastName?: string;
+  profilePicUrl?: string;
+}
+
+/** Requires Meta user profile access; returns null when unavailable (permissions, dev mode, etc.). */
+export async function getMessengerUserProfile(
+  config: CoreConfig,
+  psid: string,
+  pageAccessToken: string
+): Promise<MessengerUserProfile | null> {
+  try {
+    const res = await graphGet<{
+      first_name?: string;
+      last_name?: string;
+      profile_pic?: string;
+    }>(
+      config,
+      `/${encodeURIComponent(psid)}?fields=first_name,last_name,profile_pic`,
+      pageAccessToken
+    );
+    const firstName = res.first_name?.trim() || undefined;
+    const lastName = res.last_name?.trim() || undefined;
+    const profilePicUrl = res.profile_pic?.trim() || undefined;
+    if (!firstName && !lastName) return null;
+    return { firstName, lastName, profilePicUrl };
+  } catch (err) {
+    const message = err instanceof MetaGraphError ? err.message : String(err);
+    console.warn("[messenger] profile lookup failed for", psid, message);
+    return null;
+  }
+}
+
 export async function subscribePageToApp(
   config: CoreConfig,
   pageId: string,

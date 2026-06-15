@@ -10,6 +10,7 @@ import { sendMessengerGenericTemplate } from "../channels/meta-client";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { sendMessengerReply } from "./messenger-outbound";
+import { syncMessengerCustomerProfile } from "./messenger-profile";
 import { setPendingCustomerMessage } from "../page-voice/service";
 import {
   buildMessengerProductElements,
@@ -58,6 +59,15 @@ export async function processMessengerInbound(
   if (!claimed) {
     console.log("[messenger] duplicate message skipped", inbound.messageId);
     return;
+  }
+
+  try {
+    await syncMessengerCustomerProfile(tenantId, inbound.from, config);
+  } catch (err) {
+    console.warn(
+      "[messenger] profile sync error:",
+      err instanceof Error ? err.message : err
+    );
   }
 
   const auth = {
