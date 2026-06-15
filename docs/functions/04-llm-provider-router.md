@@ -1,13 +1,45 @@
 # Function Spec: LLM Provider Router
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
-**Version:** 1.0
+**Version:** 1.1  
+**Implementation:** `packages/core/src/llm/` · wired from `packages/core/src/chat/orchestrator.ts`
 
 ---
 
 ## 1. Purpose
 
 Abstract LLM and embedding providers behind a unified interface so the platform can switch between **OpenAI** (primary) and **Amazon Bedrock** (fallback) without changing orchestration or tool logic.
+
+### Shipped vs planned
+
+| Feature | Status |
+|---------|--------|
+| OpenAI `chat/completions` + tools | **Shipped** — `OpenAILLMProvider` |
+| Model per intent (`faq` / `product` / `checkout`) | **Shipped** — tenant `llmConfig.models` |
+| Bedrock fallback adapter | Planned |
+| `chatStream` for widget | Planned (widget uses SSE events around sync chat today) |
+| Embedding provider | **Shipped** — `createEmbeddingProvider` in ingest |
+
+```mermaid
+flowchart TD
+  ORCH[runChatOrchestrator] --> INTENT[detectIntent]
+  INTENT --> MODEL["tenant.llmConfig.models[intent]"]
+  MODEL --> FACTORY[createLLMProvider]
+  FACTORY -->|OPENAI_API_KEY set| OAI[OpenAILLMProvider.chat]
+  FACTORY -->|no key| FB[generateFallbackReply]
+  OAI -->|tool_calls| TOOLS[executeTool loop]
+  TOOLS --> OAI
+  OAI --> REPLY[assistant message]
+```
+
+**Code map:**
+
+| Module | Role |
+|--------|------|
+| `llm/provider.ts` | `createLLMProvider()` — OpenAI if `OPENAI_API_KEY` |
+| `llm/openai.ts` | HTTP adapter, retries, tool call mapping |
+| `llm/types.ts` | `LLMProvider`, `ChatRequest`, `ChatResponse` |
+| `chat/orchestrator.ts` | Model selection + tool loop |
 
 ---
 

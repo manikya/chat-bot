@@ -106,15 +106,30 @@ Step 6: Copy widget embed code
 | WhatsApp templates | List approved templates |
 | Test message | Send test to merchant's own number |
 
-### 4.7 Analytics (Phase 2)
+### 4.7 Analytics — shipped
 
-| Chart | Metric |
-|-------|--------|
-| Messages over time | Line chart by channel |
-| Intent breakdown | Pie: faq, product, checkout |
-| Top products searched | Bar chart |
-| Conversion funnel | Conversations → cart → checkout |
-| Response latency | p50/p95 |
+**Route:** `GET /api/v1/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD`  
+**UI:** Admin → **Analytics** (`/analytics`)
+
+```mermaid
+flowchart LR
+  UI[Analytics page] --> API[GET /api/v1/analytics]
+  API --> SVC[getConversationAnalytics]
+  SVC --> DDB[(DynamoDB scan CONV MSG CART)]
+  SVC --> JSON[summary + charts data]
+  JSON --> UI
+```
+
+| Chart / widget | Data source |
+|----------------|---------------|
+| Summary cards | messages, conversations, carts, checkout links |
+| Messages per day | `MSG#` by `createdAt` date |
+| Channel breakdown | `MSG#.channel` |
+| Intent breakdown | `MSG#.metadata.intent` |
+| Top product searches | `toolCalls` includes `search_products` |
+| Commerce funnel | conversations → withCart → checkoutLinks |
+
+**Code:** `packages/core/src/analytics/service.ts` · `apps/admin/src/app/(dashboard)/analytics/page.tsx`
 
 ### 4.8 Billing (see 09)
 

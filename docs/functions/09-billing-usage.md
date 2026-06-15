@@ -77,9 +77,21 @@ stripe products:
 
 `assertChannelEnabled(tenantId, channel)` blocks channels not in the tenant `LIMITS.enabledChannels` list.
 
-**Soft limit (80%):** Shown in admin Usage/Billing UI (`messagesPct`). Email warning — **planned** (next).  
+**Soft limit (80%):** Shown in admin Usage/Billing UI (`messagesPct`). **Email warning shipped** — `maybeSendMessageQuotaWarning()` sends one SMTP/Resend email per billing period when usage crosses 80% (`message80PctSent` on `USAGE#{period}`).  
 **Hard limit (100%):** Orchestrator rejects new AI turns; Meta channels receive a short auto-reply explaining the limit.  
 **Suspended tenant:** `assertTenantOperational` blocks widget, Meta, and chat when status is `suspended` or trial expired.
+
+```mermaid
+flowchart LR
+  CHAT[reserveMessageQuota] --> INC[Increment messages counter]
+  INC --> PCT{usage >= 80%?}
+  PCT -->|yes, not sent this period| EMAIL[sendRawEmail to owner]
+  EMAIL --> FLAG[message80PctSent on USAGE row]
+  PCT -->|no| OK[Continue orchestration]
+  FLAG --> OK
+```
+
+**Code:** `packages/core/src/billing/quota-email.ts` · called from `packages/core/src/chat/usage.ts`.
 
 ### Billing lifecycle (implemented, no Stripe)
 

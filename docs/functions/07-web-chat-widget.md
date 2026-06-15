@@ -22,6 +22,7 @@ Provide an embeddable JavaScript chat widget merchants add to their storefront, 
 | Product UI | Carousel cards (up to 5) | Multi-image dots; `search_products` tool |
 | Rate limits | Per-plan | `WIDGET_CHAT_RATE_LIMITS` / config limits in `billing/plans.ts` |
 | CDN | CloudFront (`npm run deploy:widget`) | Dev: `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js` |
+| WordPress plugin | `commercechat-connector` | `register-cloud` stores `widgetScriptUrl`; fallback `widget-bootstrap` API |
 | Demo | `http://localhost:3001/widget/demo.html?key=...` | Must use HTTP (CORS blocks `file://`) |
 
 ---
@@ -213,11 +214,20 @@ Button clicks send structured message to API:
 
 ## 10. CDN deployment
 
+```mermaid
+flowchart LR
+  CC[CommerceChat connect] -->|register-cloud| WP[WordPress option widget_script_url]
+  WP --> RENDER[wp_footer script tag]
+  RENDER -->|src| CDN[CloudFront widget/v1.js]
+  RENDER -->|data-api-url| API[API Gateway]
+  BOOT[widget-bootstrap fallback] -.->|if no stored URL| RENDER
+```
+
 | Asset | Cache |
 |-------|-------|
-| `loader.js` | 1 hour |
-| `widget.bundle.js` | 24 hours (versioned filename) |
-| Widget config API | 5 minutes |
+| `v1.js` | CloudFront default |
+| Widget config API | Client-side fetch |
+| WP bootstrap script URL | Transient 1h in WordPress |
 
 Versioned URLs: `widget/v1.2.3/bundle.js` for cache busting.
 

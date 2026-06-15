@@ -43,8 +43,40 @@
 | 2026-06-15 | Widget CDN: `commercechat-dev-widget` CloudFront, `WIDGET_CDN_URL`, embed uses CDN |
 | 2026-06-15 | S3 Vectors on AWS: catalog CSV → data S3 bucket → ingest worker → `commercechat-dev-vectors` |
 | 2026-06-15 | E2E `apps/api/scripts/test-s3-vectors-ingest.mjs` (FAQ sync + catalog pipeline, 5/5 on dev) |
+| 2026-06-15 | **Analytics:** `GET /api/v1/analytics` + admin `/analytics` charts (messages, channels, intents, funnel) |
+| 2026-06-15 | **80% quota emails:** `maybeSendMessageQuotaWarning` via SMTP on `reserveMessageQuota` |
+| 2026-06-15 | **Website crawl S3:** `website/{tenantId}/{sourceId}/crawl.json` in data bucket |
+| 2026-06-15 | **WordPress CDN:** `widgetScriptUrl` on register-cloud + bootstrap fallback in plugin |
 
-**Git (local `main`):** widget CDN + S3 Vectors ingest verified on AWS dev.
+**Git (local `main`):** analytics, quota emails, website crawl S3, WP CDN widget (`7cbf8ac`).
+
+---
+
+## 0b. Architecture diagrams
+
+### Chat orchestration (shipped)
+
+See [03-chat-orchestration.md](../functions/03-chat-orchestration.md) for full spec. Core entry: `packages/core/src/chat/orchestrator.ts`.
+
+```mermaid
+flowchart TB
+  subgraph handlers [Lambda entry points]
+    WH[webhook-meta]
+    W[widget chat/stream]
+    C[chat-api]
+  end
+  ORCH[runChatOrchestrator]
+  WH & W & C --> ORCH
+  ORCH --> INTENT[detectIntent]
+  ORCH --> RAG[retrieveKnowledge]
+  ORCH --> LLM[OpenAILLMProvider]
+  ORCH --> TOOLS[executeTool]
+  ORCH --> DDB[(DynamoDB messages + usage)]
+```
+
+### Platform context
+
+See [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md) §4–7 for system context, inbound sequence, and ingest flow diagrams.
 
 ---
 
@@ -52,10 +84,10 @@
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **~75 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **~76 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
-| **Not started** (no handler, no mock) | 6+ routes |
-| **Phase 2** (MFA, payment gateway, widget CDN) | 5+ routes |
+| **Not started** (no handler, no mock) | 5+ routes |
+| **Phase 2** (MFA, payment gateway, custom domains) | 4+ routes |
 
 The admin UI calls all endpoints over HTTP. The local dev server routes matching paths to Lambda handlers; everything else falls through to `@commercechat/mock-api`.
 
@@ -112,6 +144,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `POST` | `/api/v1/widget/chat` | `widget` | Yes (embed) |
 | `POST` | `/api/v1/widget/chat/stream` | `widget` | Yes (embed SSE) |
 | `GET` | `/api/v1/dashboard/stats` | `dashboard-stats` | Yes |
+| `GET` | `/api/v1/analytics` | `analytics` | Yes |
 | `GET` | `/api/v1/channels` | `channels` | Yes |
 | `POST` | `/api/v1/channels/meta/connect` | `channels-meta-connect` | Yes |
 | `POST` | `/api/v1/channels/meta/connect-messenger` | `channels-meta-connect-messenger` | Yes |
@@ -143,6 +176,9 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 - Meta token refresh — EventBridge `cron(0 3 * * ? *)` UTC + optional `POST /internal/cron/meta-token-refresh`
 - Billing lifecycle — EventBridge `cron(0 6 * * ? *)` UTC; trial expiry, cancel-at-period-end, SMTP emails; HTTP requires `x-cron-secret`
 - Plan enforcement — `reserveMessageQuota`, `assertVectorQuota`, `assertTenantOperational` (suspended tenants blocked)
+- **80% message quota email** — `packages/core/src/billing/quota-email.ts` (once per `USAGE#{period}`)
+- **Conversation analytics** — `packages/core/src/analytics/service.ts` (DynamoDB aggregates)
+- **Website crawl persistence** — `packages/core/src/ingest/storage/website-crawl-file.ts`
 - Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, SSE stream, product carousel, plan rate limits)
 - Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)
 - 24h messaging window — enforced on WhatsApp/Messenger/Instagram outbound sends
@@ -170,7 +206,7 @@ _None — core auth + team invite flow complete._
 
 ### Phase 2
 
-MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — Stripe deferred), analytics dashboard, 80% quota warning emails, custom domains (`api.*`, `app.*`).
+MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — Stripe deferred), custom domains (`api.*`, `app.*`), vector quota warning emails, analytics rollups/GSI (optional perf).
 
 ---
 
@@ -191,11 +227,10 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 | Item | Notes |
 |------|-------|
 | **MFA** | TOTP + email OTP per [13-custom-auth.md](../functions/13-custom-auth.md) |
-| **Analytics** | Conversation aggregates + admin charts (Phase 2) |
-| **Quota emails** | 80% usage warning via Resend |
+| **Vector quota email** | Mirror 80% message warning for vector/ingest limits |
+| **Analytics perf** | Daily rollup items or GSI if scan volume grows |
 | **WAF + budgets** | Pre-launch hardening per [aws-serverless-deployment.md](../../infra/aws-serverless-deployment.md) |
-| **Website crawl on AWS** | Persist crawled pages to data S3 (same pattern as catalog CSV) |
-| **WordPress plugin** | Use `widgetScriptUrl` from bootstrap when `WIDGET_CDN_URL` is set |
+| **SQS chat orchestrator** | Async inbound/outbound queues (spec in chat orchestration doc) |
 
 ### Already done (remove from backlog)
 
@@ -205,6 +240,10 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 - Conversation ingest admin UI (page-voice)
 - Widget CDN (`commercechat-dev-widget` CloudFront + `WIDGET_CDN_URL`)
 - S3 Vectors on AWS (`commercechat-dev-vectors`, catalog → S3 data bucket → ingest worker)
+- **Analytics** — `GET /api/v1/analytics` + admin `/analytics` page
+- **80% quota warning emails** — SMTP/Resend via `sendRawEmail`
+- **Website crawl on AWS** — `crawl.json` in data S3 bucket
+- **WordPress plugin CDN** — `widgetScriptUrl` from register-cloud / widget-bootstrap
 
 ---
 
@@ -218,6 +257,7 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 | FAQ quick-add, catalog products (knowledge page) | Yes | — |
 | Bot config + test simulator | Config + chat orchestrator | — |
 | Usage, billing, dashboard | Usage overview, billing plans/checkout/cancel/reactivate | — |
+| **Analytics** | `GET /api/v1/analytics` (date range, funnel, channels) | — |
 | Knowledge (page-voice) | Pro+ conversation ingest, export JSON | — |
 | Conversations | List, thread, messages | — |
 | Widget / API keys | Config, regen-key, embed snippet | — |

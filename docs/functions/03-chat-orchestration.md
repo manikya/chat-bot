@@ -1,44 +1,104 @@
 # Function Spec: Chat Orchestration
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
-**Version:** 1.0
+**Version:** 1.1  
+**Implementation:** `packages/core/src/chat/orchestrator.ts`
 
 ---
 
 ## 1. Purpose
 
-Process every inbound customer message end-to-end: session management, intent detection, RAG retrieval, LLM invocation, tool execution, and outbound reply enqueue — channel-agnostic.
+Process every inbound customer message end-to-end: session management, intent detection, RAG retrieval, LLM invocation, tool execution, and outbound reply — channel-agnostic.
 
 ---
 
 ## 2. Position in pipeline
 
+### Target (SQS-driven)
+
+```mermaid
+flowchart LR
+  SQS_IN[SQS inbound] --> ORCH[chat-orchestrator]
+  ORCH --> RAG[RAG retrieve]
+  ORCH --> LLM[LLM provider]
+  ORCH --> TOOLS[Commerce tools]
+  ORCH --> SQS_OUT[SQS outbound]
+  SQS_OUT --> SEND[Channel senders]
 ```
-SQS (inbound) → chat-orchestrator → [RAG, LLM Router, Tools] → SQS (outbound)
+
+### Shipped (sync Lambda, same core library)
+
+```mermaid
+flowchart TB
+  subgraph entry [Entry handlers]
+    WH[webhook-meta]
+    WIDGET[widget chat / stream]
+    CHAT[chat-api]
+    ONB[onboarding test-chat]
+  end
+
+  ORCH[runChatOrchestrator]
+  WH & WIDGET & CHAT & ONB --> ORCH
+  ORCH --> META[Meta Graph send]
+  ORCH --> SSE[SSE to widget]
+  ORCH --> JSON[JSON reply]
 ```
+
+| Caller | File |
+|--------|------|
+| Web widget | `packages/core/src/widget/service.ts` |
+| Admin test chat | `packages/core/src/chat/service.ts` |
+| WhatsApp | `packages/core/src/meta/process-inbound.ts` |
+| Messenger | `packages/core/src/meta/process-messenger-inbound.ts` |
+| Instagram | `packages/core/src/meta/process-instagram-inbound.ts` |
 
 ---
 
 ## 3. Orchestrator algorithm
 
+```mermaid
+flowchart TD
+  A[Inbound message] --> B{Channel enabled?}
+  B -->|no| X[Reject]
+  B --> C[reserveMessageQuota]
+  C --> D[Load tenant config + conversation history]
+  D --> E[detectIntent]
+  E --> F[Persist inbound MSG]
+  F --> G[retrieveForIntent RAG]
+  G --> H[buildSystemPrompt + load cart]
+  H --> I[createLLMProvider]
+  I --> J{LLM available?}
+  J -->|yes| K[Select model by intent]
+  K --> L[LLM chat loop max 3 rounds]
+  L --> M{tool_calls?}
+  M -->|yes| N[executeTool]
+  N --> L
+  M -->|no| O[replyContent]
+  J -->|no| P[fallback search_products + template reply]
+  O --> Q[Persist outbound + incrementUsage]
+  P --> Q
+  Q --> R[ChatResult]
 ```
-1.  Parse SQS record → UnifiedMessage
-2.  Load tenant config (cache 5 min)
-3.  Check tenant status (active/trial only)
-4.  Check plan message quota → reject with notice if exceeded
+
+Numbered steps (spec):
+
+```
+1.  Validate message; check channel + quota
+2.  Load tenant config (DynamoDB CONFIG + PROFILE)
+3.  Check tenant status (active/trial only) — assertTenantOperational
+4.  reserveMessageQuota (atomic; 80% warning email after success)
 5.  Resolve conversationId from externalUserId + channel
 6.  Persist inbound message to DynamoDB
-7.  Load conversation state (history, cart, metadata)
-8.  Evaluate messaging policy (24h window — delegate to channel policy)
-9.  Detect intent (faq | product | checkout | greeting | unknown)
-10. Retrieve RAG context (filtered by intent + source_type)
-11. Build LLM messages array (system + history + user + tool results)
-12. Call LLM router (streaming off for social; on for web)
-13. If tool_calls → execute tools → loop (max 3 rounds)
+7.  Load conversation history + cart
+8.  Detect intent (faq | product | checkout | greeting | unknown)
+9.  Retrieve RAG context (filtered by intent + source_type)
+10. Build LLM messages array (system + history + user)
+11. Call OpenAI via createLLMProvider (model per intent from tenant llmConfig)
+12. If tool_calls → execute tools → loop (max 3 rounds)
+13. Fallback reply if no LLM or empty response
 14. Persist outbound message(s) to DynamoDB
-15. Increment usage counters
-16. Enqueue outbound SQS message(s)
-17. Emit analytics event (EventBridge)
+15. Increment usage counters (messages, tokens)
+16. Return reply to channel handler (Meta send / widget SSE / JSON)
 ```
 
 ---
@@ -124,11 +184,23 @@ Lightweight LLM classifier (GPT-4.1 nano) when rules confidence < 0.6.
 
 ## 7. Tool execution loop
 
+```mermaid
+flowchart LR
+  INTENT[intent] --> TOOLS[toolsForIntent]
+  TOOLS --> LLM[OpenAI chat]
+  LLM -->|tool_calls| EXEC[executeTool]
+  EXEC --> CATALOG[search_products / cart / checkout]
+  EXEC --> ORDERS[get_order_status]
+  EXEC --> LLM
+```
+
 | Rule | Value |
 |------|-------|
 | Max tool rounds per message | 3 |
-| Timeout per tool | 5s |
-| Parallel tool calls | Yes (when LLM requests multiple) |
+| Timeout per tool | 5s (implicit via Lambda) |
+| Parallel tool calls | Sequential in loop (LLM may request multiple per round) |
+
+**Code:** `packages/core/src/chat/tools.ts` — `TOOL_DEFINITIONS`, `toolsForIntent()`, `executeTool()`.
 
 ### Available tools
 
@@ -264,11 +336,15 @@ Current cart: {{cartSummary}}
 
 ## 14. APIs (internal)
 
-Orchestrator is SQS-driven only. Web chat uses `chat-api` Lambda that invokes same core library synchronously with SSE.
+Orchestrator core is **`runChatOrchestrator()`** in `packages/core/src/chat/orchestrator.ts`. Invoked synchronously from channel handlers today.
 
 | Lambda | Path | Mode |
 |--------|------|------|
-| `chat-api` | POST `/api/v1/chat` | Sync + SSE (web widget) |
+| `chat-api` | `POST /api/v1/chat` | Sync JSON |
+| `widget` | `POST /api/v1/widget/chat` | Sync JSON |
+| `widget` | `POST /api/v1/widget/chat/stream` | Sync + SSE events |
+| `webhook-meta` | `POST /webhooks/meta` | Sync; orchestrate + Meta Graph send |
+| `onboarding` | `POST /api/v1/onboarding/test-chat` | Sync test simulator |
 
 ---
 

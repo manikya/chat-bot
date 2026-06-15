@@ -13,14 +13,15 @@
 | Sprint | Status | Done |
 |--------|--------|------|
 | **Sprint 1 — Foundation** | ~98% | Auth, tenant, JWT, onboarding, logo S3 presign; **not done:** CDK |
-| **Sprint 2 — Knowledge** | ~98% | Crawl, CSV, FAQ, page-voice, vector quota; **AWS:** S3 Vectors + Step Functions + catalog → data S3 |
-| **Sprint 3 — Chat** | ~95% | Orchestrator, tools, usage metering, message quota, suspended tenants |
+| **Sprint 2 — Knowledge** | ~100% | Crawl + crawl S3 snapshot, CSV, FAQ, page-voice, S3 Vectors + Step Functions |
+| **Sprint 3 — Chat** | ~95% | Orchestrator, tools, usage metering, message quota + 80% email, suspended tenants |
 | **Sprint 4 — Meta** | ~75% | WhatsApp + Messenger + Instagram connect/webhooks; **not done:** App Review, prod domains |
-| **Sprint 5 — Widget** | ~100% | SSE, carousel, rate limits, CloudFront CDN (`deploy:widget`) |
-| **Sprint 7 — Billing** | ~60% | Plans, trial lifecycle cron, cancel/reactivate, limit enforcement; **not done:** payment gateway |
+| **Sprint 5 — Widget** | ~100% | SSE, carousel, rate limits, CloudFront CDN (`deploy:widget`), WP CDN script URL |
+| **Sprint 6 — Analytics** | ~90% | Conversation aggregates API + admin charts; **not done:** rollups/GSI, latency metrics |
+| **Sprint 7 — Billing** | ~65% | Plans, trial lifecycle cron, cancel/reactivate, 80% quota email; **not done:** payment gateway |
 | **Infra (Week 0)** | ~80% | `deploy:aws:full`, IAM bootstrap, EventBridge crons, admin + widget CloudFront; **not done:** CI, custom domain |
 
-**~75 real API routes** · **0 mock routes** · See [06-api-implementation-status.md](06-api-implementation-status.md).
+**~76 real API routes** · **0 mock routes** · See [06-api-implementation-status.md](06-api-implementation-status.md).
 
 ---
 

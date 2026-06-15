@@ -2,8 +2,8 @@
 
 **Product:** Multi-tenant AI chatbot for e-commerce stores  
 **Version:** 1.0  
-**Last updated:** 2026-06-07  
-**Status:** Design specification + **local implementation in progress** (25 real API routes; see [implementation/06-api-implementation-status.md](implementation/06-api-implementation-status.md))
+**Last updated:** 2026-06-15  
+**Status:** Design specification + **AWS dev deployed** (~76 real API routes; see [implementation/06-api-implementation-status.md](implementation/06-api-implementation-status.md))
 
 ---
 
@@ -79,7 +79,53 @@ The platform runs on **AWS serverless**, uses a **switchable LLM layer** (OpenAI
 
 ## 4. System context diagram
 
+```mermaid
+flowchart TB
+  subgraph channels [Customer channels]
+    WA[WhatsApp]
+    MSG[Messenger]
+    IG[Instagram]
+    WEB[Web widget]
+  end
+
+  subgraph edge [AWS edge]
+    CF_ADMIN[CloudFront admin]
+    CF_WIDGET[CloudFront widget CDN]
+    APIGW[API Gateway HTTP]
+  end
+
+  subgraph compute [Lambda handlers]
+    WH[webhook-meta]
+    WIDGET[widget / chat-api]
+    CORE[packages/core chat orchestrator]
+  end
+
+  subgraph data [Data layer]
+    DDB[(DynamoDB)]
+    S3DATA[(S3 data bucket)]
+    S3VEC[(S3 Vectors)]
+  end
+
+  subgraph external [External APIs]
+    META[Meta Graph API]
+    OAI[OpenAI chat + embed]
+  end
+
+  WA & MSG & IG --> WH
+  WEB --> CF_WIDGET
+  WEB --> APIGW
+  CF_ADMIN --> APIGW
+  WH --> CORE
+  WIDGET --> CORE
+  CORE --> DDB
+  CORE --> S3VEC
+  CORE --> OAI
+  WH --> META
+  WIDGET --> DDB
+  APIGW --> WH & WIDGET
 ```
+
+ASCII overview (legacy):
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           CommerceChat SaaS Platform                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -189,20 +235,57 @@ Retrieval uses metadata filters:
 
 ### Inbound (customer message)
 
-1. Customer sends message on WhatsApp / Messenger / Instagram / web
-2. Meta (or widget) delivers to platform webhook / chat API
-3. Webhook receiver validates signature, resolves `tenantId`, enqueues to SQS
-4. Orchestrator loads session, checks messaging policy, retrieves RAG context
-5. LLM router selects model by intent; tools execute commerce actions
-6. Reply enqueued to outbound SQS
-7. Channel sender delivers via Meta Graph API or SSE to widget
+```mermaid
+sequenceDiagram
+  participant C as Customer
+  participant CH as Channel
+  participant API as API / webhook Lambda
+  participant O as runChatOrchestrator
+  participant RAG as S3 Vectors RAG
+  participant LLM as OpenAI provider
+  participant T as Commerce tools
+  participant DDB as DynamoDB
+
+  C->>CH: Send message
+  CH->>API: Webhook or widget POST
+  API->>O: Auth + channel + text
+  O->>DDB: reserveMessageQuota, load config/history
+  O->>O: detectIntent
+  O->>RAG: retrieveKnowledge by intent
+  O->>LLM: chat with system prompt + tools
+  loop Max 3 tool rounds
+    LLM-->>O: tool_calls
+    O->>T: executeTool
+    T-->>O: JSON result
+    O->>LLM: tool messages
+  end
+  LLM-->>O: reply text
+  O->>DDB: persist outbound + usage
+  API->>CH: Meta send or SSE / JSON reply
+  CH->>C: Assistant message
+```
+
+**Target (production scale):** Meta webhooks enqueue to SQS; a dedicated `chat-orchestrator` consumer runs the same `packages/core/src/chat/orchestrator.ts` library. **Current dev:** webhook and widget Lambdas invoke the orchestrator synchronously inside the handler.
 
 ### Knowledge ingestion (merchant setup)
 
-1. Merchant adds website URL, social links, or uploads conversation export
-2. Ingest API creates job → Step Functions pipeline
-3. Fetch/parse → PII scrub → chunk (source-specific) → embed → index in S3 Vectors
-4. Job status visible in admin dashboard
+```mermaid
+flowchart LR
+  ADMIN[Admin UI] --> API[Ingest API]
+  API --> SFN[Step Functions]
+  SFN --> WORKER[ingest-worker Lambda]
+  WORKER --> S3DATA[(S3 data bucket)]
+  WORKER --> EMB[OpenAI embeddings]
+  EMB --> S3VEC[(S3 Vectors per tenant)]
+  SFN --> DDB[(Job status DynamoDB)]
+```
+
+Steps:
+
+1. Merchant adds website URL, catalog CSV, FAQ, or conversation export
+2. Ingest API creates job → Step Functions pipeline (when `--with-ingest-step-functions`)
+3. Fetch/parse → chunk → embed → index in S3 Vectors; catalog/website snapshots in data S3
+4. Job status visible in admin Knowledge UI
 
 ---
 

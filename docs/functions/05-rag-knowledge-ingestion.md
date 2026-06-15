@@ -15,10 +15,36 @@ Ingest merchant knowledge from websites, social content, conversation exports, a
 |-----------|---------|-------|
 | Vector store | `S3VectorStore` | Bucket `commercechat-{env}-vectors`; per-tenant index `tenant-{id}` |
 | Async ingest | Step Functions + SQS | `commercechat-dev-ingest` → `ingest-worker` Lambda |
-| Catalog CSV | Data S3 bucket | `S3_DATA_BUCKET/catalog/{tenantId}/{sourceId}.csv` (shared across Lambdas) |
+| Catalog CSV | Data S3 bucket | `S3_DATA_BUCKET/catalog/{tenantId}/{sourceId}.csv` |
+| Website crawl snapshot | Data S3 bucket | `website/{tenantId}/{sourceId}/crawl.json` via `saveWebsiteCrawl()` |
 | FAQ | Sync on POST | `POST /api/v1/knowledge/faq` embeds inline (no job queue) |
-| Website crawl | Local + AWS | Crawl output still local `/tmp` on AWS — **persist to data S3 next** |
 | Verify | `test-s3-vectors-ingest.mjs` | FAQ + catalog pipeline; 5/5 on dev |
+
+```mermaid
+flowchart TB
+  subgraph sources [Source types]
+    WEB[Website crawl]
+    CSV[Catalog CSV]
+    FAQ[FAQ POST]
+    PV[Page-voice pairs]
+  end
+
+  subgraph persist [Data S3 bucket]
+    WEBFILE[website/.../crawl.json]
+    CSVFILE[catalog/.../csv]
+  end
+
+  subgraph pipeline [Ingest worker]
+    CHUNK[Chunk + embed]
+    INDEX[S3 Vectors upsert]
+  end
+
+  WEB --> WEBFILE --> CHUNK
+  CSV --> CSVFILE --> CHUNK
+  FAQ --> CHUNK
+  PV --> CHUNK
+  CHUNK --> INDEX
+```
 
 ---
 
