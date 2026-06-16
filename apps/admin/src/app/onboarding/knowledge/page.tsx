@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
 import { pollIngestJob } from "@/lib/poll-job";
-import { SHOPIFY_APP_INSTALL_STEPS } from "@/lib/commerce-plugin";
 import { WooCommerceConnectCard } from "@/components/onboarding/woocommerce-connect-card";
+import { ShopifyConnectCard } from "@/components/onboarding/shopify-connect-card";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ export default function OnboardingKnowledgePage() {
   const [progress, setProgress] = useState(0);
   const [crawlDone, setCrawlDone] = useState(false);
   const [wooReady, setWooReady] = useState(false);
+  const [shopifyReady, setShopifyReady] = useState(false);
   const [faqs, setFaqs] = useState<FaqRow[]>([]);
   const [faqSourceId, setFaqSourceId] = useState<string | null>(null);
   const [faqQuestion, setFaqQuestion] = useState("");
@@ -62,6 +63,10 @@ export default function OnboardingKnowledgePage() {
       .wordpressStatus()
       .then((r) => setWooReady(Boolean(r.data.connected)))
       .catch(() => setWooReady(false));
+    api.commerce
+      .shopifyStatus()
+      .then((r) => setShopifyReady(Boolean(r.data.connected)))
+      .catch(() => setShopifyReady(false));
     void loadFaqs();
     api.knowledge.listSources().then((r) => {
       const hasWebsite = r.data.items.some((s) => s.type === "website" && s.status === "active");
@@ -162,7 +167,7 @@ export default function OnboardingKnowledgePage() {
     }
   };
 
-  const canContinue = crawlDone || wooReady || faqs.length > 0;
+  const canContinue = crawlDone || wooReady || shopifyReady || faqs.length > 0;
 
   const next = async (skip = false) => {
     await api.onboarding.advanceStep("catalog", skip);
@@ -278,32 +283,37 @@ export default function OnboardingKnowledgePage() {
               )}
 
               {platform === "shopify" && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    We detected a Shopify storefront. Install the CommerceChat Shopify app when available, or
-                    crawl public pages for now.
+                    We detected a Shopify storefront — copy your widget API key, install the CommerceChat
+                    Shopify app, and paste the key when prompted.
                   </p>
-                  <ol className="list-decimal space-y-1.5 pl-4 text-xs text-muted-foreground">
-                    {SHOPIFY_APP_INSTALL_STEPS.map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ol>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={crawling || crawlDone}
-                    onClick={() => crawlSite(detectedUrl)}
-                  >
-                    {crawling ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Crawling storefront...
-                      </>
-                    ) : crawlDone ? (
-                      "Storefront indexed"
-                    ) : (
-                      "Crawl storefront"
-                    )}
-                  </Button>
+                  <ShopifyConnectCard
+                    defaultStoreUrl={detectedUrl}
+                    onConnected={() => setShopifyReady(true)}
+                  />
+                  <div className="border-t pt-4 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Don&apos;t have API access yet? You can index public storefront pages as a fallback.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={crawling || crawlDone || shopifyReady}
+                      onClick={() => crawlSite(detectedUrl)}
+                    >
+                      {crawling ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" /> Crawling storefront...
+                        </>
+                      ) : crawlDone ? (
+                        "Storefront indexed"
+                      ) : (
+                        "Crawl storefront instead"
+                      )}
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -399,7 +409,7 @@ export default function OnboardingKnowledgePage() {
           <p className="text-xs text-muted-foreground">
             {mode === "no-website"
               ? "Add at least one FAQ, or skip and add knowledge later from Settings → Knowledge."
-              : "Check your store URL, connect WooCommerce, or skip this step."}
+              : "Check your store URL, connect WooCommerce or Shopify, or skip this step."}
           </p>
         )}
       </div>

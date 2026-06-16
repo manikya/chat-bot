@@ -217,10 +217,22 @@ interface CommerceConnector {
 | Type | Class | Phase |
 |------|-------|-------|
 | CSV / manual | `ManualConnector` | MVP |
-| Shopify | `ShopifyConnector` | Phase 3 |
-| WooCommerce | `WooCommerceConnector` | Phase 3 |
+| Shopify | `ShopifyConnector` | **Shipped** (OAuth app + manual token) |
+| WooCommerce | `WooCommerceConnector` | **Shipped** (WordPress plugin) |
 
 Connector selected from `tenant.commerceConnector.type`.
+
+### Shopify (shipped)
+
+| Piece | Location |
+|-------|----------|
+| Core sync + credentials | `packages/core/src/commerce/shopify/` |
+| Commerce APIs | `apps/api/src/handlers/commerce-shopify.ts` |
+| Partner OAuth app | `apps/api/src/shopify-app/` → Lambda `shopify-app` |
+| Admin UI | `ShopifyConnectCard` on Knowledge + onboarding; widget API key panel |
+| Self-hosted fallback | `plugins/shopify-app/` zip in `apps/admin/public/` |
+
+Merchant flow: copy `pk_live_…` in admin → install `{API}/shopify-app/auth?shop=…` → paste key in app → sync in Knowledge.
 
 ---
 

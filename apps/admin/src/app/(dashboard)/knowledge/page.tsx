@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Download, MessageSquare, Pause, Play, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
-  SHOPIFY_APP_INSTALL_STEPS,
   WOOCOMMERCE_PLUGIN_DOWNLOAD_URL,
   WOOCOMMERCE_PLUGIN_INSTALL_STEPS,
 } from "@/lib/commerce-plugin";
+import { ShopifyConnectCard } from "@/components/onboarding/shopify-connect-card";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { pollIngestJob } from "@/lib/poll-job";
@@ -58,15 +58,6 @@ export default function KnowledgePage() {
   } | null>(null);
   const [wpConnecting, setWpConnecting] = useState(false);
   const [wpSyncing, setWpSyncing] = useState(false);
-  const [shopDomain, setShopDomain] = useState("");
-  const [shopifyToken, setShopifyToken] = useState("");
-  const [shopifyStatus, setShopifyStatus] = useState<{
-    connected: boolean;
-    shopDomain?: string;
-    lastSyncAt?: string;
-  } | null>(null);
-  const [shopifyConnecting, setShopifyConnecting] = useState(false);
-  const [shopifySyncing, setShopifySyncing] = useState(false);
   const [pageVoice, setPageVoice] = useState<PageVoiceStatus | null>(null);
   const [pageVoiceSyncing, setPageVoiceSyncing] = useState(false);
   const [pageVoiceUploading, setPageVoiceUploading] = useState(false);
@@ -76,7 +67,6 @@ export default function KnowledgePage() {
     api.knowledge.listSources().then((r) => setSources(r.data.items));
     api.knowledge.listJobs().then((r) => setJobs(r.data.items));
     api.commerce.wordpressStatus().then((r) => setWpStatus(r.data)).catch(() => setWpStatus(null));
-    api.commerce.shopifyStatus().then((r) => setShopifyStatus(r.data)).catch(() => setShopifyStatus(null));
     api.knowledge.getPageVoice().then((r) => setPageVoice(r.data)).catch(() => setPageVoice(null));
   };
 
@@ -113,37 +103,6 @@ export default function KnowledgePage() {
       load();
     } finally {
       setWpSyncing(false);
-    }
-  };
-
-  const connectShopify = async () => {
-    setShopifyConnecting(true);
-    try {
-      await api.commerce.connectShopify({ shopDomain, accessToken: shopifyToken });
-      toast.success("Shopify connected");
-      setShopifyToken("");
-      load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Connect failed");
-    } finally {
-      setShopifyConnecting(false);
-    }
-  };
-
-  const syncShopify = async () => {
-    setShopifySyncing(true);
-    try {
-      const sync = await api.commerce.syncShopify();
-      toast.success("Product sync started");
-      await pollIngestJob(sync.data.jobId, () => load());
-      toast.success("Shopify sync completed");
-      load();
-      api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sync failed");
-      load();
-    } finally {
-      setShopifySyncing(false);
     }
   };
 
@@ -252,73 +211,14 @@ export default function KnowledgePage() {
         <CardHeader>
           <CardTitle className="text-base">Shopify store</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Install the <strong>CommerceChat</strong> Shopify app (see{" "}
-            <code className="text-xs">plugins/shopify-app</code> in the repo), or connect manually with a
-            custom app access token for development.
-          </p>
-          <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
-            {SHOPIFY_APP_INSTALL_STEPS.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-          {shopifyStatus?.connected ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="success">Connected</Badge>
-                <span className="text-sm">{shopifyStatus.shopDomain}</span>
-              </div>
-              {shopifyStatus.lastSyncAt && (
-                <p className="text-xs text-muted-foreground">
-                  Last sync {new Date(shopifyStatus.lastSyncAt).toLocaleString()}
-                </p>
-              )}
-              <div className="flex gap-2">
-                <Button size="sm" onClick={syncShopify} disabled={shopifySyncing}>
-                  {shopifySyncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  Sync products
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    await api.commerce.disconnectShopify();
-                    toast.success("Disconnected");
-                    load();
-                  }}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Shop domain</Label>
-                <Input
-                  value={shopDomain}
-                  onChange={(e) => setShopDomain(e.target.value)}
-                  placeholder="your-store.myshopify.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Admin API access token</Label>
-                <Input
-                  type="password"
-                  value={shopifyToken}
-                  onChange={(e) => setShopifyToken(e.target.value)}
-                  placeholder="shpat_..."
-                />
-              </div>
-              <Button
-                onClick={connectShopify}
-                disabled={shopifyConnecting || !shopDomain.trim() || !shopifyToken.trim()}
-              >
-                {shopifyConnecting ? "Connecting…" : "Connect Shopify"}
-              </Button>
-            </div>
-          )}
+        <CardContent>
+          <ShopifyConnectCard
+            manageActions
+            onStatusChange={() => {
+              load();
+              api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
+            }}
+          />
         </CardContent>
       </Card>
 

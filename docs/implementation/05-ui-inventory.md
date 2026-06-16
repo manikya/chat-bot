@@ -230,7 +230,9 @@ Shared chrome across all steps:
 | UI element | User actions |
 |------------|--------------|
 | Website URL input | Prefilled from profile `websiteUrl` |
+| Platform detection | WooCommerce / Shopify / generic storefront |
 | WooCommerce connect card | Connect store + sync products/FAQs |
+| Shopify connect card | Copy widget API key → **Install in Shopify** → paste key in app → **Refresh status** |
 | **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` |
 | Progress bar | Poll `GET /knowledge/jobs/{jobId}` until complete |
 | Error panel | View crawl errors; **Retry** |
@@ -244,8 +246,9 @@ Shared chrome across all steps:
 
 | UI element | User actions |
 |------------|--------------|
-| WooCommerce hint | When connected, skip CSV and continue |
-| WooCommerce connect card | Sync catalog from store |
+| WooCommerce / Shopify hint | When connected, skip CSV and continue |
+| WooCommerce connect card | Sync catalog from WordPress store |
+| Shopify connect card | OAuth app install + widget API key; **Advanced** manual `shpat_` token |
 | CSV dropzone | Upload `products.csv` → catalog source + sync |
 | Template download link | `/sample-products.csv` |
 | Upload progress | View ingest job status |
@@ -364,8 +367,10 @@ Shared chrome across all steps:
 | Job status indicator | View running / failed / completed |
 | **View job details** | Open job detail drawer |
 | Empty state | Click **Add your website** CTA |
+| **WooCommerce store** card | Plugin download, connect, sync, disconnect |
+| **Shopify store** card | Widget API key panel, install link, refresh status, sync/disconnect; advanced manual token |
 
-**APIs:** `GET /knowledge/sources`, `POST /knowledge/sources/{id}/sync`, `DELETE /knowledge/sources/{id}`
+**APIs:** `GET /knowledge/sources`, `POST /knowledge/sources/{id}/sync`, `DELETE /knowledge/sources/{id}`, `GET/POST/DELETE /api/v1/commerce/{wordpress|shopify}/*`
 
 ---
 
@@ -641,17 +646,19 @@ Shared chrome across all steps:
 
 ---
 
-### 5.22 Commerce — Shopify connect (`/settings/integrations/shopify`)
+### 5.22 Commerce — Shopify connect (`/knowledge` + onboarding)
 
-**Phase:** P3 · **Roles:** Owner, Admin
+**Phase:** Shipped (Growth) · **Roles:** Owner, Admin
 
 | UI element | User actions |
 |------------|--------------|
-| Connect status | View connected shop domain |
-| **Connect Shopify** | OAuth → authorize app |
+| Widget API key panel | **Show / copy API key** (`pk_live_…`) for paste in Shopify app |
+| Shop domain | Enter `store.myshopify.com` |
+| **Install in Shopify** | Open `{API}/shopify-app/auth?shop=…` |
+| **Refresh status** | Poll connection after OAuth + key paste in Shopify |
+| **Sync products** | `POST /api/v1/commerce/shopify/sync` (when connected) |
 | **Disconnect** | Revoke integration |
-| Sync status | View last catalog sync; **Sync now** |
-| Product count | View synced SKU count |
+| Advanced (collapsed) | Manual connect with Admin API token (`shpat_…`) |
 
 ---
 
@@ -744,7 +751,7 @@ Embedded on merchant site. Not part of admin app.
 | 18 | Analytics | `/analytics` | P2 | View charts |
 | 19 | Settings (6 sub-pages) | `/settings/*` | MVP–P3 | Profile, team, security |
 | 20 | Agent inbox | `/inbox` | P3 | Human handoff |
-| 21 | Shopify integration | `/settings/integrations/shopify` | P3 | Connect store |
+| 21 | Shopify integration | `/knowledge`, `/onboarding/*` | Growth | Install app, paste API key, sync |
 | 22 | Web widget (shopper) | embedded | MVP | Chat, buy |
 
 ---
@@ -763,7 +770,7 @@ Recommended sequence aligned with [03-task-plan.md](03-task-plan.md):
 | 6 | Knowledge (full) + Usage + Settings (team, API keys) | Sprint 5 |
 
 **Defer to P2:** Billing, Analytics, MFA security, Marketing site, Notifications settings.  
-**Defer to P3:** Agent inbox, Shopify, conversation search, manual reply.
+**Defer to P3:** Agent inbox, conversation search, manual reply.
 
 ---
 

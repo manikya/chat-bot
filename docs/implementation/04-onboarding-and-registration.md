@@ -467,5 +467,5 @@ From [03-task-plan.md](03-task-plan.md):
 |---------|--------|
 | Stripe checkout in onboarding | Optional step 7: "Choose plan" before `complete` |
 | Marketing site self-serve | Same signup API; UTM params stored on PROFILE |
-| Shopify connect | Alternative to CSV in step 4 |
+| Shopify connect | Onboarding step 3/4 + Knowledge — OAuth app + widget API key; alternative to CSV |
 | MFA | Login step 2 only; no change to onboarding |

@@ -11,14 +11,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@codegenie/serverless-express": "^4.17.1",
     "@commercechat/core": "*",
     "@commercechat/mock-api": "*",
     "@commercechat/shared": "*",
     "@hono/node-server": "^1.14.1",
+    "@shopify/shopify-api": "^11.6.0",
+    "express": "^4.21.2",
     "hono": "^4.7.4"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.147",
+    "@types/express": "^4.17.21",
     "esbuild": "^0.25.0",
     "tsx": "^4.19.4",
     "typescript": "^5"

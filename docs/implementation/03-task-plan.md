@@ -241,7 +241,7 @@
 
 | # | Task | Owner | Size |
 |---|------|-------|------|
-| 10.1 | Shopify connector (OAuth + product sync) | BE | XL |
+| 10.1 | Shopify connector (OAuth + product sync) | BE | XL | **Done** — serverless app + admin UI |
 | 10.2 | Human handoff queue + agent inbox | BE | XL |
 | 10.3 | SMS MFA via Twilio `SmsProvider` | BE | M |
 | 10.4 | Bedrock fallback in LLM router | BE | M |

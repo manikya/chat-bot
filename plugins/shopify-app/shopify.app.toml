@@ -2,7 +2,7 @@
 name = "CommerceChat"
 client_id = "YOUR_SHOPIFY_API_KEY"
 application_url = "https://your-tunnel.example.com"
-embedded = true
+embedded = false
 
 [access_scopes]
 scopes = "read_products,read_orders,write_script_tags"

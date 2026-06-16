@@ -1,5 +1,10 @@
+import { apiPublicBaseUrl } from "./onboarding-env";
+
 /** WordPress plugin served from admin static assets. */
 export const WOOCOMMERCE_PLUGIN_DOWNLOAD_URL = "/commercechat-connector.zip";
+
+/** Legacy self-hosted Shopify app package. */
+export const SHOPIFY_APP_DOWNLOAD_URL = "/commercechat-shopify-app.zip";
 
 export const WOOCOMMERCE_PLUGIN_INSTALL_STEPS = [
   "Download the CommerceChat Connector plugin (.zip)",
@@ -9,8 +14,30 @@ export const WOOCOMMERCE_PLUGIN_INSTALL_STEPS = [
 ] as const;
 
 export const SHOPIFY_APP_INSTALL_STEPS = [
-  "Deploy the CommerceChat Shopify app from plugins/shopify-app (see README)",
-  "Install on your store and authorize product read access",
-  "Paste your CommerceChat widget API key in the app setup screen",
-  "Return here and click Sync products to index your catalog",
+  "Copy your widget API key below (pk_live_…)",
+  "Click Install in Shopify and approve the CommerceChat app",
+  "In Shopify Admin, paste your API key on the CommerceChat connect screen",
+  "Return here and sync products to import your catalog",
 ] as const;
+
+export function normalizeShopDomain(input: string): string {
+  const trimmed = input.trim().toLowerCase().replace(/\/+$/, "");
+  if (!trimmed) return "";
+
+  try {
+    const host = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`).hostname;
+    if (host.endsWith(".myshopify.com")) return host;
+  } catch {
+    /* ignore */
+  }
+
+  if (trimmed.endsWith(".myshopify.com")) return trimmed;
+  return "";
+}
+
+export function shopifyAppInstallUrl(shopDomain: string): string {
+  const shop = normalizeShopDomain(shopDomain);
+  const base = `${apiPublicBaseUrl()}/shopify-app`;
+  if (!shop) return `${base}/app`;
+  return `${base}/auth?shop=${encodeURIComponent(shop)}`;
+}

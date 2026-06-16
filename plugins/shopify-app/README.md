@@ -1,45 +1,87 @@
 # CommerceChat Shopify app
 
-OAuth app that links a Shopify store to CommerceChat: saves the offline access token, calls the CommerceChat connect API, and installs the chat widget via a ScriptTag.
+Links a Shopify store to CommerceChat (OAuth, product sync, chat widget).
 
-## Prerequisites
+## Merchant setup (recommended)
 
-1. [Shopify Partner](https://partners.shopify.com) account and a custom app
-2. CommerceChat tenant with a widget API key (`pk_live_…` from the admin dashboard)
-3. Public HTTPS URL for local dev (e.g. ngrok) pointing at this server
+Use the **serverless** app on your CommerceChat API — no separate Node server.
 
-## Setup
+1. In CommerceChat admin, open **Knowledge → Shopify** (or onboarding when Shopify is detected).
+2. **Copy your widget API key** (`pk_live_…`) from the connect card, or **Settings → API keys**.
+3. Enter your **shop domain** (`your-store.myshopify.com`) and click **Install in Shopify**.
+4. Approve the app in Shopify Admin, then **paste your API key** on the CommerceChat connect screen.
+5. Back in CommerceChat admin, click **Refresh status**, then **Sync products**.
+
+Manual connect with an Admin API token (`shpat_…`) is available under **Advanced** in the same card.
+
+---
+
+## Operator setup: serverless (Lambda on existing API)
+
+CommerceChat deploys this app as a **Lambda** on your existing API. You do **not** need to run Node on a VPS.
+
+### 1. Add Partner credentials
+
+In `apps/api/.env` (or `.env.aws`):
+
+```env
+SHOPIFY_API_KEY=your_partner_api_key
+SHOPIFY_API_SECRET=your_partner_api_secret
+```
+
+### 2. Deploy the API
+
+```bash
+npm run deploy:aws -- --env=dev --with-ingest-pipeline --with-ingest-step-functions
+```
+
+Your app base URL becomes:
+
+```
+https://YOUR-API.execute-api.us-east-1.amazonaws.com/shopify-app
+```
+
+`SHOPIFY_APP_URL` is set automatically to `{API_PUBLIC_URL}/shopify-app`.
+
+### 3. Configure Shopify Partner Dashboard
+
+| Field | Value |
+|--------|--------|
+| **App URL** | `https://YOUR-API.../shopify-app/app` |
+| **Allowed redirection URL(s)** | `https://YOUR-API.../shopify-app/auth/callback` |
+| **Embed app in Shopify admin** | **Off** (non-embedded — avoids cookie/iframe errors) |
+| **Scopes** | `read_products`, `read_orders`, `write_script_tags` |
+| **App uninstalled webhook** (optional) | `https://YOUR-API.../shopify-app/webhooks` |
+
+### 4. Install on a store
+
+```
+https://YOUR-API.../shopify-app/auth?shop=STORE.myshopify.com
+```
+
+The merchant pastes their CommerceChat `pk_live_…` key when prompted (also shown in admin UI).
+
+### 5. Sync products
+
+CommerceChat admin → **Knowledge → Shopify** → **Sync products**
+
+---
+
+## Alternative: self-hosted (zip)
+
+Legacy zip at `apps/admin/public/commercechat-shopify-app.zip` if you want to run the app on your own server (Railway, VPS, ngrok for dev).
 
 ```bash
 cd plugins/shopify-app
 cp .env.example .env
-# Fill SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_APP_URL, COMMERCECHAT_API_URL
 npm install
 npm run dev
 ```
 
-In the Partner Dashboard:
+Set `SHOPIFY_APP_URL` to your public HTTPS URL and `COMMERCECHAT_API_URL` to the CommerceChat API.
 
-- **App URL**: `https://your-tunnel/auth`
-- **Allowed redirection URL(s)**: `https://your-tunnel/auth/callback`
-- **Scopes**: `read_products`, `read_orders`, `write_script_tags`
-
-Install on a development store: open `https://your-tunnel/auth?shop=your-store.myshopify.com`.
-
-## Flow
-
-1. Merchant installs the app → OAuth offline token stored in session storage
-2. Merchant pastes CommerceChat widget API key on `/app`
-3. App `POST`s to `COMMERCECHAT_API_URL/api/v1/commerce/shopify/connect-store` with `X-API-Key`
-4. App creates a ScriptTag loading the CommerceChat widget
-5. In CommerceChat admin → **Knowledge** → **Shopify** → **Sync products**
+---
 
 ## Manual connect (no app)
 
-For custom apps or testing, connect directly in the admin UI with shop domain + Admin API access token (`shpat_…`).
-
-## Production notes
-
-- Replace `MemorySessionStorage` with Redis or DynamoDB
-- Register `APP_UNINSTALLED` webhook in Partner Dashboard → `https://your-host/webhooks`
-- Prefer a Theme App Extension over ScriptTags for Online Store 2.0 long term
+In CommerceChat admin → **Knowledge → Shopify** → **Advanced**: connect with shop domain + Admin API token (`shpat_…`). Paste the widget embed in your theme if not using the Shopify app for ScriptTag injection.

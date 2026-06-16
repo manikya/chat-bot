@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
 import { pollIngestJob } from "@/lib/poll-job";
 import { WooCommerceConnectCard } from "@/components/onboarding/woocommerce-connect-card";
+import { ShopifyConnectCard } from "@/components/onboarding/shopify-connect-card";
 import { OnboardingShell } from "@/components/layout/onboarding-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,12 +23,17 @@ export default function OnboardingCatalogPage() {
   const [uploadDone, setUploadDone] = useState(false);
   const [productCount, setProductCount] = useState<number | null>(null);
   const [wooConnected, setWooConnected] = useState(false);
+  const [shopifyConnected, setShopifyConnected] = useState(false);
 
   useEffect(() => {
     api.commerce
       .wordpressStatus()
       .then((r) => setWooConnected(Boolean(r.data.connected)))
       .catch(() => setWooConnected(false));
+    api.commerce
+      .shopifyStatus()
+      .then((r) => setShopifyConnected(Boolean(r.data.connected)))
+      .catch(() => setShopifyConnected(false));
   }, []);
 
   const upload = async (file: File) => {
@@ -76,12 +82,15 @@ export default function OnboardingCatalogPage() {
   return (
     <OnboardingShell currentStep="catalog">
       <div className="space-y-4">
-        {wooConnected && (
+        {(wooConnected || shopifyConnected) && (
           <Card className="border-emerald-200 bg-emerald-50/40">
             <CardContent className="pt-6">
               <p className="text-sm">
-                WooCommerce is connected — your catalog is already syncing. You can skip CSV upload and continue to
-                test chat.
+                {wooConnected && shopifyConnected
+                  ? "Your store is connected — catalog sync is in progress. You can skip CSV upload."
+                  : wooConnected
+                    ? "WooCommerce is connected — your catalog is already syncing. You can skip CSV upload and continue to test chat."
+                    : "Shopify is connected — your catalog is already syncing. You can skip CSV upload and continue to test chat."}
               </p>
             </CardContent>
           </Card>
@@ -91,11 +100,12 @@ export default function OnboardingCatalogPage() {
           <CardHeader>
             <CardTitle>Product catalog</CardTitle>
             <CardDescription>
-              Upload a CSV of products, or use WooCommerce above. Website crawl may also index product pages.
+              Connect WooCommerce or Shopify to sync products automatically, or upload a CSV.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <WooCommerceConnectCard onConnected={() => setWooConnected(true)} />
+            <ShopifyConnectCard onConnected={() => setShopifyConnected(true)} />
 
             <input
               ref={inputRef}

@@ -29,7 +29,7 @@ const shopify = shopifyApi({
   hostName: new URL(HOST).host,
   hostScheme: new URL(HOST).protocol.replace(":", "") as "http" | "https",
   apiVersion: ApiVersion.October24,
-  isEmbeddedApp: true,
+  isEmbeddedApp: false,
   logger: { level: LogSeverity.Warning },
   sessionStorage,
 });

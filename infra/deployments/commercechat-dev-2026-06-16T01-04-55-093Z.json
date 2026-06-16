@@ -1,0 +1,619 @@
+{
+  "createdAt": "2026-06-16T01:04:55.095Z",
+  "status": "success",
+  "stackName": "commercechat-dev",
+  "environment": "dev",
+  "region": "us-east-1",
+  "accountId": "960884446408",
+  "apiEndpoint": "https://fimfx57xwl.execute-api.us-east-1.amazonaws.com",
+  "artifactBucket": "commercechat-dev-960884446408-us-east-1-deploy",
+  "artifactPrefix": "serverless/1781571495064",
+  "resources": [
+    {
+      "logicalId": "ApiStage",
+      "physicalId": "$default",
+      "type": "AWS::ApiGatewayV2::Stage",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "AssetsBucket",
+      "physicalId": "commercechat-dev-assets-960884446408-us-east-1",
+      "type": "AWS::S3::Bucket",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "BillingLifecycleSchedule",
+      "physicalId": "commercechat-dev-cron-billing-lifecycle",
+      "type": "AWS::Events::Rule",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "BillingLifecycleSchedulePermission",
+      "physicalId": "commercechat-dev-BillingLifecycleSchedulePermission-DfFfP8VtlQDZ",
+      "type": "AWS::Lambda::Permission",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "DataBucket",
+      "physicalId": "commercechat-dev-data-960884446408-us-east-1",
+      "type": "AWS::S3::Bucket",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAnalytics",
+      "physicalId": "commercechat-dev-analytics",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthAcceptInvite",
+      "physicalId": "commercechat-dev-auth-accept-invite",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthForgotPassword",
+      "physicalId": "commercechat-dev-auth-forgot-password",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthInvite",
+      "physicalId": "commercechat-dev-auth-invite",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthLogin",
+      "physicalId": "commercechat-dev-auth-login",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthLogout",
+      "physicalId": "commercechat-dev-auth-logout",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthMe",
+      "physicalId": "commercechat-dev-auth-me",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthRefresh",
+      "physicalId": "commercechat-dev-auth-refresh",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthResendVerification",
+      "physicalId": "commercechat-dev-auth-resend-verification",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthResetPassword",
+      "physicalId": "commercechat-dev-auth-reset-password",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthSignup",
+      "physicalId": "commercechat-dev-auth-signup",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnAuthVerifyEmail",
+      "physicalId": "commercechat-dev-auth-verify-email",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnBillingCancelHandler",
+      "physicalId": "commercechat-dev-billing-cancelHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnBillingCheckoutHandler",
+      "physicalId": "commercechat-dev-billing-checkoutHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnBillingOverviewHandler",
+      "physicalId": "commercechat-dev-billing-overviewHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnBillingPlansHandler",
+      "physicalId": "commercechat-dev-billing-plansHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnBillingReactivateHandler",
+      "physicalId": "commercechat-dev-billing-reactivateHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnBillingSubscriptionHandler",
+      "physicalId": "commercechat-dev-billing-subscriptionHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsConnectHandler",
+      "physicalId": "commercechat-dev-channels-connectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsConnectInstagramHandler",
+      "physicalId": "commercechat-dev-channels-connectInstagramHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsConnectMessengerHandler",
+      "physicalId": "commercechat-dev-channels-connectMessengerHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsDevConnectHandler",
+      "physicalId": "commercechat-dev-channels-devConnectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsDevStatusHandler",
+      "physicalId": "commercechat-dev-channels-devStatusHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsDisconnectHandler",
+      "physicalId": "commercechat-dev-channels-disconnectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsHealthHandler",
+      "physicalId": "commercechat-dev-channels-healthHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsListHandler",
+      "physicalId": "commercechat-dev-channels-listHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChannelsMessengerDevConnectHandler",
+      "physicalId": "commercechat-dev-channels-messengerDevConnectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnChatApi",
+      "physicalId": "commercechat-dev-chat-api",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceProducts",
+      "physicalId": "commercechat-dev-commerce-products",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceShopifyConnectHandler",
+      "physicalId": "commercechat-dev-commerce-shopify-connectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceShopifyConnectStoreHandler",
+      "physicalId": "commercechat-dev-commerce-shopify-connectStoreHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceShopifyDisconnectHandler",
+      "physicalId": "commercechat-dev-commerce-shopify-disconnectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceShopifyStatusHandler",
+      "physicalId": "commercechat-dev-commerce-shopify-statusHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceShopifySyncHandler",
+      "physicalId": "commercechat-dev-commerce-shopify-syncHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceShopifyWidgetBootstrapHandler",
+      "physicalId": "commercechat-dev-commerce-shopify-widgetBootstrapHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceWordpressConnectHandler",
+      "physicalId": "commercechat-dev-commerce-wordpress-connectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceWordpressDisconnectHandler",
+      "physicalId": "commercechat-dev-commerce-wordpress-disconnectHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceWordpressStatusHandler",
+      "physicalId": "commercechat-dev-commerce-wordpress-statusHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceWordpressSyncHandler",
+      "physicalId": "commercechat-dev-commerce-wordpress-syncHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCommerceWordpressWidgetBootstrapHandler",
+      "physicalId": "commercechat-dev-commerce-wordpress-widgetBootstrapHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnConversations",
+      "physicalId": "commercechat-dev-conversations",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCronBillingLifecycle",
+      "physicalId": "commercechat-dev-cron-billing-lifecycle",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnCronMetaTokenRefresh",
+      "physicalId": "commercechat-dev-cron-meta-token-refresh",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnDashboardStats",
+      "physicalId": "commercechat-dev-dashboard-stats",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnDevices",
+      "physicalId": "commercechat-dev-devices",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnHealth",
+      "physicalId": "commercechat-dev-health",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnIngestWorker",
+      "physicalId": "commercechat-dev-ingest-worker",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnKnowledgeDetectPlatform",
+      "physicalId": "commercechat-dev-knowledge-detect-platform",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnKnowledgeFaq",
+      "physicalId": "commercechat-dev-knowledge-faq",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnKnowledgeJobs",
+      "physicalId": "commercechat-dev-knowledge-jobs",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnKnowledgePageVoice",
+      "physicalId": "commercechat-dev-knowledge-page-voice",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnKnowledgeSources",
+      "physicalId": "commercechat-dev-knowledge-sources",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnKnowledgeSync",
+      "physicalId": "commercechat-dev-knowledge-sync",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnOnboarding",
+      "physicalId": "commercechat-dev-onboarding",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnOnboardingTestChat",
+      "physicalId": "commercechat-dev-onboarding-test-chat",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnShopifyApp",
+      "physicalId": "commercechat-dev-shopify-app",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTeam",
+      "physicalId": "commercechat-dev-team",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTeamMemberDeleteHandler",
+      "physicalId": "commercechat-dev-team-member-deleteHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTeamMemberPatchHandler",
+      "physicalId": "commercechat-dev-team-member-patchHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantConfig",
+      "physicalId": "commercechat-dev-tenant-config",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantLimits",
+      "physicalId": "commercechat-dev-tenant-limits",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantLogo",
+      "physicalId": "commercechat-dev-tenant-logo",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantLogoPresignCompleteHandler",
+      "physicalId": "commercechat-dev-tenant-logo-presign-completeHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantLogoPresignPresignHandler",
+      "physicalId": "commercechat-dev-tenant-logo-presign-presignHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantMe",
+      "physicalId": "commercechat-dev-tenant-me",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantUsage",
+      "physicalId": "commercechat-dev-tenant-usage",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnTenantWidgetKey",
+      "physicalId": "commercechat-dev-tenant-widget-key",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnWebhookMeta",
+      "physicalId": "commercechat-dev-webhook-meta",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnWebhookPayment",
+      "physicalId": "commercechat-dev-webhook-payment",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnWidgetChatHandler",
+      "physicalId": "commercechat-dev-widget-chatHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnWidgetConfigHandler",
+      "physicalId": "commercechat-dev-widget-configHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "FnWidgetStreamHandler",
+      "physicalId": "commercechat-dev-widget-streamHandler",
+      "type": "AWS::Lambda::Function",
+      "status": "UPDATE_COMPLETE"
+    },
+    {
+      "logicalId": "HttpApi",
+      "physicalId": "fimfx57xwl",
+      "type": "AWS::ApiGatewayV2::Api",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IngestDeadLetterQueue",
+      "physicalId": "https://sqs.us-east-1.amazonaws.com/960884446408/commercechat-dev-ingest-dlq",
+      "type": "AWS::SQS::Queue",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IngestQueue",
+      "physicalId": "https://sqs.us-east-1.amazonaws.com/960884446408/commercechat-dev-ingest",
+      "type": "AWS::SQS::Queue",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IngestStateMachine",
+      "physicalId": "arn:aws:states:us-east-1:960884446408:stateMachine:commercechat-dev-ingest",
+      "type": "AWS::StepFunctions::StateMachine",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IngestStateMachineRole",
+      "physicalId": "commercechat-dev-ingest-sfn-role-us-east-1",
+      "type": "AWS::IAM::Role",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IngestWorkerEventSourceMapping",
+      "physicalId": "0d0c65d1-6786-4f7f-beed-7d45a60f0d2e",
+      "type": "AWS::Lambda::EventSourceMapping",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAnalyticsHandler",
+      "physicalId": "uno2qxp",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthAcceptInviteHandler",
+      "physicalId": "nm4hd4u",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthForgotPasswordHandler",
+      "physicalId": "zivzrij",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthInviteHandler",
+      "physicalId": "n5qz1yf",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthLoginHandler",
+      "physicalId": "69oklzr",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthLogoutHandler",
+      "physicalId": "60anfz6",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthMeHandler",
+      "physicalId": "g2tgrv0",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthRefreshHandler",
+      "physicalId": "ylu7hgv",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthResendVerificationHandler",
+      "physicalId": "1qwrfh5",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthResetPasswordHandler",
+      "physicalId": "r9f3w0u",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthSignupHandler",
+      "physicalId": "hfb6fak",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationAuthVerifyEmailHandler",
+      "physicalId": "fglg60v",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationBillingCancelHandler",
+      "physicalId": "ngo7psg",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationBillingCheckoutHandler",
+      "physicalId": "kgmu809",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationBillingOverviewHandler",
+      "physicalId": "oadf7f4",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationBillingPlansHandler",
+      "physicalId": "y7bfyur",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    },
+    {
+      "logicalId": "IntegrationBillingReactivateHandler",
+      "physicalId": "2gyqkf6",
+      "type": "AWS::ApiGatewayV2::Integration",
+      "status": "CREATE_COMPLETE"
+    }
+  ],
+  "removal": {
+    "deleteStack": "aws cloudformation delete-stack --stack-name commercechat-dev --region us-east-1",
+    "waitForDelete": "aws cloudformation wait stack-delete-complete --stack-name commercechat-dev --region us-east-1",
+    "emptyArtifacts": "aws s3 rm s3://commercechat-dev-960884446408-us-east-1-deploy/serverless/1781571495064 --recursive --region us-east-1",
+    "deleteArtifactBucket": "aws s3 rb s3://commercechat-dev-960884446408-us-east-1-deploy --force --region us-east-1"
+  }
+}

@@ -85,6 +85,8 @@ packages/core/              → Real Lambda business logic + DynamoDB
 | Accept team invite | **Real** `POST /auth/accept-invite` at `/accept-invite` |
 | Auth emails (verify, reset, invite) | **Real** Zoho SMTP when `SMTP_*` set in `apps/api/.env` |
 | Commerce products (knowledge page) | **Real** `GET /api/v1/commerce/products` |
+| WooCommerce connect (Knowledge + onboarding) | **Real** `/api/v1/commerce/wordpress/*` + plugin zip |
+| Shopify connect (Knowledge + onboarding) | **Real** `/api/v1/commerce/shopify/*` + `/shopify-app` OAuth Lambda |
 | Bot config, chat simulator, widget colors | **Real** config + chat orchestrator |
 | Usage, dashboard stats, conversations | **Real** DynamoDB metering + threads |
 | Widget embed, API key regen | **Real** `/widget/v1.js` + widget APIs |

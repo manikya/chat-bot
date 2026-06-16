@@ -10,7 +10,7 @@
 
 | # | Objective | Success criteria |
 |---|-----------|------------------|
-| 1 | Shopify integration live | OAuth app; real-time catalog sync |
+| 1 | Shopify integration live | OAuth app; catalog sync via ingest pipeline (**shipped**) |
 | 2 | Human handoff | Agent can take over conversation |
 | 3 | Enterprise tier | SSO, dedicated support, custom SLA |
 | 4 | Operational scale | 500 merchants, 1M messages/month |

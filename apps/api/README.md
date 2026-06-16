@@ -58,6 +58,8 @@ See [docs/implementation/06-api-implementation-status.md](../../docs/implementat
 - WhatsApp + Messenger + Instagram connect/disconnect/health
 - Meta webhooks (`GET`/`POST /webhooks/meta`)
 - Billing crons via EventBridge (`cron-billing-lifecycle`, `cron-meta-token-refresh`)
+- Commerce: WooCommerce (`/api/v1/commerce/wordpress/*`) and Shopify (`/api/v1/commerce/shopify/*`)
+- Shopify Partner app (serverless Express on Lambda): `GET/POST /shopify-app/*` (`shopify-app` handler)
 - Static widget bundle at `GET /widget/v1.js`
 
 ## AWS deploy

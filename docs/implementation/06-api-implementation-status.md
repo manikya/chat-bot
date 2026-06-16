@@ -1,7 +1,7 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-15  
+**Last updated:** 2026-06-16  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)  
 **AWS dev API:** `https://fimfx57xwl.execute-api.us-east-1.amazonaws.com`  
 **AWS dev admin:** `https://d3g8dfkodwqrza.cloudfront.net`  
@@ -47,8 +47,9 @@
 | 2026-06-15 | **80% quota emails:** `maybeSendMessageQuotaWarning` via SMTP on `reserveMessageQuota` |
 | 2026-06-15 | **Website crawl S3:** `website/{tenantId}/{sourceId}/crawl.json` in data bucket |
 | 2026-06-15 | **WordPress CDN:** `widgetScriptUrl` on register-cloud + bootstrap fallback in plugin |
+| 2026-06-16 | **Shopify connector:** OAuth app on Lambda (`/shopify-app/*`), product sync, widget ScriptTag, admin Knowledge + onboarding UI with widget API key |
 
-**Git (local `main`):** analytics, quota emails, website crawl S3, WP CDN widget (`7cbf8ac`).
+**Git (local `main`):** Shopify serverless app, commerce APIs, admin connect cards.
 
 ---
 
@@ -84,7 +85,7 @@ See [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md) §4–7 for system
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **~76 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **~85 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
 | **Not started** (no handler, no mock) | 5+ routes |
 | **Phase 2** (MFA, payment gateway, custom domains) | 4+ routes |
@@ -133,6 +134,18 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/knowledge/jobs/{jobId}` | `knowledge-jobs` | Yes |
 | `POST` | `/api/v1/knowledge/faq` | `knowledge-faq` | Yes |
 | `GET` | `/api/v1/commerce/products` | `commerce-products` | Yes |
+| `GET` | `/api/v1/commerce/wordpress/status` | `commerce-wordpress` | Yes |
+| `POST` | `/api/v1/commerce/wordpress/connect` | `commerce-wordpress` | Yes |
+| `POST` | `/api/v1/commerce/wordpress/sync` | `commerce-wordpress` | Yes |
+| `DELETE` | `/api/v1/commerce/wordpress` | `commerce-wordpress` | Yes |
+| `GET` | `/api/v1/commerce/wordpress/widget-bootstrap` | `commerce-wordpress` | Yes |
+| `GET` | `/api/v1/commerce/shopify/status` | `commerce-shopify` | Yes |
+| `POST` | `/api/v1/commerce/shopify/connect` | `commerce-shopify` | Yes |
+| `POST` | `/api/v1/commerce/shopify/connect-store` | `commerce-shopify` | Yes (Shopify app) |
+| `POST` | `/api/v1/commerce/shopify/sync` | `commerce-shopify` | Yes |
+| `DELETE` | `/api/v1/commerce/shopify` | `commerce-shopify` | Yes |
+| `GET` | `/api/v1/commerce/shopify/widget-bootstrap` | `commerce-shopify` | Yes (widget) |
+| `GET/POST` | `/shopify-app/*` | `shopify-app` | Yes (OAuth + connect UI) |
 | `GET` | `/api/v1/team` | `team` | Yes |
 | `PATCH` | `/api/v1/team/{userId}` | `team-member` | Yes |
 | `DELETE` | `/api/v1/team/{userId}` | `team-member` | Yes |
@@ -184,6 +197,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 - 24h messaging window — enforced on WhatsApp/Messenger/Instagram outbound sends
 - Logo storage — S3 presigned upload (`POST .../logo/presign` + `complete`) via LocalStack; local filesystem fallback when `S3_BUCKET` unset
 - Ingest pipeline (AWS) — SQS + Step Functions `commercechat-{env}-ingest` when deployed with `--with-ingest-step-functions`
+- **Shopify app** — `apps/api/src/shopify-app/` (cookieless OAuth, DynamoDB sessions); Partner credentials `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`
 
 **Code locations:**
 - Handlers: `apps/api/src/handlers/`

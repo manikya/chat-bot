@@ -83,6 +83,18 @@ const BASE_ROUTES = [
   ["POST", "/api/v1/commerce/shopify/sync", "commerce-shopify", "syncHandler"],
   ["DELETE", "/api/v1/commerce/shopify", "commerce-shopify", "disconnectHandler"],
   ["GET", "/api/v1/commerce/shopify/widget-bootstrap", "commerce-shopify", "widgetBootstrapHandler"],
+  ["GET", "/shopify-app/health", "shopify-app"],
+  ["HEAD", "/shopify-app/health", "shopify-app"],
+  ["GET", "/shopify-app/auth", "shopify-app"],
+  ["HEAD", "/shopify-app/auth", "shopify-app"],
+  ["GET", "/shopify-app/auth/callback", "shopify-app"],
+  ["HEAD", "/shopify-app/auth/callback", "shopify-app"],
+  ["GET", "/shopify-app/app", "shopify-app"],
+  ["HEAD", "/shopify-app/app", "shopify-app"],
+  ["GET", "/shopify-app", "shopify-app"],
+  ["HEAD", "/shopify-app", "shopify-app"],
+  ["POST", "/shopify-app/app/connect", "shopify-app"],
+  ["POST", "/shopify-app/webhooks", "shopify-app"],
   ["GET", "/api/v1/team", "team"],
   ["DELETE", "/api/v1/team/{userId}", "team-member", "deleteHandler"],
   ["PATCH", "/api/v1/team/{userId}", "team-member", "patchHandler"],
@@ -123,7 +135,10 @@ function readDeploymentInventory(env, kind) {
   const files = readdirSync(INVENTORY_DIR)
     .filter((name) => name.startsWith(`commercechat-${env}`) && name.endsWith(".json"))
     .filter((name) => !name.includes("partial") && !name.includes("failed") && !name.includes("error"))
-    .filter((name) => (kind === "admin" ? name.includes("-admin-") : !name.includes("-admin-")))
+    .filter((name) => {
+      if (kind === "admin") return name.includes("-admin-");
+      return !name.includes("-admin-") && !name.includes("-widget-");
+    })
     .sort();
   const latest = files.at(-1);
   if (!latest) return null;
@@ -823,7 +838,8 @@ function buildTemplate({
       handlerName.includes("knowledge") ||
       handlerName === "chat-api" ||
       handlerName === "widget" ||
-      handlerName === "ingest-worker"
+      handlerName === "ingest-worker" ||
+      handlerName === "shopify-app"
         ? 60
         : 20;
     const memory =
@@ -888,6 +904,9 @@ function buildTemplate({
             SKIP_EMAIL_VERIFICATION: { Ref: "SkipEmailVerification" },
             META_TOKEN_REFRESH_CRON_SECRET: { Ref: "MetaTokenRefreshCronSecret" },
             BILLING_LIFECYCLE_CRON_SECRET: { Ref: "BillingLifecycleCronSecret" },
+            SHOPIFY_API_KEY: { Ref: "ShopifyApiKey" },
+            SHOPIFY_API_SECRET: { Ref: "ShopifyApiSecret" },
+            SHOPIFY_APP_URL: { Ref: "ShopifyAppUrl" },
             S3_VECTORS_BUCKET: vectorBucketName,
             DATA_DIR: "/tmp/commercechat",
             ...(handlerName !== "ingest-worker" && withIngestPipeline
@@ -1035,6 +1054,9 @@ function buildTemplate({
       SkipEmailVerification: { Type: "String", AllowedValues: ["true", "false"], Default: env === "prod" ? "false" : "true" },
       MetaTokenRefreshCronSecret: { Type: "String", NoEcho: true, Default: "" },
       BillingLifecycleCronSecret: { Type: "String", NoEcho: true, Default: "" },
+      ShopifyApiKey: { Type: "String", Default: "" },
+      ShopifyApiSecret: { Type: "String", NoEcho: true, Default: "" },
+      ShopifyAppUrl: { Type: "String", Default: "" },
     },
     Resources: resources,
     Outputs: {
@@ -1253,6 +1275,16 @@ async function main() {
   const billingLifecycleCronSecret = hasArg("billing-lifecycle-cron-secret")
     ? arg("billing-lifecycle-cron-secret", "")
     : process.env.BILLING_LIFECYCLE_CRON_SECRET ?? deployedEnv?.BILLING_LIFECYCLE_CRON_SECRET ?? randomBytes(32).toString("hex");
+  const shopifyApiKey = hasArg("shopify-api-key")
+    ? arg("shopify-api-key", "")
+    : process.env.SHOPIFY_API_KEY ?? deployedEnv?.SHOPIFY_API_KEY ?? "";
+  const shopifyApiSecret = hasArg("shopify-api-secret")
+    ? arg("shopify-api-secret", "")
+    : process.env.SHOPIFY_API_SECRET ?? deployedEnv?.SHOPIFY_API_SECRET ?? "";
+  const shopifyAppUrl = arg(
+    "shopify-app-url",
+    apiPublicUrl ? `${apiPublicUrl.replace(/\/$/, "")}/shopify-app` : deployedEnv?.SHOPIFY_APP_URL ?? ""
+  );
   let widgetCdnUrl = hasArg("widget-cdn-url")
     ? arg("widget-cdn-url", "")
     : latestWidgetCdnUrl(env) ?? deployedEnv?.WIDGET_CDN_URL ?? "";
@@ -1447,6 +1479,9 @@ async function main() {
         `SkipEmailVerification=${skipEmailVerification}`,
         `MetaTokenRefreshCronSecret=${metaTokenRefreshCronSecret}`,
         `BillingLifecycleCronSecret=${billingLifecycleCronSecret}`,
+        `ShopifyApiKey=${shopifyApiKey}`,
+        `ShopifyApiSecret=${shopifyApiSecret}`,
+        `ShopifyAppUrl=${shopifyAppUrl}`,
         "--tags",
         "Project=CommerceChat",
         "Application=commercechat",

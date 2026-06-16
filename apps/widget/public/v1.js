@@ -13,6 +13,13 @@
   }
 
   var apiKey = script.getAttribute("data-api-key");
+  if (!apiKey) {
+    try {
+      apiKey = new URL(script.src).searchParams.get("api_key");
+    } catch (e) {
+      apiKey = null;
+    }
+  }
   if (!apiKey || (!apiKey.startsWith("pk_live_") && !apiKey.startsWith("cc_wp_"))) {
     console.warn("[CommerceChat] Missing or invalid data-api-key");
     return;
