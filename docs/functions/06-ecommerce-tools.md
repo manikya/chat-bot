@@ -218,7 +218,7 @@ interface CommerceConnector {
 |------|-------|-------|
 | CSV / manual | `ManualConnector` | MVP |
 | Shopify | `ShopifyConnector` | **Shipped** (OAuth app + manual token) |
-| WooCommerce | `WooCommerceConnector` | **Shipped** (WordPress plugin) |
+| WooCommerce | `WooCommerceConnector` | **Shipped** (WordPress plugin + product webhooks) |
 
 Connector selected from `tenant.commerceConnector.type`.
 
@@ -227,12 +227,20 @@ Connector selected from `tenant.commerceConnector.type`.
 | Piece | Location |
 |-------|----------|
 | Core sync + credentials | `packages/core/src/commerce/shopify/` |
+| ScriptTag install/remove | `packages/core/src/commerce/shopify/widget-script.ts` |
+| Catalog webhook debounce | `packages/core/src/commerce/catalog-sync-trigger.ts` |
 | Commerce APIs | `apps/api/src/handlers/commerce-shopify.ts` |
 | Partner OAuth app | `apps/api/src/shopify-app/` → Lambda `shopify-app` |
-| Admin UI | `ShopifyConnectCard` on Knowledge + onboarding; widget API key panel |
+| Admin UI | `ShopifyConnectCard` — widget toggle, API key panel, sync/disconnect |
 | Self-hosted fallback | `plugins/shopify-app/` zip in `apps/admin/public/` |
 
-Merchant flow: copy `pk_live_…` in admin → install `{API}/shopify-app/auth?shop=…` → paste key in app → sync in Knowledge.
+Merchant flow: copy `pk_live_…` in admin → install `{API}/shopify-app/auth?shop=…` → paste key in app → widget ScriptTag installed automatically.
+
+**Widget on/off:** same as WordPress — `widgetConfig.widgetEnabled` toggles Shopify ScriptTags. Control in **Knowledge → Shopify** (admin) or **CommerceChat app** (`/shopify-app/app`).
+
+**Catalog sync:** Shopify `products/create|update|delete` webhooks → `/shopify-app/webhooks` queue debounced ingest. Manual **Sync products** still available.
+
+**Reinstall:** if connect fails with Shopify 401 after reinstalling the app, use **Re-authorize** (`/shopify-app/auth?shop=…&force=1`).
 
 ---
 
@@ -307,7 +315,7 @@ LLM must explain errors politely to customer.
 |----------|------------|----------------|
 | `tool-executor` | Orchestrator (in-process lib) | Route tool name → handler |
 | `checkout-page` | API Gateway | Render/host checkout redirect |
-| `commerce-sync` | EventBridge (Phase 3) | Sync catalog from Shopify/Woo |
+| `commerce-sync` | Webhooks + manual sync | Debounced catalog ingest from Shopify/Woo product change events |
 
 ---
 

@@ -9,6 +9,21 @@ Install this plugin on the merchant's WooCommerce site. CommerceChat pulls produ
 3. In CommerceChat Admin → **Knowledge** → enter store URL + API key → **Connect WooCommerce**.
 4. Products sync on connect and **automatically** when you add, edit, or delete products in WooCommerce (plugin v0.2.1+). Use **Sync products** in admin for a full manual refresh.
 
+## Widget on storefront
+
+**Settings → CommerceChat → Show CommerceChat widget on storefront** — same idea as Shopify. One API key powers sync and the chat bubble. Toggle off to hide the widget without disconnecting WooCommerce.
+
+## Webhooks (catalog auto-sync)
+
+Plugin v0.2.1+ sends product change events to CommerceChat:
+
+```
+POST {API}/webhooks/commerce/woocommerce
+Authorization: Bearer <cc_wp_...>
+```
+
+CommerceChat debounces and queues a catalog ingest job (30s). Manual sync is still available in admin.
+
 ## API
 
 All routes require `Authorization: Bearer <api_key>`.

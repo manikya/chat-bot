@@ -3,7 +3,7 @@
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
 **Related:** [08-admin-dashboard.md](../functions/08-admin-dashboard.md) · [04-onboarding-and-registration.md](04-onboarding-and-registration.md) · [07-web-chat-widget.md](../functions/07-web-chat-widget.md) · [06-api-implementation-status.md](06-api-implementation-status.md)  
 **Reference UI:** [Jetwing component mapping](../../reference%20UI/README.md)  
-**Implementation status (2026-06-07):** Auth, tenant, onboarding, knowledge ingest, chat orchestrator, usage, conversations, dashboard stats, and widget embed (`/widget/v1.js`) use **real Lambdas + DynamoDB**. **Mock fallback:** channels, team. Widget bot replies render `**bold**`, numbered list breaks, and `\n` line breaks; product `suggestedActions` show as tappable chips under replies. Timezone fields use a native `<select>` (`TimezoneSelect`, ~32 curated IANA zones).
+**Implementation status (2026-06-16):** Auth, tenant, onboarding, knowledge ingest, chat orchestrator, usage, conversations, dashboard stats, analytics, and widget embed use **real Lambdas + DynamoDB**. Shopify/WooCommerce connectors include **widget on/off** and **automatic catalog sync** on product webhooks.
 
 ---
 
@@ -232,7 +232,7 @@ Shared chrome across all steps:
 | Website URL input | Prefilled from profile `websiteUrl` |
 | Platform detection | WooCommerce / Shopify / generic storefront |
 | WooCommerce connect card | Connect store + sync products/FAQs |
-| Shopify connect card | Copy widget API key → **Install in Shopify** → paste key in app → **Refresh status** |
+| Shopify connect card | Copy widget API key → **Install in Shopify** → paste key in app → widget toggle + auto sync |
 | **Crawl my site** button | `POST /knowledge/sources` + `POST /sync` |
 | Progress bar | Poll `GET /knowledge/jobs/{jobId}` until complete |
 | Error panel | View crawl errors; **Retry** |
@@ -248,7 +248,7 @@ Shared chrome across all steps:
 |------------|--------------|
 | WooCommerce / Shopify hint | When connected, skip CSV and continue |
 | WooCommerce connect card | Sync catalog from WordPress store |
-| Shopify connect card | OAuth app install + widget API key; **Advanced** manual `shpat_` token |
+| Shopify connect card | OAuth app install + widget API key + **Chat widget on storefront** switch; **Advanced** manual `shpat_` token |
 | CSV dropzone | Upload `products.csv` → catalog source + sync |
 | Template download link | `/sample-products.csv` |
 | Upload progress | View ingest job status |
@@ -368,7 +368,7 @@ Shared chrome across all steps:
 | **View job details** | Open job detail drawer |
 | Empty state | Click **Add your website** CTA |
 | **WooCommerce store** card | Plugin download, connect, sync, disconnect |
-| **Shopify store** card | Widget API key panel, install link, refresh status, sync/disconnect; advanced manual token |
+| **Shopify store** card | Widget API key panel, install link, **widget on/off** switch, sync/disconnect; advanced manual token |
 
 **APIs:** `GET /knowledge/sources`, `POST /knowledge/sources/{id}/sync`, `DELETE /knowledge/sources/{id}`, `GET/POST/DELETE /api/v1/commerce/{wordpress|shopify}/*`
 
@@ -656,7 +656,8 @@ Shared chrome across all steps:
 | Shop domain | Enter `store.myshopify.com` |
 | **Install in Shopify** | Open `{API}/shopify-app/auth?shop=…` |
 | **Refresh status** | Poll connection after OAuth + key paste in Shopify |
-| **Sync products** | `POST /api/v1/commerce/shopify/sync` (when connected) |
+| **Sync products** | `POST /api/v1/commerce/shopify/sync` (when connected; also repairs webhooks) |
+| **Chat widget on storefront** | `PATCH /api/v1/commerce/shopify/widget` — installs/removes ScriptTag |
 | **Disconnect** | Revoke integration |
 | Advanced (collapsed) | Manual connect with Admin API token (`shpat_…`) |
 

@@ -48,8 +48,11 @@
 | 2026-06-15 | **Website crawl S3:** `website/{tenantId}/{sourceId}/crawl.json` in data bucket |
 | 2026-06-15 | **WordPress CDN:** `widgetScriptUrl` on register-cloud + bootstrap fallback in plugin |
 | 2026-06-16 | **Shopify connector:** OAuth app on Lambda (`/shopify-app/*`), product sync, widget ScriptTag, admin Knowledge + onboarding UI with widget API key |
+| 2026-06-16 | **Shopify widget on/off:** `GET/PATCH /api/v1/commerce/shopify/widget`, ScriptTag install/remove, admin + Shopify app toggles (matches WordPress) |
+| 2026-06-16 | **Catalog auto-sync:** Shopify product webhooks (`PRODUCTS_*` → `/shopify-app/webhooks`); WooCommerce `POST /webhooks/commerce/woocommerce` + plugin hooks |
+| 2026-06-16 | **Widget Dawn fix:** `commercechat-root` custom element host + `api_url` query param; Shopify ScriptTag cache bust `&v=4` |
 
-**Git (local `main`):** Shopify serverless app, commerce APIs, admin connect cards.
+**Git (local `main`):** `4b98a64` — Shopify widget toggle, catalog webhooks, Dawn bubble fix.
 
 ---
 
@@ -145,7 +148,11 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `POST` | `/api/v1/commerce/shopify/sync` | `commerce-shopify` | Yes |
 | `DELETE` | `/api/v1/commerce/shopify` | `commerce-shopify` | Yes |
 | `GET` | `/api/v1/commerce/shopify/widget-bootstrap` | `commerce-shopify` | Yes (widget) |
+| `GET` | `/api/v1/commerce/shopify/widget` | `commerce-shopify` | Yes |
+| `PATCH` | `/api/v1/commerce/shopify/widget` | `commerce-shopify` | Yes |
 | `GET/POST` | `/shopify-app/*` | `shopify-app` | Yes (OAuth + connect UI) |
+| `POST` | `/shopify-app/app/widget` | `shopify-app` | Yes (widget toggle in app) |
+| `POST` | `/webhooks/commerce/woocommerce` | `webhook-commerce` | — (WooCommerce plugin) |
 | `GET` | `/api/v1/team` | `team` | Yes |
 | `PATCH` | `/api/v1/team/{userId}` | `team-member` | Yes |
 | `DELETE` | `/api/v1/team/{userId}` | `team-member` | Yes |
@@ -192,12 +199,13 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 - **80% message quota email** — `packages/core/src/billing/quota-email.ts` (once per `USAGE#{period}`)
 - **Conversation analytics** — `packages/core/src/analytics/service.ts` (DynamoDB aggregates)
 - **Website crawl persistence** — `packages/core/src/ingest/storage/website-crawl-file.ts`
-- Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM, SSE stream, product carousel, plan rate limits)
-- Embed snippet — `buildWidgetEmbedCode()` uses `API_PUBLIC_URL` (Settings → API keys)
+- Widget embed — `apps/widget/public/v1.js` at `/widget/v1.js` (shadow DOM on `<commercechat-root>`, SSE stream, product carousel, plan rate limits; `data-api-url` / `api_url` for API base; Dawn `div:empty` safe)
+- Embed snippet — `buildWidgetEmbedCode()` uses `WIDGET_CDN_URL` or `API_PUBLIC_URL` (Settings → API keys)
 - 24h messaging window — enforced on WhatsApp/Messenger/Instagram outbound sends
 - Logo storage — S3 presigned upload (`POST .../logo/presign` + `complete`) via LocalStack; local filesystem fallback when `S3_BUCKET` unset
 - Ingest pipeline (AWS) — SQS + Step Functions `commercechat-{env}-ingest` when deployed with `--with-ingest-step-functions`
-- **Shopify app** — `apps/api/src/shopify-app/` (cookieless OAuth, DynamoDB sessions); Partner credentials `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`
+- **Shopify app** — `apps/api/src/shopify-app/` (cookieless OAuth, DynamoDB sessions, stale-token re-auth); ScriptTag via `packages/core/src/commerce/shopify/widget-script.ts`
+- **Catalog debounce** — `packages/core/src/commerce/catalog-sync-trigger.ts` queues ingest when Shopify/Woo product webhooks fire
 
 **Code locations:**
 - Handlers: `apps/api/src/handlers/`
@@ -258,6 +266,7 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 - **80% quota warning emails** — SMTP/Resend via `sendRawEmail`
 - **Website crawl on AWS** — `crawl.json` in data S3 bucket
 - **WordPress plugin CDN** — `widgetScriptUrl` from register-cloud / widget-bootstrap
+- **Shopify widget toggle** — `widgetConfig.widgetEnabled` + ScriptTag sync; admin Knowledge card + Shopify app `/app`
 
 ---
 

@@ -360,13 +360,14 @@ POST /api/v1/knowledge/sources/{sourceId}/sync
 
 ```html
 <script
-  src="http://localhost:3001/widget/v1.js"
+  src="https://dtm79sin0m5bg.cloudfront.net/widget/v1.js"
   data-api-key="pk_live_abc..."
+  data-api-url="https://YOUR-API.execute-api.us-east-1.amazonaws.com"
   async
 ></script>
 ```
 
-Production uses `API_PUBLIC_URL` (e.g. `https://api.commercechat.com/widget/v1.js`). Local demo: `http://localhost:3001/widget/demo.html?key=pk_live_...`.
+Production uses `WIDGET_CDN_URL` for `src` and `API_PUBLIC_URL` for `data-api-url`. Shopify installs the ScriptTag via the CommerceChat app. Local demo: `http://localhost:3001/widget/demo.html?key=pk_live_...`.
 
 **API:** `GET /api/v1/widget/config` (validates key works).
 
@@ -467,5 +468,5 @@ From [03-task-plan.md](03-task-plan.md):
 |---------|--------|
 | Stripe checkout in onboarding | Optional step 7: "Choose plan" before `complete` |
 | Marketing site self-serve | Same signup API; UTM params stored on PROFILE |
-| Shopify connect | Onboarding step 3/4 + Knowledge — OAuth app + widget API key; alternative to CSV |
+| Shopify connect | Onboarding step 3/4 + Knowledge — OAuth app + widget API key + on/off toggle; alternative to CSV |
 | MFA | Login step 2 only; no change to onboarding |

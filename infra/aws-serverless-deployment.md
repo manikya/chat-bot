@@ -268,12 +268,15 @@ Stack name: `commercechat-{env}-admin` · Cost group: `admin-web`
 The Shopify OAuth app runs on the **same API Gateway** as CommerceChat — no separate host.
 
 1. Set `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` in `apps/api/.env.aws` before deploy.
-2. Deploy API (`npm run deploy:aws`). `SHOPIFY_APP_URL` is set to `{API_PUBLIC_URL}/shopify-app`.
+2. Deploy widget CDN (`npm run deploy:widget`) then API (`npm run deploy:aws`). `SHOPIFY_APP_URL` = `{API_PUBLIC_URL}/shopify-app`.
 3. In Shopify Partner Dashboard:
    - **App URL:** `{ApiUrl}/shopify-app/app`
    - **Redirect:** `{ApiUrl}/shopify-app/auth/callback`
    - **Embed in admin:** Off
-4. Merchants install via admin **Knowledge → Shopify** (widget API key + install link).
+   - **Scopes:** `read_products`, `read_orders`, `write_script_tags`
+4. Merchants install via admin **Knowledge → Shopify** (widget API key + install link). Widget ScriptTag is installed on connect; toggle on/off in admin or Shopify app.
+
+**Routes:** `/shopify-app/*`, `GET/PATCH /api/v1/commerce/shopify/widget`, `POST /webhooks/commerce/woocommerce` (WooCommerce plugin).
 
 See [plugins/shopify-app/README.md](../plugins/shopify-app/README.md).
 

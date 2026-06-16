@@ -45,7 +45,7 @@ npm run build:lambdas
 # → apps/api/dist/handlers/*.cjs
 ```
 
-## Implemented (~75 routes)
+## Implemented (~85 routes)
 
 See [docs/implementation/06-api-implementation-status.md](../../docs/implementation/06-api-implementation-status.md) for the full table and **recommended next steps**.
 
@@ -54,13 +54,14 @@ See [docs/implementation/06-api-implementation-status.md](../../docs/implementat
 - Knowledge ingest (website, catalog, FAQ, page-voice/conversation export)
 - Chat orchestrator (`POST /api/v1/chat`)
 - Usage, conversations, dashboard stats, billing (trial lifecycle, cancel/reactivate)
-- Widget config/chat + SSE stream + API key auth + plan rate limits
+- Widget config/chat + SSE stream + API key auth + plan rate limits; CDN embed with `api_url`
 - WhatsApp + Messenger + Instagram connect/disconnect/health
 - Meta webhooks (`GET`/`POST /webhooks/meta`)
 - Billing crons via EventBridge (`cron-billing-lifecycle`, `cron-meta-token-refresh`)
-- Commerce: WooCommerce (`/api/v1/commerce/wordpress/*`) and Shopify (`/api/v1/commerce/shopify/*`)
+- Commerce: WooCommerce (`/api/v1/commerce/wordpress/*` + `POST /webhooks/commerce/woocommerce`)
+- Shopify (`/api/v1/commerce/shopify/*`, widget toggle, catalog webhooks)
 - Shopify Partner app (serverless Express on Lambda): `GET/POST /shopify-app/*` (`shopify-app` handler)
-- Static widget bundle at `GET /widget/v1.js`
+- Static widget bundle at `GET /widget/v1.js` (CDN) or API origin when no CDN
 
 ## AWS deploy
 

@@ -12,11 +12,13 @@ AI-powered e-commerce chatbot SaaS for **WhatsApp**, **Facebook Messenger**, **I
 
 🖥️ **[Admin UI](../apps/admin/README.md)** — Next.js dashboard; **~75 real API routes** (auth, tenant, knowledge, chat, channels, billing, widget).
 
-📡 **[API implementation status](implementation/06-api-implementation-status.md)** — built vs remaining + **what to build next** (last updated 2026-06-15).
+📡 **[API implementation status](implementation/06-api-implementation-status.md)** — built vs remaining + **what to build next** (last updated 2026-06-16).
 
 🚀 **[AWS deploy guide](../infra/aws-serverless-deployment.md)** — `npm run deploy:aws:full` (IAM + ingest + widget CDN + crons).
 
-🧩 **Widget (dev):** CDN `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js` · local demo `http://localhost:3001/widget/demo.html?key=pk_live_...`
+🧩 **Widget (dev):** CDN `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js` · use `data-api-url` when embedding from CDN · local demo `http://localhost:3001/widget/demo.html?key=pk_live_...`
+
+🛒 **Commerce:** Shopify OAuth app + widget toggle · WooCommerce plugin with catalog webhooks · auto product sync on catalog changes
 
 ---
 
