@@ -43,7 +43,7 @@ export class DynamoSessionStorage {
       isOnline: Boolean(data.isOnline),
       accessToken: data.accessToken ? String(data.accessToken) : undefined,
       scope: data.scope ? String(data.scope) : undefined,
-      expires: data.expires ? Number(data.expires) : undefined,
+      expires: data.expires ? new Date(Number(data.expires)) : undefined,
     });
   }
 
@@ -85,7 +85,7 @@ export class DynamoSessionStorage {
           isOnline: Boolean(data.isOnline),
           accessToken: data.accessToken ? String(data.accessToken) : undefined,
           scope: data.scope ? String(data.scope) : undefined,
-          expires: data.expires ? Number(data.expires) : undefined,
+          expires: data.expires ? new Date(Number(data.expires)) : undefined,
         })
       );
     }

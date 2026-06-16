@@ -14,13 +14,15 @@ import {
   persistMessage,
   resolveConversation,
 } from "./conversation";
-import { detectIntent, ragSourceTypesForIntent } from "./intent";
+import { detectIntent, messageMentionsProducts, ragSourceTypesForIntent } from "./intent";
 import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
+import { enrichReplyWithProductSearch, formatProductListForReply } from "./product-reply";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 import { assertTenantOperational } from "../tenant/status";
 import { notifyAgentInboundMessage, getHandlingMode } from "./agent-notify";
+import { marketFromTimezone } from "./locale";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -28,6 +30,7 @@ export interface OrchestratorInput {
   channel: string;
   externalUserId: string;
   message: string;
+  metadata?: { pageUrl?: string; [key: string]: unknown };
 }
 
 async function loadTenantContext(auth: AuthContext, config: CoreConfig) {
@@ -61,9 +64,10 @@ async function retrieveForIntent(
   auth: AuthContext,
   query: string,
   intent: ChatIntent,
-  config: CoreConfig
+  config: CoreConfig,
+  message?: string
 ): Promise<ScoredChunk[]> {
-  let sourceTypes = ragSourceTypesForIntent(intent);
+  let sourceTypes = ragSourceTypesForIntent(intent, message);
   const conversationEnabled = await tenantHasPageVoiceVectors(auth.tenantId, config);
   if (!conversationEnabled) {
     sourceTypes = sourceTypes.filter((t) => t !== "conversation");
@@ -88,30 +92,35 @@ function generateFallbackReply(
   greeting: string,
   userMessage: string,
   ragChunks: ScoredChunk[],
-  toolResults: Array<{ tool: string; success: boolean; result: unknown }>
+  toolResults: Array<{ tool: string; success: boolean; result: unknown }>,
+  currency: string,
+  channel?: string
 ): string {
   if (intent === "greeting") return greeting;
 
   const searchResult = toolResults.find((t) => t.tool === "search_products" && t.success);
   if (searchResult) {
-    const data = searchResult.result as { products?: Array<{ name: string; price: number; sku: string }> };
+    const data = searchResult.result as {
+      products?: Array<{ name: string; price: number; sku: string; currency?: string; inStock?: boolean }>;
+    };
     if (data.products?.length) {
-      const list = data.products
-        .map((p) => `• ${p.name} — $${p.price} (SKU: ${p.sku})`)
-        .join("\n");
-      return `Here's what I found:\n\n${list}`;
+      return formatProductListForReply(data.products, currency, { channel });
     }
   }
 
   if (ragChunks.length > 0 && ragChunks[0]!.score > 0.1) {
     const snippet = ragChunks
       .slice(0, 2)
-      .map((h) => h.chunk.text.slice(0, 400))
+      .map((h) => h.chunk.text.slice(0, 600))
       .join("\n\n");
     return `Based on our knowledge base:\n\n${snippet}`;
   }
 
   return `Thanks for your message. I'm still learning about this store — could you tell me more about what you're looking for? You asked: "${userMessage.slice(0, 120)}"`;
+}
+
+function shouldRunProductSearch(intent: ChatIntent, message: string): boolean {
+  return intent === "product" || intent === "checkout" || messageMentionsProducts(message);
 }
 
 export async function runChatOrchestrator(
@@ -162,15 +171,20 @@ export async function runChatOrchestrator(
 
   await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, { intent });
 
-  const ragChunks = await retrieveForIntent(auth, text, intent, config);
+  const ragChunks = await retrieveForIntent(auth, text, intent, config, text);
   const cart = await loadCart(auth.tenantId, conversation.conversationId, config);
+  const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
+  const market = marketFromTimezone(timezone);
+  const currency = tenantConfig.commerceConnector?.currency ?? (market === "lk" ? "LKR" : "USD");
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,
     timezone,
+    intent,
+    pageUrl,
   });
 
   const llm = createLLMProvider(config);
-  const tools = toolsForIntent(intent);
+  const tools = toolsForIntent(intent, text);
   const toolCtx = {
     auth,
     config,
@@ -195,14 +209,16 @@ export async function runChatOrchestrator(
     const model =
       tenantConfig.llmConfig.models[intent === "faq" ? "faq" : intent === "checkout" ? "checkout" : "product"] ??
       config.llmModel;
+    const temperature = tenantConfig.llmConfig.temperature ?? 0.4;
+    const maxOutputTokens = tenantConfig.llmConfig.maxOutputTokens ?? 800;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await llm.chat({
         model,
         messages,
         tools: tools.length ? tools : undefined,
-        temperature: 0.4,
-        maxOutputTokens: 800,
+        temperature,
+        maxOutputTokens,
       });
       totalInputTokens += response.usage.inputTokens;
       totalOutputTokens += response.usage.outputTokens;
@@ -237,7 +253,7 @@ export async function runChatOrchestrator(
   }
 
   if (!replyContent) {
-    if (intent === "product" || intent === "checkout") {
+    if (shouldRunProductSearch(intent, text)) {
       const { result, success } = await executeTool(
         "search_products",
         JSON.stringify({ query: text, limit: 5 }),
@@ -250,12 +266,14 @@ export async function runChatOrchestrator(
       tenantConfig.prompts.greeting,
       text,
       ragChunks,
-      toolResults
+      toolResults,
+      currency,
+      input.channel
     );
   }
 
   if (
-    (intent === "product" || intent === "checkout") &&
+    shouldRunProductSearch(intent, text) &&
     !toolResults.some((t) => t.tool === "search_products" && t.success)
   ) {
     const { result, success } = await executeTool(
@@ -265,6 +283,10 @@ export async function runChatOrchestrator(
     );
     toolResults.push({ tool: "search_products", success, result });
   }
+
+  replyContent = enrichReplyWithProductSearch(replyContent, toolResults, currency, {
+    channel: input.channel,
+  });
 
   await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
     intent,

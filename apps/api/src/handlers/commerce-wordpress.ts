@@ -3,7 +3,9 @@ import {
   disconnectWordPressStore,
   getWordPressConnectorStatus,
   getWordPressWidgetBootstrap,
+  getWordPressWidgetSettings,
   loadConfig,
+  setWordPressWidgetEnabled,
   syncKnowledgeSource,
   type ConnectWordPressBody,
 } from "@commercechat/core";
@@ -39,6 +41,22 @@ export const syncHandler = createHandler(
     return syncKnowledgeSource(auth!, sourceId, loadConfig());
   },
   { requireAuth: true, successStatus: 202 }
+);
+
+export const widgetSettingsHandler = createHandler(
+  async (_event, auth) => getWordPressWidgetSettings(auth!, loadConfig()),
+  { requireAuth: true }
+);
+
+export const widgetPatchHandler = createHandler(
+  async (event, auth) => {
+    const body = parseBody<{ widgetEnabled?: boolean }>(event);
+    if (typeof body.widgetEnabled !== "boolean") {
+      throw new ApiError(ErrorCodes.VALIDATION_ERROR, "widgetEnabled must be a boolean", 400);
+    }
+    return setWordPressWidgetEnabled(auth!, body.widgetEnabled, loadConfig());
+  },
+  { requireAuth: true }
 );
 
 /** Public (store API key) — WordPress plugin fetches widget config with the same cc_wp_ key. */

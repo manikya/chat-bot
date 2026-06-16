@@ -1,11 +1,13 @@
 import type { AuthContext, ChatIntent } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
-import { getProductBySku, getStoreCurrency, searchProductCache } from "../catalog/products";
+import { getProductBySku, getStoreCurrency, searchProductCache, type ProductRecord } from "../catalog/products";
 import { lookupWordPressOrder } from "../commerce/wordpress/service";
 import { getTenantConfig } from "../tenant/service";
 import { retrieveKnowledge } from "../ingest/retrieve";
+import type { ScoredChunk } from "../ingest/types";
 import type { ToolDefinition } from "../llm/types";
 import { addToCart, getOrCreateCart, loadCart } from "./cart";
+import { messageMentionsProducts } from "./intent";
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   search_products: {
@@ -73,8 +75,9 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   },
 };
 
-export function toolsForIntent(intent: ChatIntent): ToolDefinition[] {
+export function toolsForIntent(intent: ChatIntent, message?: string): ToolDefinition[] {
   const names: string[] = [];
+  const wantsProducts = messageMentionsProducts(message ?? "");
   if (intent === "product" || intent === "checkout") {
     names.push("search_products", "get_product_details", "add_to_cart");
   }
@@ -83,8 +86,63 @@ export function toolsForIntent(intent: ChatIntent): ToolDefinition[] {
   }
   if (intent === "faq") {
     names.push("get_order_status");
+    if (wantsProducts) {
+      names.push("search_products", "get_product_details");
+    }
+  }
+  if ((intent === "greeting" || intent === "unknown") && wantsProducts) {
+    names.push("search_products", "get_product_details");
   }
   return names.map((n) => TOOL_DEFINITIONS[n]!);
+}
+
+async function mergeProductSearchResults(
+  tenantId: string,
+  vectorHits: ScoredChunk[],
+  cacheHits: ProductRecord[],
+  config: CoreConfig,
+  storeCurrency: string,
+  limit: number
+): Promise<ProductRecord[]> {
+  const bySku = new Map<string, ProductRecord>();
+  for (const p of cacheHits) {
+    bySku.set(p.sku, p);
+  }
+  for (const h of vectorHits) {
+    const sku = String(h.chunk.metadata.sku ?? h.chunk.id);
+    if (bySku.has(sku)) continue;
+    const cached = await getProductBySku(tenantId, sku, config);
+    bySku.set(
+      sku,
+      cached ?? {
+        sku,
+        name: h.chunk.metadata.title ?? "Product",
+        description: h.chunk.text.slice(0, 200),
+        price: 0,
+        currency: storeCurrency,
+        inStock: true,
+        productUrl: h.chunk.metadata.url,
+      }
+    );
+  }
+
+  const ordered: ProductRecord[] = [];
+  const seen = new Set<string>();
+  for (const p of cacheHits) {
+    if (seen.has(p.sku)) continue;
+    seen.add(p.sku);
+    ordered.push(p);
+  }
+  for (const h of vectorHits) {
+    const sku = String(h.chunk.metadata.sku ?? h.chunk.id);
+    if (seen.has(sku)) continue;
+    const item = bySku.get(sku);
+    if (item) {
+      seen.add(sku);
+      ordered.push(item);
+    }
+  }
+  return ordered.slice(0, limit);
 }
 
 export interface ToolExecutionContext {
@@ -122,32 +180,29 @@ export async function executeTool(
           limit,
         }),
       ]);
-      const fromVectors = cacheHits.length
-        ? cacheHits
-        : vectorHits.map((h) => ({
-            sku: h.chunk.metadata.sku ?? h.chunk.id,
-            name: h.chunk.metadata.title ?? "Product",
-            description: h.chunk.text.slice(0, 200),
-            price: 0,
-            currency: storeCurrency,
-            inStock: true,
-            productUrl: h.chunk.metadata.url,
-          }));
+      const merged = await mergeProductSearchResults(
+        ctx.auth.tenantId,
+        vectorHits,
+        cacheHits,
+        ctx.config,
+        storeCurrency,
+        limit
+      );
       return {
         success: true,
         result: {
-          products: fromVectors.map((p) => ({
+          products: merged.map((p) => ({
             sku: p.sku,
             name: p.name,
             description: p.description,
             price: p.price,
             currency: p.currency,
             inStock: p.inStock,
-            imageUrl: "imageUrl" in p ? p.imageUrl : undefined,
-            imageUrls: "imageUrls" in p ? p.imageUrls : undefined,
+            imageUrl: p.imageUrl,
+            imageUrls: p.imageUrls,
             url: p.productUrl,
           })),
-          totalFound: fromVectors.length,
+          totalFound: merged.length,
         },
       };
     }

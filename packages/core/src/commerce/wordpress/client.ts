@@ -1,5 +1,6 @@
 import { ApiError, ErrorCodes } from "@commercechat/shared";
 import type { CoreConfig } from "../../config";
+import { buildWordPressWidgetScriptBase } from "./widget-script";
 import type {
   WordPressCredentials,
   WordPressOrder,
@@ -79,15 +80,21 @@ async function wpFetch<T>(
 
 export async function pushWordPressCloudConfig(
   creds: WordPressCredentials,
-  apiPublicUrl: string,
-  widgetScriptUrl: string | undefined,
-  config: CoreConfig
+  config: CoreConfig,
+  options?: { widgetEnabled?: boolean }
 ): Promise<void> {
-  const body: { apiPublicUrl: string; widgetScriptUrl?: string } = {
-    apiPublicUrl: apiPublicUrl.replace(/\/$/, ""),
+  const body: {
+    apiPublicUrl: string;
+    widgetScriptUrl: string;
+    widgetEnabled?: boolean;
+    adminUrl?: string;
+  } = {
+    apiPublicUrl: config.apiPublicUrl.replace(/\/$/, ""),
+    widgetScriptUrl: buildWordPressWidgetScriptBase(config),
+    adminUrl: config.appUrl.replace(/\/$/, ""),
   };
-  if (widgetScriptUrl) {
-    body.widgetScriptUrl = widgetScriptUrl.replace(/\/$/, "");
+  if (typeof options?.widgetEnabled === "boolean") {
+    body.widgetEnabled = options.widgetEnabled;
   }
   await wpRequest<{ ok: boolean }>(creds, "/register-cloud", config, {
     method: "POST",

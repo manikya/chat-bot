@@ -148,6 +148,7 @@ export async function widgetChat(tenantId: string, body: WidgetChatBody, config:
       channel: "web",
       externalUserId: body.sessionId.trim(),
       message: body.message.trim(),
+      metadata: body.metadata,
     },
     config
   );

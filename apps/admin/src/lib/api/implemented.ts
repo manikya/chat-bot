@@ -43,6 +43,8 @@ export const IMPLEMENTED_ROUTES = [
   "POST /api/v1/commerce/wordpress/connect",
   "POST /api/v1/commerce/wordpress/sync",
   "DELETE /api/v1/commerce/wordpress",
+  "GET /api/v1/commerce/wordpress/widget",
+  "PATCH /api/v1/commerce/wordpress/widget",
   "GET /api/v1/commerce/wordpress/widget-bootstrap",
   "GET /api/v1/commerce/shopify/status",
   "POST /api/v1/commerce/shopify/connect",

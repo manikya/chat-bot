@@ -28,6 +28,10 @@ import {
 } from "./client";
 import type { ConnectWordPressBody, WordPressOrder, WordPressProduct } from "./types";
 import { queueCommerceCatalogSync } from "../catalog-sync-trigger";
+import { buildWordPressWidgetScriptBase } from "./widget-script";
+
+/** Keep in sync with plugins/commercechat-connector/commercechat-connector.php */
+export const WOOCOMMERCE_PLUGIN_VERSION = "0.2.2";
 
 const WOOCOMMERCE_SOURCE_NAME = "WooCommerce store";
 
@@ -139,7 +143,61 @@ export async function getWordPressConnectorStatus(auth: AuthContext, config: Cor
     siteUrl: creds?.siteUrl ?? (connector as { siteUrl?: string }).siteUrl,
     lastSyncAt: (connector as { lastSyncAt?: string }).lastSyncAt,
     sourceId,
+    widgetEnabled: tenantConfig.data!.widgetConfig?.widgetEnabled !== false,
   });
+}
+
+function readWidgetEnabled(tenantConfig: { widgetConfig?: { widgetEnabled?: boolean } }): boolean {
+  return tenantConfig.widgetConfig?.widgetEnabled !== false;
+}
+
+export async function getWordPressWidgetSettings(auth: AuthContext, config: CoreConfig) {
+  const tenantConfig = await getTenantConfig(auth, config);
+  const creds = await loadWordPressCredentials(auth.tenantId, config);
+  if (!creds) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "WooCommerce is not connected", 400);
+  }
+  return ok({
+    widgetEnabled: readWidgetEnabled(tenantConfig.data!),
+  });
+}
+
+export async function setWordPressWidgetEnabled(
+  auth: AuthContext,
+  enabled: boolean,
+  config: CoreConfig
+) {
+  const tenantConfig = await getTenantConfig(auth, config);
+  const creds = await loadWordPressCredentials(auth.tenantId, config);
+  if (!creds) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "WooCommerce is not connected", 400);
+  }
+
+  await updateTenantConfig(
+    auth,
+    {
+      widgetConfig: {
+        ...tenantConfig.data!.widgetConfig,
+        widgetEnabled: enabled,
+      },
+    },
+    config
+  );
+
+  try {
+    await pushWordPressCloudConfig(creds, config, {
+      widgetEnabled: enabled,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new ApiError(
+      ErrorCodes.VALIDATION_ERROR,
+      `Could not update the WordPress store: ${message}`,
+      400
+    );
+  }
+
+  return ok({ widgetEnabled: enabled });
 }
 
 export async function connectWordPressStore(
@@ -159,12 +217,9 @@ export async function connectWordPressStore(
   await registerStoreApiKey(auth.tenantId, creds.apiKey, config);
 
   try {
-    const widgetScriptUrl = config.widgetCdnUrl
-      ? `${config.widgetCdnUrl.replace(/\/$/, "")}/widget/v1.js`
-      : undefined;
-    await pushWordPressCloudConfig(creds, config.apiPublicUrl, widgetScriptUrl, config);
+    await pushWordPressCloudConfig(creds, config, { widgetEnabled: true });
   } catch {
-    /* Store may block outbound from CommerceChat; widget URL can be set in WP admin */
+    /* Store may block outbound from CommerceChat; widget URL can be set on re-connect */
   }
 
   const sourceId = await ensureWooCommerceSource(auth, creds.siteUrl, config);
@@ -188,6 +243,9 @@ export async function connectWordPressStore(
         storeName: status.site_name,
         currency: status.currency ?? undefined,
         lastSyncAt: undefined,
+      },
+      widgetConfig: {
+        widgetEnabled: true,
       },
     },
     config
@@ -246,16 +304,19 @@ export async function getWordPressWidgetBootstrap(tenantId: string, config: Core
   }
 
   const widget = await getWidgetConfig(tenantId, config);
-  const scriptBase = (config.widgetCdnUrl ?? config.apiPublicUrl).replace(/\/$/, "");
+  const scriptBase = buildWordPressWidgetScriptBase(config);
+  const pluginDownloadUrl = `${config.appUrl.replace(/\/$/, "")}/commercechat-connector.zip`;
   return ok({
     apiPublicUrl: config.apiPublicUrl.replace(/\/$/, ""),
-    widgetScriptUrl: `${scriptBase}/widget/v1.js`,
+    widgetScriptUrl: scriptBase,
     storeName: widget.data?.storeName,
     greeting: widget.data?.greeting,
     primaryColor: widget.data?.primaryColor,
     position: widget.data?.position,
     suggestedQuestions: widget.data?.suggestedQuestions ?? [],
     enabled: widget.data?.enabled ?? true,
+    pluginVersion: WOOCOMMERCE_PLUGIN_VERSION,
+    pluginDownloadUrl,
   });
 }
 

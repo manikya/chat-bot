@@ -25,7 +25,8 @@
     "ensure:deploy-iam": "node scripts/ensure-deploy-iam.mjs",
     "deploy:widget": "node scripts/deploy-widget-static.mjs",
     "deploy:aws:full": "node scripts/deploy-aws-serverless.mjs --env=dev --with-ingest-pipeline --with-ingest-step-functions --with-widget-cdn --ensure-iam",
-    "deploy:admin": "node scripts/deploy-admin-static.mjs"
+    "deploy:admin": "node scripts/deploy-admin-static.mjs",
+    "build:woocommerce-plugin": "node scripts/build-woocommerce-plugin.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

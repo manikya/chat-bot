@@ -3,11 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Download, MessageSquare, Pause, Play, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
-import {
-  WOOCOMMERCE_PLUGIN_DOWNLOAD_URL,
-  WOOCOMMERCE_PLUGIN_INSTALL_STEPS,
-} from "@/lib/commerce-plugin";
 import { ShopifyConnectCard } from "@/components/onboarding/shopify-connect-card";
+import { WooCommerceConnectCard } from "@/components/onboarding/woocommerce-connect-card";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { pollIngestJob } from "@/lib/poll-job";
@@ -49,15 +46,6 @@ export default function KnowledgePage() {
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
   const [products, setProducts] = useState<Array<{ sku: string; name: string; price: number; currency?: string }>>([]);
-  const [wpSiteUrl, setWpSiteUrl] = useState("https://");
-  const [wpApiKey, setWpApiKey] = useState("");
-  const [wpStatus, setWpStatus] = useState<{
-    connected: boolean;
-    siteUrl?: string;
-    lastSyncAt?: string;
-  } | null>(null);
-  const [wpConnecting, setWpConnecting] = useState(false);
-  const [wpSyncing, setWpSyncing] = useState(false);
   const [pageVoice, setPageVoice] = useState<PageVoiceStatus | null>(null);
   const [pageVoiceSyncing, setPageVoiceSyncing] = useState(false);
   const [pageVoiceUploading, setPageVoiceUploading] = useState(false);
@@ -66,7 +54,6 @@ export default function KnowledgePage() {
   const load = () => {
     api.knowledge.listSources().then((r) => setSources(r.data.items));
     api.knowledge.listJobs().then((r) => setJobs(r.data.items));
-    api.commerce.wordpressStatus().then((r) => setWpStatus(r.data)).catch(() => setWpStatus(null));
     api.knowledge.getPageVoice().then((r) => setPageVoice(r.data)).catch(() => setPageVoice(null));
   };
 
@@ -75,35 +62,8 @@ export default function KnowledgePage() {
     api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
   }, []);
 
-  const connectWordPress = async () => {
-    setWpConnecting(true);
-    try {
-      await api.commerce.connectWordPress({ siteUrl: wpSiteUrl, apiKey: wpApiKey });
-      toast.success("WooCommerce connected");
-      setWpApiKey("");
-      load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Connect failed");
-    } finally {
-      setWpConnecting(false);
-    }
-  };
-
-  const syncWordPress = async () => {
-    setWpSyncing(true);
-    try {
-      const sync = await api.commerce.syncWordPress();
-      toast.success("Product sync started");
-      await pollIngestJob(sync.data.jobId, () => load());
-      toast.success("WooCommerce sync completed");
-      load();
-      api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sync failed");
-      load();
-    } finally {
-      setWpSyncing(false);
-    }
+  const refreshProducts = () => {
+    api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
   };
 
   const addWebsite = async () => {
@@ -139,71 +99,14 @@ export default function KnowledgePage() {
         <CardHeader>
           <CardTitle className="text-base">WooCommerce store</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Install the <strong>CommerceChat Connector</strong> plugin on WordPress, copy the API key from
-            Settings → CommerceChat, then connect below to sync products.
-          </p>
-          <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
-            {WOOCOMMERCE_PLUGIN_INSTALL_STEPS.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-          <Button type="button" variant="outline" size="sm" asChild>
-            <a href={WOOCOMMERCE_PLUGIN_DOWNLOAD_URL} download>
-              <Download className="h-4 w-4" />
-              Download plugin (.zip)
-            </a>
-          </Button>
-          {wpStatus?.connected ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="success">Connected</Badge>
-                <span className="text-sm">{wpStatus.siteUrl}</span>
-              </div>
-              {wpStatus.lastSyncAt && (
-                <p className="text-xs text-muted-foreground">
-                  Last sync {new Date(wpStatus.lastSyncAt).toLocaleString()}
-                </p>
-              )}
-              <div className="flex gap-2">
-                <Button size="sm" onClick={syncWordPress} disabled={wpSyncing}>
-                  {wpSyncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                  Sync products
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    await api.commerce.disconnectWordPress();
-                    toast.success("Disconnected");
-                    load();
-                  }}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label>Store URL</Label>
-                <Input value={wpSiteUrl} onChange={(e) => setWpSiteUrl(e.target.value)} placeholder="https://yourstore.com" />
-              </div>
-              <div className="space-y-2">
-                <Label>API key (from WordPress plugin)</Label>
-                <Input
-                  type="password"
-                  value={wpApiKey}
-                  onChange={(e) => setWpApiKey(e.target.value)}
-                  placeholder="cc_wp_..."
-                />
-              </div>
-              <Button onClick={connectWordPress} disabled={wpConnecting || !wpSiteUrl.trim() || !wpApiKey.trim()}>
-                {wpConnecting ? "Connecting…" : "Connect WooCommerce"}
-              </Button>
-            </div>
-          )}
+        <CardContent>
+          <WooCommerceConnectCard
+            manageActions
+            onStatusChange={() => {
+              load();
+              refreshProducts();
+            }}
+          />
         </CardContent>
       </Card>
 
@@ -216,7 +119,7 @@ export default function KnowledgePage() {
             manageActions
             onStatusChange={() => {
               load();
-              api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
+              refreshProducts();
             }}
           />
         </CardContent>

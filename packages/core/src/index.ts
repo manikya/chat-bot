@@ -109,7 +109,7 @@ export {
   registerStoreApiKey,
   revokeStoreApiKey,
 } from "./auth/api-key";
-export { getWordPressWidgetBootstrap } from "./commerce/wordpress/service";
+export { getWordPressWidgetBootstrap, getWordPressWidgetSettings, setWordPressWidgetEnabled, WOOCOMMERCE_PLUGIN_VERSION } from "./commerce/wordpress/service";
 export {
   registerPushDevice,
   unregisterPushDevice,

@@ -1,0 +1,10 @@
+{
+  "name": "CommerceChat Connector",
+  "version": "0.2.2",
+  "download_url": "https://d3g8dfkodwqrza.cloudfront.net/commercechat-connector.zip",
+  "homepage": "https://d3g8dfkodwqrza.cloudfront.net",
+  "description": "Connect WooCommerce to CommerceChat for product sync, order lookups, and the web chat widget.",
+  "changelog": "0.2.2: Widget toggle moved to CommerceChat Admin; fixed CDN widget script loading; automatic plugin updates from CommerceChat.",
+  "requires": "6.0",
+  "tested": "6.7"
+}

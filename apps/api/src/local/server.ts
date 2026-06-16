@@ -36,6 +36,8 @@ import {
   statusHandler as wordpressStatusHandler,
   syncHandler as wordpressSyncHandler,
   widgetBootstrapHandler as wordpressWidgetBootstrapHandler,
+  widgetPatchHandler as wordpressWidgetPatchHandler,
+  widgetSettingsHandler as wordpressWidgetSettingsHandler,
 } from "../handlers/commerce-wordpress";
 import {
   connectHandler as shopifyConnectHandler,
@@ -149,6 +151,8 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/commerce/wordpress/connect", handler: wordpressConnectHandler },
   { method: "POST", path: "/api/v1/commerce/wordpress/sync", handler: wordpressSyncHandler },
   { method: "DELETE", path: "/api/v1/commerce/wordpress", handler: wordpressDisconnectHandler },
+  { method: "GET", path: "/api/v1/commerce/wordpress/widget", handler: wordpressWidgetSettingsHandler },
+  { method: "PATCH", path: "/api/v1/commerce/wordpress/widget", handler: wordpressWidgetPatchHandler },
   { method: "GET", path: "/api/v1/commerce/wordpress/widget-bootstrap", handler: wordpressWidgetBootstrapHandler },
   { method: "GET", path: "/api/v1/commerce/shopify/status", handler: shopifyStatusHandler },
   { method: "POST", path: "/api/v1/commerce/shopify/connect", handler: shopifyConnectHandler },

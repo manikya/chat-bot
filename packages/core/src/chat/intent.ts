@@ -20,14 +20,24 @@ export function detectIntent(message: string, isFirstMessage: boolean): ChatInte
   return "product";
 }
 
-export function ragSourceTypesForIntent(intent: ChatIntent): string[] {
+export function messageMentionsProducts(message: string): boolean {
+  const lower = message.toLowerCase();
+  return PRODUCT_KEYWORDS.some((k) => lower.includes(k));
+}
+
+export function ragSourceTypesForIntent(intent: ChatIntent, message?: string): string[] {
+  const wantsProducts = messageMentionsProducts(message ?? "");
   switch (intent) {
     case "faq":
-      return ["website", "faq", "conversation"];
+      return wantsProducts
+        ? ["website", "faq", "catalog", "conversation"]
+        : ["website", "faq", "conversation"];
     case "greeting":
-      return ["website", "conversation"];
+      return wantsProducts ? ["website", "catalog", "conversation"] : ["website", "conversation"];
     case "unknown":
-      return ["website", "faq", "conversation"];
+      return wantsProducts
+        ? ["website", "faq", "catalog", "conversation"]
+        : ["website", "faq", "conversation"];
     case "product":
       return ["catalog", "website", "conversation"];
     case "checkout":

@@ -51,6 +51,7 @@ export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) =>
         channel: "web",
         externalUserId: sessionId,
         message: body.message.trim(),
+        metadata: body.metadata,
       },
       config
     );

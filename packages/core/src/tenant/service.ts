@@ -4,6 +4,15 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 
+export type TenantConfigPatch = {
+  llmConfig?: Partial<TenantConfig["llmConfig"]>;
+  prompts?: Partial<TenantConfig["prompts"]>;
+  enabledChannels?: TenantConfig["enabledChannels"];
+  commerceConnector?: Partial<TenantConfig["commerceConnector"]>;
+  widgetConfig?: Partial<TenantConfig["widgetConfig"]>;
+  featureFlags?: TenantConfig["featureFlags"];
+};
+
 export async function getTenantProfile(auth: AuthContext, config: CoreConfig) {
   const db = getDocClient(config);
   const res = await db.send(
@@ -99,15 +108,18 @@ export async function getTenantConfig(auth: AuthContext, config: CoreConfig) {
 
 export async function updateTenantConfig(
   auth: AuthContext,
-  patch: Partial<TenantConfig>,
+  patch: TenantConfigPatch,
   config: CoreConfig
 ) {
   const current = await getTenantConfig(auth, config);
-  const merged = {
-    ...current.data,
+  const merged: TenantConfig = {
+    ...current.data!,
     ...patch,
+    llmConfig: { ...current.data!.llmConfig, ...patch.llmConfig },
     prompts: { ...current.data!.prompts, ...patch.prompts },
+    commerceConnector: { ...current.data!.commerceConnector, ...patch.commerceConnector },
     widgetConfig: { ...current.data!.widgetConfig, ...patch.widgetConfig },
+    featureFlags: { ...current.data!.featureFlags, ...patch.featureFlags },
   };
   const db = getDocClient(config);
   await db.send(

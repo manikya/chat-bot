@@ -10,7 +10,7 @@ export const WOOCOMMERCE_PLUGIN_INSTALL_STEPS = [
   "Download the CommerceChat Connector plugin (.zip)",
   "In WordPress: Plugins → Add New → Upload Plugin → choose the zip → Install → Activate",
   "Go to Settings → CommerceChat (or WooCommerce → CommerceChat) → Generate API key",
-  "Paste your store URL and API key below, then connect — products sync automatically on changes",
+  "Paste your store URL and API key below, then connect — use the toggle here to show or hide the chat widget",
 ] as const;
 
 export const SHOPIFY_APP_INSTALL_STEPS = [

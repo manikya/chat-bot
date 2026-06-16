@@ -1,4 +1,4 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand, type QueryCommandOutput } from "@aws-sdk/lib-dynamodb";
 import { ok, type AuthContext } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
@@ -87,7 +87,7 @@ export async function getConversationAnalytics(
 
   startKey = undefined;
   do {
-    const res = await db.send(
+    const res: QueryCommandOutput = await db.send(
       new QueryCommand({
         TableName: config.tableName,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
@@ -128,7 +128,7 @@ export async function getConversationAnalytics(
 
   startKey = undefined;
   do {
-    const res = await db.send(
+    const res: QueryCommandOutput = await db.send(
       new QueryCommand({
         TableName: config.tableName,
         KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",

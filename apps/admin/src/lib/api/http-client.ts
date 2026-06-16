@@ -449,9 +449,18 @@ export function createHttpApi() {
         );
       },
       wordpressStatus: () =>
-        request<{ connected: boolean; siteUrl?: string; lastSyncAt?: string }>(
-          "/api/v1/commerce/wordpress/status"
-        ),
+        request<{
+          connected: boolean;
+          siteUrl?: string;
+          lastSyncAt?: string;
+          sourceId?: string;
+          widgetEnabled?: boolean;
+        }>("/api/v1/commerce/wordpress/status"),
+      setWordPressWidgetEnabled: (widgetEnabled: boolean) =>
+        request<{ widgetEnabled: boolean }>("/api/v1/commerce/wordpress/widget", {
+          method: "PATCH",
+          body: JSON.stringify({ widgetEnabled }),
+        }),
       connectWordPress: (body: { siteUrl: string; apiKey: string }) =>
         request("/api/v1/commerce/wordpress/connect", {
           method: "POST",

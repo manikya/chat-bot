@@ -175,7 +175,7 @@ export function ShopifyConnectCard({
               Chat widget on storefront
             </Label>
             <p className="text-xs text-muted-foreground">
-              Same as WooCommerce — off removes the bubble; products still sync.
+              Same as WooCommerce — off hides the bubble; products still sync.
             </p>
           </div>
           <Switch

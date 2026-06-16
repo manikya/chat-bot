@@ -18,9 +18,10 @@ export function wrapCronHandler(
   return async (
     event: APIGatewayProxyEventV2 | { source: string },
     context: Context
-  ) => {
+  ): Promise<APIGatewayProxyResultV2> => {
     if (isScheduledEvent(event)) {
-      return run();
+      await run();
+      return { statusCode: 200, body: JSON.stringify({ ok: true }) };
     }
     return httpHandler(event as APIGatewayProxyEventV2, context);
   };

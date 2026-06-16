@@ -131,14 +131,25 @@ class CommerceChat_Connector_REST_API
         }
 
         update_option('commercechat_cloud_api_url', untrailingslashit($url));
-        update_option('commercechat_widget_enabled', '1');
+
+        $enabled = true;
+        if (isset($body['widgetEnabled'])) {
+            $enabled = (bool) $body['widgetEnabled'];
+        }
+        update_option('commercechat_widget_enabled', $enabled ? '1' : '0');
 
         $script = isset($body['widgetScriptUrl']) ? esc_url_raw((string) $body['widgetScriptUrl']) : '';
         if ($script !== '') {
             update_option('commercechat_widget_script_url', untrailingslashit($script));
-            delete_transient('commercechat_bootstrap_script_url');
         }
 
-        return new WP_REST_Response(['ok' => true], 200);
+        $admin = isset($body['adminUrl']) ? esc_url_raw((string) $body['adminUrl']) : '';
+        if ($admin !== '') {
+            update_option('commercechat_admin_url', untrailingslashit($admin));
+        }
+
+        CommerceChat_Connector_Widget::clear_cache();
+
+        return new WP_REST_Response(['ok' => true, 'widgetEnabled' => $enabled], 200);
     }
 }

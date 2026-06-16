@@ -42,6 +42,10 @@ export interface TenantConfig {
     primaryProvider: string;
     models: { faq: string; product: string; checkout: string };
     embeddingModel: string;
+    /** LLM sampling temperature (0–1). Default 0.4 when unset. */
+    temperature?: number;
+    /** Max tokens in assistant reply. Default 800 when unset. */
+    maxOutputTokens?: number;
   };
   prompts: {
     systemPrompt: string;

@@ -6,14 +6,11 @@ if (!defined('ABSPATH')) {
 
 class CommerceChat_Connector_Widget
 {
+    private const BOOTSTRAP_TRANSIENT = 'commercechat_bootstrap_v2';
+
     public static function init(): void
     {
         add_action('wp_footer', [self::class, 'render'], 99);
-    }
-
-    public static function is_enabled(): bool
-    {
-        return get_option('commercechat_widget_enabled', '1') === '1';
     }
 
     public static function cloud_api_url(): string
@@ -21,23 +18,68 @@ class CommerceChat_Connector_Widget
         return rtrim((string) get_option('commercechat_cloud_api_url', ''), '/');
     }
 
-    /** CDN script URL from register-cloud, or widget-bootstrap when CDN is enabled. */
-    public static function widget_script_url(): string
+    /** CDN or API script base (…/widget/v1.js), set by CommerceChat on connect. */
+    public static function widget_script_base(): string
     {
         $stored = (string) get_option('commercechat_widget_script_url', '');
         if ($stored !== '') {
             return untrailingslashit($stored);
         }
 
-        $cached = get_transient('commercechat_bootstrap_script_url');
-        if (is_string($cached) && $cached !== '') {
+        $cloud = self::cloud_api_url();
+        return $cloud !== '' ? $cloud . '/widget/v1.js' : '';
+    }
+
+    /** Build full script src with api_key + api_url (required when script is served from CDN). */
+    public static function build_script_src(): string
+    {
+        $api_key = (string) get_option('commercechat_api_key', '');
+        $cloud = self::cloud_api_url();
+        $base = self::widget_script_base();
+        if ($api_key === '' || $cloud === '' || $base === '') {
+            return '';
+        }
+
+        return add_query_arg(
+            [
+                'api_key' => $api_key,
+                'api_url' => $cloud,
+                'v' => '4',
+            ],
+            $base
+        );
+    }
+
+    /**
+     * Widget on/off is controlled in CommerceChat Admin (same as Shopify).
+     * register-cloud pushes the flag; bootstrap confirms it on the storefront.
+     */
+    public static function is_enabled(): bool
+    {
+        if (get_option('commercechat_widget_enabled', '1') !== '1') {
+            return false;
+        }
+
+        $bootstrap = self::get_bootstrap();
+        if (is_array($bootstrap) && array_key_exists('enabled', $bootstrap)) {
+            return (bool) $bootstrap['enabled'];
+        }
+
+        return true;
+    }
+
+    /** @return array<string, mixed>|null */
+    private static function get_bootstrap(): ?array
+    {
+        $cached = get_transient(self::BOOTSTRAP_TRANSIENT);
+        if (is_array($cached)) {
             return $cached;
         }
 
         $cloud = self::cloud_api_url();
         $api_key = (string) get_option('commercechat_api_key', '');
         if ($cloud === '' || $api_key === '') {
-            return $cloud !== '' ? $cloud . '/widget/v1.js' : '';
+            return null;
         }
 
         $response = wp_remote_get(
@@ -48,20 +90,29 @@ class CommerceChat_Connector_Widget
             ]
         );
 
-        if (!is_wp_error($response) && (int) wp_remote_retrieve_response_code($response) === 200) {
-            $body = json_decode(wp_remote_retrieve_body($response), true);
-            $script = '';
-            if (is_array($body) && isset($body['data']['widgetScriptUrl'])) {
-                $script = esc_url_raw((string) $body['data']['widgetScriptUrl']);
-            }
-            if ($script !== '') {
-                $script = untrailingslashit($script);
-                set_transient('commercechat_bootstrap_script_url', $script, HOUR_IN_SECONDS);
-                return $script;
-            }
+        if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) !== 200) {
+            return null;
         }
 
-        return $cloud . '/widget/v1.js';
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (!is_array($body) || !isset($body['data']) || !is_array($body['data'])) {
+            return null;
+        }
+
+        $data = $body['data'];
+        set_transient(self::BOOTSTRAP_TRANSIENT, $data, 5 * MINUTE_IN_SECONDS);
+
+        if (!empty($data['widgetScriptUrl'])) {
+            update_option('commercechat_widget_script_url', untrailingslashit((string) $data['widgetScriptUrl']));
+        }
+
+        return $data;
+    }
+
+    public static function clear_cache(): void
+    {
+        delete_transient(self::BOOTSTRAP_TRANSIENT);
+        delete_transient('commercechat_bootstrap_script_url');
     }
 
     public static function render(): void
@@ -70,26 +121,11 @@ class CommerceChat_Connector_Widget
             return;
         }
 
-        $api_key = get_option('commercechat_api_key', '');
-        if ($api_key === '') {
+        $src = self::build_script_src();
+        if ($src === '') {
             return;
         }
 
-        $cloud = self::cloud_api_url();
-        if ($cloud === '') {
-            return;
-        }
-
-        $script = self::widget_script_url();
-        if ($script === '') {
-            return;
-        }
-
-        printf(
-            '<script src="%s" data-api-key="%s" data-api-url="%s" async></script>' . "\n",
-            esc_url($script),
-            esc_attr($api_key),
-            esc_attr($cloud)
-        );
+        printf('<script src="%s" async></script>' . "\n", esc_url($src));
     }
 }

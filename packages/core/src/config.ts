@@ -12,6 +12,8 @@ export interface CoreConfig {
   dataDir: string;
   s3VectorsBucketName?: string;
   s3VectorsEndpoint?: string;
+  s3VectorsAccessKeyId?: string;
+  s3VectorsSecretAccessKey?: string;
   openaiApiKey?: string;
   embeddingModel: string;
   llmModel: string;
@@ -79,6 +81,8 @@ export function loadConfig(): CoreConfig {
     dataDir: process.env.DATA_DIR ?? ".data",
     s3VectorsBucketName: process.env.S3_VECTORS_BUCKET,
     s3VectorsEndpoint: process.env.S3_VECTORS_ENDPOINT,
+    s3VectorsAccessKeyId: process.env.S3_VECTORS_AWS_ACCESS_KEY_ID,
+    s3VectorsSecretAccessKey: process.env.S3_VECTORS_AWS_SECRET_ACCESS_KEY,
     openaiApiKey: process.env.OPENAI_API_KEY,
     embeddingModel: process.env.EMBEDDING_MODEL ?? "text-embedding-3-small",
     llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",

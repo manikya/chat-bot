@@ -86,13 +86,11 @@ class CommerceChat_Connector_Admin
             'type' => 'string',
             'sanitize_callback' => 'esc_url_raw',
         ]);
-        register_setting('commercechat_connector', 'commercechat_widget_enabled', [
-            'type' => 'string',
-            'sanitize_callback' => static function ($value) {
-                return $value === '1' ? '1' : '0';
-            },
-        ]);
         register_setting('commercechat_connector', 'commercechat_widget_script_url', [
+            'type' => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+        ]);
+        register_setting('commercechat_connector', 'commercechat_admin_url', [
             'type' => 'string',
             'sanitize_callback' => 'esc_url_raw',
         ]);
@@ -138,9 +136,20 @@ class CommerceChat_Connector_Admin
                 </p></div>
             <?php endif; ?>
 
-            <?php if ($widget_on && $api_key !== '' && $cloud_url === '') : ?>
+            <?php if ($api_key !== '' && $cloud_url === '') : ?>
                 <div class="notice notice-warning"><p>
-                    <?php esc_html_e('Widget is enabled but CommerceChat API URL is missing. Enter the full URL below (e.g. https://….execute-api.us-east-1.amazonaws.com) and click Save, or re-connect WooCommerce in CommerceChat Admin.', 'commercechat-connector'); ?>
+                    <?php esc_html_e('CommerceChat API URL is missing. Re-connect WooCommerce in CommerceChat Admin → Knowledge, or enter the API URL below and save.', 'commercechat-connector'); ?>
+                </p></div>
+            <?php endif; ?>
+
+            <?php if ($api_key !== '' && $cloud_url !== '') : ?>
+                <div class="notice notice-info"><p>
+                    <?php esc_html_e('Chat widget on/off is controlled in CommerceChat Admin → Knowledge → WooCommerce (same as Shopify).', 'commercechat-connector'); ?>
+                    <?php if ($widget_on) : ?>
+                        <?php esc_html_e('Widget is currently enabled.', 'commercechat-connector'); ?>
+                    <?php else : ?>
+                        <?php esc_html_e('Widget is currently disabled.', 'commercechat-connector'); ?>
+                    <?php endif; ?>
                 </p></div>
             <?php endif; ?>
 
@@ -163,18 +172,7 @@ class CommerceChat_Connector_Admin
                                     <?php esc_html_e('Copy', 'commercechat-connector'); ?>
                                 </button>
                             <?php endif; ?>
-                            <p class="description"><?php esc_html_e('Paste this key once in CommerceChat Admin when connecting WooCommerce. The same key powers product sync and the storefront chat widget — no separate widget key needed.', 'commercechat-connector'); ?></p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><?php esc_html_e('Web chat widget', 'commercechat-connector'); ?></th>
-                        <td>
-                            <input type="hidden" name="commercechat_widget_enabled" value="0" />
-                            <label>
-                                <input type="checkbox" name="commercechat_widget_enabled" value="1" <?php checked($widget_on); ?> />
-                                <?php esc_html_e('Show CommerceChat widget on storefront (no theme code edits)', 'commercechat-connector'); ?>
-                            </label>
-                            <p class="description"><?php esc_html_e('When you connect this store in CommerceChat Admin, the API URL is saved automatically. Re-connect if the widget does not appear.', 'commercechat-connector'); ?></p>
+                            <p class="description"><?php esc_html_e('Paste this key once in CommerceChat Admin when connecting WooCommerce. The same key powers product sync and the storefront chat widget.', 'commercechat-connector'); ?></p>
                         </td>
                     </tr>
                     <tr>

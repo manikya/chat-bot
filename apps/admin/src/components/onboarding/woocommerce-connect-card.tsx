@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { pollIngestJob } from "@/lib/poll-job";
@@ -13,33 +13,67 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 type Props = {
   defaultSiteUrl?: string;
   compact?: boolean;
+  manageActions?: boolean;
   onConnected?: () => void;
+  onStatusChange?: () => void;
 };
 
-export function WooCommerceConnectCard({ defaultSiteUrl, compact, onConnected }: Props) {
+export function WooCommerceConnectCard({
+  defaultSiteUrl,
+  compact,
+  manageActions,
+  onConnected,
+  onStatusChange,
+}: Props) {
   const [siteUrl, setSiteUrl] = useState(defaultSiteUrl?.trim() || "");
   const [apiKey, setApiKey] = useState("");
   const [connected, setConnected] = useState(false);
   const [siteLabel, setSiteLabel] = useState<string | undefined>();
+  const [lastSyncAt, setLastSyncAt] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [widgetEnabled, setWidgetEnabled] = useState(true);
+  const [widgetToggling, setWidgetToggling] = useState(false);
+  const widgetConfigSynced = useRef(false);
+
+  const refreshStatus = useCallback(() => {
+    return api.commerce
+      .wordpressStatus()
+      .then((r) => {
+        const isConnected = Boolean(r.data.connected);
+        setConnected(isConnected);
+        setSiteLabel(r.data.siteUrl);
+        setLastSyncAt(r.data.lastSyncAt);
+        setWidgetEnabled(r.data.widgetEnabled !== false);
+        if (isConnected) onConnected?.();
+        return isConnected;
+      })
+      .catch(() => {
+        setConnected(false);
+        return false;
+      });
+  }, [onConnected]);
 
   useEffect(() => {
     if (defaultSiteUrl?.startsWith("http")) setSiteUrl(defaultSiteUrl);
   }, [defaultSiteUrl]);
 
   useEffect(() => {
-    api.commerce
-      .wordpressStatus()
-      .then((r) => {
-        setConnected(Boolean(r.data.connected));
-        setSiteLabel(r.data.siteUrl);
-      })
-      .catch(() => setConnected(false));
-  }, []);
+    void refreshStatus();
+  }, [refreshStatus]);
+
+  useEffect(() => {
+    if (!connected || widgetConfigSynced.current) return;
+    widgetConfigSynced.current = true;
+    void api.commerce.setWordPressWidgetEnabled(widgetEnabled).catch(() => {
+      widgetConfigSynced.current = false;
+    });
+  }, [connected, widgetEnabled]);
 
   const connect = async () => {
     if (!siteUrl.trim().startsWith("http")) {
@@ -54,6 +88,8 @@ export function WooCommerceConnectCard({ defaultSiteUrl, compact, onConnected }:
       setConnected(true);
       setSiteLabel(siteUrl.trim());
       setApiKey("");
+      setWidgetEnabled(true);
+      widgetConfigSynced.current = false;
       toast.success("WooCommerce connected and products synced");
       onConnected?.();
     } catch (err) {
@@ -63,9 +99,53 @@ export function WooCommerceConnectCard({ defaultSiteUrl, compact, onConnected }:
     }
   };
 
+  const toggleWidget = async (enabled: boolean) => {
+    setWidgetToggling(true);
+    try {
+      await api.commerce.setWordPressWidgetEnabled(enabled);
+      setWidgetEnabled(enabled);
+      toast.success(enabled ? "Chat widget enabled on storefront" : "Chat widget disabled");
+      onStatusChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update widget setting");
+      void refreshStatus();
+    } finally {
+      setWidgetToggling(false);
+    }
+  };
+
+  const syncProducts = async () => {
+    setSyncing(true);
+    try {
+      const sync = await api.commerce.syncWordPress();
+      await pollIngestJob(sync.data.jobId, () => onStatusChange?.());
+      await refreshStatus();
+      toast.success("WooCommerce sync completed");
+      onStatusChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      await api.commerce.disconnectWordPress();
+      await refreshStatus();
+      toast.success("WooCommerce disconnected");
+      onStatusChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Disconnect failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (connected) {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 space-y-1">
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Badge variant="success">WooCommerce connected</Badge>
           {siteLabel && <span className="text-sm text-muted-foreground">{siteLabel}</span>}
@@ -74,6 +154,38 @@ export function WooCommerceConnectCard({ defaultSiteUrl, compact, onConnected }:
           <p className="text-xs text-muted-foreground">
             Products sync automatically when your catalog changes in WordPress.
           </p>
+        )}
+        {lastSyncAt && (
+          <p className="text-xs text-muted-foreground">
+            Last sync {new Date(lastSyncAt).toLocaleString()}
+          </p>
+        )}
+        <div className="flex items-center justify-between gap-3 rounded-md border bg-background/80 px-3 py-2">
+          <div className="space-y-0.5">
+            <Label htmlFor="woocommerce-widget-toggle" className="text-sm font-medium">
+              Chat widget on storefront
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Off hides the bubble on your store; products still sync.
+            </p>
+          </div>
+          <Switch
+            id="woocommerce-widget-toggle"
+            checked={widgetEnabled}
+            disabled={widgetToggling}
+            onCheckedChange={(checked) => void toggleWidget(checked)}
+          />
+        </div>
+        {manageActions && (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={syncProducts} disabled={syncing}>
+              {syncing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Sync products
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={disconnect} disabled={busy}>
+              Disconnect
+            </Button>
+          </div>
         )}
       </div>
     );
