@@ -57,10 +57,28 @@
     open: false,
     loading: false,
     config: null,
+    suggestedQuestions: null,
     messages: [],
     primaryColor: "#4F46E5",
     position: "bottom-right",
   };
+
+  function activeSuggestedQuestions() {
+    if (state.suggestedQuestions && state.suggestedQuestions.length) {
+      return state.suggestedQuestions;
+    }
+    if (state.config && state.config.suggestedQuestions && state.config.suggestedQuestions.length) {
+      return state.config.suggestedQuestions;
+    }
+    return [];
+  }
+
+  function applyChatContext(data) {
+    if (!data) return;
+    if (data.suggestedQuestions && data.suggestedQuestions.length) {
+      state.suggestedQuestions = data.suggestedQuestions;
+    }
+  }
 
   var root = document.createElement("commercechat-root");
   root.id = "commercechat-widget";
@@ -216,10 +234,11 @@
     }
     panel.appendChild(messagesEl);
 
-    if (state.config && state.config.suggestedQuestions && state.config.suggestedQuestions.length) {
+    var suggestions = activeSuggestedQuestions();
+    if (suggestions.length) {
       var sug = document.createElement("div");
       sug.className = "cc-suggestions";
-      state.config.suggestedQuestions.slice(0, 3).forEach(function (q) {
+      suggestions.slice(0, 3).forEach(function (q) {
         var chip = document.createElement("button");
         chip.className = "cc-chip";
         chip.type = "button";
@@ -536,14 +555,17 @@
         });
       })
       .then(function (json) {
-        var reply = json.data && json.data.reply && json.data.reply.content;
-        var actions = json.data && json.data.suggestedActions;
-        var cards = json.data && json.data.productCards;
+        var data = json.data || json;
+        applyChatContext(data);
+        var reply = data.reply && data.reply.content;
+        var actions = data.suggestedActions;
+        var cards = data.productCards;
         if (reply) {
           var idx = addBotMessage(reply, actions);
           updateBotMessage(idx, { cards: cards || null });
         }
         else addBotMessage("Sorry, I could not respond right now.");
+        render();
       });
   }
 
@@ -603,11 +625,13 @@
           cards.push(evt.data);
           updateBotMessage(botIndex, { cards: cards.slice() });
         } else if (evt.event === "done") {
+          applyChatContext(evt.data);
           var doneCards = evt.data.productCards && evt.data.productCards.length ? evt.data.productCards : cards;
           updateBotMessage(botIndex, {
             actions: evt.data.suggestedActions || null,
             cards: doneCards && doneCards.length ? doneCards : null,
           });
+          render();
         }
       }
 
@@ -650,6 +674,9 @@
           state.config = json.data;
           state.primaryColor = json.data.primaryColor || state.primaryColor;
           state.position = json.data.position || state.position;
+          if (!state.suggestedQuestions && json.data.suggestedQuestions) {
+            state.suggestedQuestions = json.data.suggestedQuestions;
+          }
         }
         render();
       })

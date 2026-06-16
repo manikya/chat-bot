@@ -5,7 +5,7 @@ import {
   getWidgetConfig,
   loadConfig,
   runChatOrchestrator,
-  toWidgetChatResponse,
+  buildWidgetChatPayload,
   verifyWidgetApiKey,
   widgetAddToCart,
   widgetChat,
@@ -62,7 +62,7 @@ export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) =>
       },
       config
     );
-    const payload = toWidgetChatResponse(body, result);
+    const payload = await buildWidgetChatPayload(tenantId, body, result, config);
     const text = payload.reply.content;
     const chunks = text.match(/.{1,24}(?:\s|$)|\S+/g) ?? [text];
     const bodyText =
@@ -77,7 +77,11 @@ export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) =>
         sessionId: payload.sessionId,
         conversationId: payload.conversationId,
         reply: payload.reply,
+        intent: payload.intent,
+        subIntent: payload.subIntent,
+        funnelStage: payload.funnelStage,
         suggestedActions: payload.suggestedActions,
+        suggestedQuestions: payload.suggestedQuestions,
         productCards: payload.productCards,
       });
 

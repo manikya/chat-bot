@@ -10,6 +10,7 @@ import { Keys } from "../db/keys";
 import { buildWidgetEmbedPlaceholder } from "./embed";
 import { assertWidgetChatRateLimit, assertWidgetConfigRateLimit } from "./rate-limit";
 import { assertTenantOperational, resolveTenantProfile, tenantIsOperational } from "../tenant/status";
+import { marketFromTimezone, suggestedQuestionsForChatContext } from "../chat/locale";
 import type { WidgetAction } from "@commercechat/shared";
 
 export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
@@ -116,7 +117,11 @@ export function buildProductCards(toolResults?: ToolRow[]): WidgetProductCard[] 
   return [];
 }
 
-export function toWidgetChatResponse(body: WidgetChatBody, result: Awaited<ReturnType<typeof runChatOrchestrator>>) {
+export function toWidgetChatResponse(
+  body: WidgetChatBody,
+  result: Awaited<ReturnType<typeof runChatOrchestrator>>,
+  options?: { market?: "default" | "lk"; defaultQuestions?: string[] }
+) {
   const suggestedActions: WidgetAction[] =
     result.suggestedActions ??
     buildSuggestedCtas({
@@ -131,6 +136,14 @@ export function toWidgetChatResponse(body: WidgetChatBody, result: Awaited<Retur
       channel: "web",
     });
 
+  const suggestedQuestions = suggestedQuestionsForChatContext({
+    market: options?.market,
+    intent: result.intent,
+    funnelStage: result.funnelStage,
+    subIntent: result.subIntent,
+    defaults: options?.defaultQuestions,
+  });
+
   return {
     sessionId: body.sessionId,
     conversationId: result.conversationId,
@@ -139,12 +152,31 @@ export function toWidgetChatResponse(body: WidgetChatBody, result: Awaited<Retur
     subIntent: result.subIntent,
     funnelStage: result.funnelStage,
     suggestedActions,
+    suggestedQuestions,
     productCards: buildProductCards(result.toolResults as ToolRow[] | undefined),
   };
 }
 
 export function encodeSseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+export async function buildWidgetChatPayload(
+  tenantId: string,
+  body: WidgetChatBody,
+  result: Awaited<ReturnType<typeof runChatOrchestrator>>,
+  config: CoreConfig
+) {
+  const profile = await resolveTenantProfile(tenantId, config);
+  const market = marketFromTimezone(profile.timezone as string | undefined);
+  const configRes = await getDocClient(config).send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.config() },
+    })
+  );
+  const defaultQuestions = (configRes.Item?.widgetConfig?.suggestedQuestions as string[] | undefined) ?? [];
+  return toWidgetChatResponse(body, result, { market, defaultQuestions });
 }
 
 export async function widgetChat(tenantId: string, body: WidgetChatBody, config: CoreConfig) {
@@ -176,7 +208,7 @@ export async function widgetChat(tenantId: string, body: WidgetChatBody, config:
     config
   );
 
-  return ok(toWidgetChatResponse(body, result));
+  return ok(await buildWidgetChatPayload(tenantId, body, result, config));
 }
 
 export async function widgetAddToCart(tenantId: string, body: WidgetCartBody, config: CoreConfig) {

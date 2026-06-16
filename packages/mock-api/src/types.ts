@@ -178,6 +178,8 @@ export interface Conversation {
   status: string;
   handlingMode?: "bot" | "human";
   funnelStage?: "discover" | "compare" | "objection" | "cart" | "checkout";
+  lastIntent?: "faq" | "product" | "checkout" | "greeting" | "unknown";
+  lastSubIntent?: string;
   assignedToUserId?: string | null;
   manualReplySupported?: boolean;
   messageCount: number;
@@ -195,6 +197,9 @@ export interface Message {
   metadata?: {
     llmModel?: string;
     toolCalls?: string[];
+    intent?: string;
+    subIntent?: string;
+    funnelStage?: string;
     manual?: boolean;
     handoff?: boolean;
     sentByUserId?: string;

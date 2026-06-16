@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { funnelStageLabel } from "@/lib/funnel-stage";
+import { intentLabel, subIntentLabel } from "@/lib/chat-intent";
 import { formatQualificationSummary } from "@/lib/qualification-summary";
 
 const META_CHANNELS = new Set(["whatsapp", "messenger", "instagram"]);
@@ -125,6 +126,10 @@ export default function ConversationThreadPage() {
             </Badge>
             <Badge variant="outline">{detail.status}</Badge>
             <Badge variant="outline">{funnelStageLabel(detail.funnelStage)}</Badge>
+            <Badge variant="outline">{intentLabel(detail.lastIntent)}</Badge>
+            {detail.lastSubIntent && (
+              <Badge variant="secondary">{subIntentLabel(detail.lastSubIntent)}</Badge>
+            )}
           </div>
         </div>
         {canReply && (
@@ -195,6 +200,14 @@ export default function ConversationThreadPage() {
                     )}
                     {isHandoff && (
                       <p className="mt-1 text-xs opacity-80">Handoff message</p>
+                    )}
+                    {m.metadata?.intent && (
+                      <p className="mt-1 text-xs opacity-70">
+                        Intent: {intentLabel(String(m.metadata.intent))}
+                        {m.metadata.subIntent
+                          ? ` · ${subIntentLabel(String(m.metadata.subIntent))}`
+                          : ""}
+                      </p>
                     )}
                     {m.metadata?.toolCalls && (
                       <p className="mt-1 text-xs opacity-70">

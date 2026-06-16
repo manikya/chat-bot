@@ -1,6 +1,6 @@
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { generateId } from "@commercechat/shared";
-import type { ChatIntent, ConversationHandlingMode, FunnelStage, QualificationState } from "@commercechat/shared";
+import type { ChatIntent, ChatSubIntent, ConversationHandlingMode, FunnelStage, QualificationState } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
@@ -29,6 +29,8 @@ export interface ConversationState {
   assignedToUserId?: string;
   handoffAt?: string;
   funnelStage?: FunnelStage;
+  lastIntent?: ChatIntent;
+  lastSubIntent?: ChatSubIntent;
   qualification?: QualificationState;
   messageCount: number;
   lastInboundAt?: string;
@@ -271,7 +273,9 @@ export async function updateConversationFunnel(
   conversation: Pick<ConversationState, "channel" | "externalUserId">,
   funnelStage: FunnelStage,
   config: CoreConfig,
-  qualification?: QualificationState
+  qualification?: QualificationState,
+  intent?: ChatIntent,
+  subIntent?: ChatSubIntent
 ) {
   const db = getDocClient(config);
   const now = new Date().toISOString();
@@ -289,6 +293,16 @@ export async function updateConversationFunnel(
     names["#qualification"] = "qualification";
     values[":qualification"] = qualification;
     setParts.push("#qualification = :qualification");
+  }
+  if (intent !== undefined) {
+    names["#lastIntent"] = "lastIntent";
+    values[":lastIntent"] = intent;
+    setParts.push("#lastIntent = :lastIntent");
+  }
+  if (subIntent !== undefined) {
+    names["#lastSubIntent"] = "lastSubIntent";
+    values[":lastSubIntent"] = subIntent;
+    setParts.push("#lastSubIntent = :lastSubIntent");
   }
 
   await db.send(
@@ -372,6 +386,8 @@ export async function listTenantConversations(
       status: c.status,
       handlingMode: c.handlingMode ?? "bot",
       funnelStage: c.funnelStage ?? "discover",
+      lastIntent: c.lastIntent,
+      lastSubIntent: c.lastSubIntent,
       assignedToUserId: c.assignedToUserId ?? null,
       messageCount: c.messageCount,
       lastInboundAt: c.lastInboundAt ?? c.createdAt,

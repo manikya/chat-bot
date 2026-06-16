@@ -40,3 +40,6 @@ yarn-error.log*
 
 # Reference UI — local clone of jetwing-ai-itinerary (not part of this repo)
 reference UI/
+
+# Local secrets / tokens (never commit)
+docs/local/

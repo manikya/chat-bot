@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { funnelStageLabel } from "@/lib/funnel-stage";
+import { intentLabel, subIntentLabel } from "@/lib/chat-intent";
 
 const CHANNELS = ["all", "whatsapp", "web", "messenger", "instagram"] as const;
 
@@ -68,6 +69,7 @@ export default function ConversationsPage() {
                 <TableHead>Channel</TableHead>
                 <TableHead>Handling</TableHead>
                 <TableHead>Funnel</TableHead>
+                <TableHead>Intent</TableHead>
                 <TableHead>Messages</TableHead>
                 <TableHead>Last activity</TableHead>
                 <TableHead></TableHead>
@@ -85,6 +87,14 @@ export default function ConversationsPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{funnelStageLabel(c.funnelStage)}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{intentLabel(c.lastIntent)}</Badge>
+                    {c.lastSubIntent && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        · {subIntentLabel(c.lastSubIntent)}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{c.messageCount}</TableCell>
                   <TableCell className="text-muted-foreground">{new Date(c.updatedAt).toLocaleString()}</TableCell>

@@ -193,7 +193,9 @@ export async function runChatOrchestrator(
   );
   const funnelOrQualChanged =
     funnel.changed ||
-    JSON.stringify(qualification) !== JSON.stringify(conversation.qualification ?? {});
+    JSON.stringify(qualification) !== JSON.stringify(conversation.qualification ?? {}) ||
+    conversation.lastIntent !== intent ||
+    conversation.lastSubIntent !== subIntent;
 
   if (funnelOrQualChanged) {
     await updateConversationFunnel(
@@ -201,10 +203,14 @@ export async function runChatOrchestrator(
       conversation,
       funnel.stage,
       config,
-      qualification
+      qualification,
+      intent,
+      subIntent
     );
     conversation.funnelStage = funnel.stage;
     conversation.qualification = qualification;
+    conversation.lastIntent = intent;
+    conversation.lastSubIntent = subIntent;
   }
 
   await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
@@ -354,8 +360,13 @@ export async function runChatOrchestrator(
       conversation,
       finalFunnel.stage,
       config,
-      qualification
+      qualification,
+      intent,
+      subIntent
     );
+    conversation.funnelStage = finalFunnel.stage;
+    conversation.lastIntent = intent;
+    conversation.lastSubIntent = subIntent;
   }
 
   const suggestedActions = buildSuggestedCtas({

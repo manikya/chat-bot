@@ -1,5 +1,7 @@
 /** Sri Lanka market presets — English, Sinhala, Tamil, and Singlish shoppers. */
 
+import type { ChatIntent, ChatSubIntent, FunnelStage } from "@commercechat/shared";
+
 export type ChatMarket = "default" | "lk";
 
 const LK_TIMEZONES = new Set(["Asia/Colombo"]);
@@ -117,6 +119,63 @@ export const LK_SUGGESTED_QUESTIONS = [
 export function defaultSuggestedQuestions(market: ChatMarket): string[] {
   if (market === "lk") return [...LK_SUGGESTED_QUESTIONS];
   return ["Shipping info", "Best sellers", "Return policy"];
+}
+
+export function suggestedQuestionsForChatContext(options: {
+  market?: ChatMarket;
+  intent?: ChatIntent;
+  funnelStage?: FunnelStage;
+  subIntent?: ChatSubIntent;
+  defaults?: string[];
+}): string[] {
+  const market = options.market ?? "default";
+  const base = options.defaults ?? defaultSuggestedQuestions(market);
+
+  if (options.funnelStage === "cart" || options.subIntent === "cart_review") {
+    return market === "lk"
+      ? ["Cart eka pennanna", "Checkout karanna", "Product eka add karanna"]
+      : ["Show my cart", "Checkout now", "Add another item"];
+  }
+  if (options.funnelStage === "checkout" || options.subIntent === "checkout_ready") {
+    return market === "lk"
+      ? ["Checkout link eka", "Payment kohomada?", "Delivery kohomada?"]
+      : ["Get checkout link", "Payment options?", "When will it ship?"];
+  }
+  if (options.subIntent === "order_status") {
+    return market === "lk"
+      ? ["Order track karanna", "Delivery date", "Contact support"]
+      : ["Track my order", "Delivery status", "Contact support"];
+  }
+  if (
+    options.intent === "faq" ||
+    options.subIntent === "faq_policy" ||
+    options.subIntent === "faq_objection" ||
+    options.funnelStage === "objection"
+  ) {
+    return market === "lk"
+      ? ["Return policy mokakda?", "Delivery kohomada?", "Warranty thiyenawada?"]
+      : ["Return policy", "Shipping times", "Warranty info"];
+  }
+  if (options.subIntent === "product_compare" || options.funnelStage === "compare") {
+    return market === "lk"
+      ? ["Me deka compare karanna", "Price difference mokakda?", "Best option mokakda?"]
+      : ["Compare these options", "Which is better value?", "Show differences"];
+  }
+  if (options.subIntent === "product_detail") {
+    return market === "lk"
+      ? ["Size guide", "Stock thiyenawada?", "Similar products"]
+      : ["Size guide", "Is it in stock?", "Similar products"];
+  }
+  if (options.intent === "product" || options.subIntent === "product_browse") {
+    return market === "lk"
+      ? ["Best sellers pennanna", "Gift ideas", "Budget options"]
+      : ["Best sellers", "Gift ideas", "Budget options"];
+  }
+  if (options.intent === "greeting") {
+    return base.slice(0, 3);
+  }
+
+  return base.slice(0, 3);
 }
 
 export function formatMoney(amount: number, currency = "USD"): string {
