@@ -1,0 +1,13 @@
+{
+  "createdAt": "2026-06-16T17:11:32.054Z",
+  "status": "success",
+  "stackName": "commercechat-dev-admin",
+  "environment": "dev",
+  "region": "us-east-1",
+  "accountId": "960884446408",
+  "adminUrl": "https://d3g8dfkodwqrza.cloudfront.net",
+  "apiUrl": "https://fimfx57xwl.execute-api.us-east-1.amazonaws.com",
+  "bucket": "commercechat-dev-admin-960884446408-us-east-1",
+  "distributionId": "EHHBD2X20PEHD",
+  "metaOAuthRedirectUri": "https://d3g8dfkodwqrza.cloudfront.net/channels/meta/callback"
+}

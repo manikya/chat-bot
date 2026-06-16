@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { ArrowLeft, Bot, Send, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
+import { conversationIdFromPath } from "@/lib/conversation-id";
 import type { ConversationDetail, Message } from "@commercechat/mock-api";
 import { useAuth } from "@/lib/auth/context";
 import { Badge } from "@/components/ui/badge";
@@ -15,12 +16,17 @@ import { cn } from "@/lib/utils";
 const META_CHANNELS = new Set(["whatsapp", "messenger", "instagram"]);
 
 export default function ConversationThreadPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const paramId = params.id && params.id !== "_" ? params.id : null;
+  const pathId = conversationIdFromPath(pathname);
+  const id = paramId ?? pathId;
   const { user } = useAuth();
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [replyText, setReplyText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const canReply = user?.role === "owner" || user?.role === "admin";
@@ -29,7 +35,7 @@ export default function ConversationThreadPage() {
     detail?.manualReplySupported ?? (detail ? META_CHANNELS.has(detail.channel) : false);
 
   const reload = useCallback(async () => {
-    if (!id || id === "_") return;
+    if (!id) return;
     const [d, m] = await Promise.all([
       api.conversations.get(id),
       api.conversations.getMessages(id),
@@ -39,8 +45,17 @@ export default function ConversationThreadPage() {
   }, [id]);
 
   useEffect(() => {
-    reload().catch(() => setError("Failed to load conversation"));
-  }, [reload]);
+    if (!id) {
+      setLoading(false);
+      setError("Invalid conversation link");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    reload()
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load conversation"))
+      .finally(() => setLoading(false));
+  }, [id, reload]);
 
   async function setMode(mode: "bot" | "human", notifyCustomer?: boolean) {
     if (!id) return;
@@ -71,8 +86,24 @@ export default function ConversationThreadPage() {
     }
   }
 
-  if (!detail) {
+  if (loading) {
     return <div className="text-muted-foreground">Loading...</div>;
+  }
+
+  if (error || !detail) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/conversations">
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Back to conversations
+          </Link>
+        </Button>
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error ?? "Conversation not found"}
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -85,7 +85,7 @@ export default function ConversationsPage() {
                   <TableCell className="text-muted-foreground">{new Date(c.updatedAt).toLocaleString()}</TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/conversations/${c.conversationId}`}>View</Link>
+                      <Link href={`/conversations/${c.conversationId}/`}>View</Link>
                     </Button>
                   </TableCell>
                 </TableRow>
