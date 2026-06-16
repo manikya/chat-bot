@@ -64,6 +64,25 @@ export const LK_CHECKOUT_KEYWORDS = [
   "ஆர்டர்",
 ];
 
+/** Price, trust, and policy concerns during shopping (funnel objection stage). */
+export const LK_OBJECTION_KEYWORDS = [
+  "too expensive",
+  "expensive",
+  "overpriced",
+  "cheaper",
+  "discount",
+  "not sure",
+  "trust",
+  "scam",
+  "legit",
+  "warranty",
+  "guarantee",
+  "why so",
+  "mahal",
+  "වැඩිය",
+  "அதிகம்",
+];
+
 /** Matches common EN / Singlish / Sinhala / Tamil openers. */
 export const LK_GREETING_PATTERN =
   /^(hi|hello|hey|halo|howdy|ayubowan|ayubo|vanakkam|koheda|kohomada|good\s+(morning|afternoon|evening)|greetings|අයුබෝ|வணக்க)/i;

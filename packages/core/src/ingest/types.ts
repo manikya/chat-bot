@@ -10,6 +10,8 @@ export interface ChunkMetadata {
   question?: string;
   platform?: string;
   date?: string;
+  /** FAQ tags e.g. objection:price, objection:shipping */
+  tags?: string[];
 }
 
 export interface VectorChunk {

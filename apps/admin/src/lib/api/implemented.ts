@@ -67,6 +67,7 @@ export const IMPLEMENTED_ROUTES = [
   "POST /api/v1/conversations/:id/reply",
   "GET /api/v1/widget/config",
   "POST /api/v1/widget/chat",
+  "POST /api/v1/widget/cart",
   "GET /api/v1/dashboard/stats",
   "GET /api/v1/analytics",
   "POST /api/v1/devices/register",

@@ -56,7 +56,7 @@ import { handler as chatApiHandler } from "../handlers/chat-api";
 import { handler as tenantUsageHandler } from "../handlers/tenant-usage";
 import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key";
 import { handler as conversationsHandler } from "../handlers/conversations";
-import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler, streamHandler as widgetStreamHandler } from "../handlers/widget";
+import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler, cartHandler as widgetCartHandler, streamHandler as widgetStreamHandler } from "../handlers/widget";
 import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
 import { handler as analyticsHandler } from "../handlers/analytics";
 import { handler as devicesHandler } from "../handlers/devices";
@@ -131,6 +131,7 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/conversations", handler: conversationsHandler },
   { method: "GET", path: "/api/v1/widget/config", handler: widgetConfigHandler },
   { method: "POST", path: "/api/v1/widget/chat", handler: widgetChatHandler },
+  { method: "POST", path: "/api/v1/widget/cart", handler: widgetCartHandler },
   { method: "POST", path: "/api/v1/widget/chat/stream", handler: widgetStreamHandler },
   { method: "POST", path: "/api/v1/chat", handler: chatApiHandler },
   { method: "GET", path: "/api/v1/onboarding", handler: onboardingHandler },

@@ -198,7 +198,7 @@
           chip.className = "cc-action-chip";
           chip.textContent = a.label || a.sku;
           chip.onclick = function () {
-            sendMessage("Tell me more about " + (a.label || a.sku));
+            handleWidgetAction(a);
           };
           actions.appendChild(chip);
         });
@@ -383,7 +383,7 @@
       add.textContent = "Add to cart";
       add.disabled = card.inStock === false;
       add.onclick = function () {
-        sendMessage("Add " + (card.sku || card.name) + " to my cart");
+        addToCartDirect(card.sku || card.name, 1);
       };
       buttons.appendChild(add);
 
@@ -428,6 +428,63 @@
       }
     }
     render();
+  }
+
+  function handleWidgetAction(a) {
+    if (!a) return;
+    if (a.action === "add_to_cart" && a.sku) {
+      addToCartDirect(a.sku, 1);
+      return;
+    }
+    if (a.action === "checkout") {
+      sendMessage(a.message || "I'm ready to checkout");
+      return;
+    }
+    if (a.message) {
+      sendMessage(a.message);
+      return;
+    }
+    if (a.sku) {
+      sendMessage("Tell me more about " + (a.label || a.sku));
+    }
+  }
+
+  function addToCartDirect(sku, quantity) {
+    if (!sku) return;
+    state.loading = true;
+    render();
+    fetch(apiBase + "/api/v1/widget/cart", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify({
+        sessionId: sessionId,
+        sku: sku,
+        quantity: quantity || 1,
+      }),
+    })
+      .then(function (res) {
+        return res.json().then(function (json) {
+          if (!res.ok) {
+            var err = (json && json.error && json.error.message) || json.message || "Could not add to cart";
+            throw new Error(err);
+          }
+          return json.data || json;
+        });
+      })
+      .then(function (data) {
+        addBotMessage(data.message || "Added to your cart.");
+      })
+      .catch(function (err) {
+        addBotMessage("Sorry — " + (err.message || "could not add to cart."));
+        console.warn("[CommerceChat] add to cart", err);
+      })
+      .finally(function () {
+        state.loading = false;
+        render();
+      });
   }
 
   function sendMessage(text) {

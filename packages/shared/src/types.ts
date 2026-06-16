@@ -110,8 +110,42 @@ export interface OnboardingTestChatResult {
 
 export type ChatIntent = "faq" | "product" | "checkout" | "greeting" | "unknown";
 
+/** Sales-funnel stage on a shopper conversation (Phase 2+). */
+export type FunnelStage = "discover" | "compare" | "objection" | "cart" | "checkout";
+
+/** Known shopper preferences gathered during discover/compare (Phase 2+). */
+export interface QualificationState {
+  budget?: { min?: number; max?: number };
+  category?: string;
+  recipient?: string;
+  constraints?: string[];
+  objectionsRaised?: string[];
+  lastComparedSkus?: string[];
+}
+
+/** Finer routing label; does not replace ChatIntent for model selection (Phase 3). */
+export type ChatSubIntent =
+  | "product_browse"
+  | "product_compare"
+  | "product_detail"
+  | "faq_policy"
+  | "faq_objection"
+  | "cart_review"
+  | "checkout_ready"
+  | "order_status";
+
 /** Who replies to the customer — bot automation or a human agent (admin / future mobile app). */
 export type ConversationHandlingMode = "bot" | "human";
+
+export type WidgetActionType = "product" | "checkout" | "message";
+
+export interface WidgetAction {
+  type: WidgetActionType;
+  label: string;
+  sku?: string;
+  action?: "view" | "add_to_cart" | "checkout";
+  message?: string;
+}
 
 export interface ChatReply {
   type: "text";
@@ -129,6 +163,9 @@ export interface ChatResult {
   reply: ChatReply;
   toolResults?: ChatToolResult[];
   intent?: ChatIntent;
+  funnelStage?: FunnelStage;
+  subIntent?: ChatSubIntent;
+  suggestedActions?: WidgetAction[];
   usage?: { inputTokens: number; outputTokens: number };
   /** Set when inbound was stored but the bot did not auto-reply (human handling). */
   handledBy?: "bot" | "human";

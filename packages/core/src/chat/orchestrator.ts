@@ -1,4 +1,4 @@
-import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type TenantConfig } from "@commercechat/shared";
+import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type ChatSubIntent, type TenantConfig } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
@@ -13,11 +13,16 @@ import {
   loadMessageHistory,
   persistMessage,
   resolveConversation,
+  updateConversationFunnel,
 } from "./conversation";
-import { detectIntent, messageMentionsProducts, ragSourceTypesForIntent } from "./intent";
+import { detectIntent, detectSubIntent, messageMentionsProducts, ragSourceTypesForIntent } from "./intent";
+import { resolveFunnelContext } from "./funnel";
+import { extractQualificationFromMessage, mergeQualification } from "./qualification";
+import { boostObjectionFaqChunks } from "./rag-boost";
 import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
 import { enrichReplyWithProductSearch, formatProductListForReply } from "./product-reply";
+import { appendCtaPromptLine, buildSuggestedCtas } from "./cta";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 import { assertTenantOperational } from "../tenant/status";
@@ -65,9 +70,10 @@ async function retrieveForIntent(
   query: string,
   intent: ChatIntent,
   config: CoreConfig,
-  message?: string
+  message?: string,
+  options?: { subIntent?: ChatSubIntent; objectionsRaised?: string[] }
 ): Promise<ScoredChunk[]> {
-  let sourceTypes = ragSourceTypesForIntent(intent, message);
+  let sourceTypes = ragSourceTypesForIntent(intent, message, options?.subIntent);
   const conversationEnabled = await tenantHasPageVoiceVectors(auth.tenantId, config);
   if (!conversationEnabled) {
     sourceTypes = sourceTypes.filter((t) => t !== "conversation");
@@ -82,9 +88,15 @@ async function retrieveForIntent(
   if (all.length === 0) {
     return retrieveKnowledge(auth, query, config, { topK: 5 });
   }
-  return all
+  let ranked = all
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
+
+  if (options?.subIntent === "faq_objection" || options?.objectionsRaised?.length) {
+    ranked = boostObjectionFaqChunks(ranked, options?.objectionsRaised ?? []);
+  }
+
+  return ranked;
 }
 
 function generateFallbackReply(
@@ -168,11 +180,43 @@ export async function runChatOrchestrator(
   const history = await loadMessageHistory(auth.tenantId, conversation.conversationId, config);
   const isFirstMessage = history.length === 0;
   const intent = detectIntent(text, isFirstMessage);
-
-  await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, { intent });
-
-  const ragChunks = await retrieveForIntent(auth, text, intent, config, text);
   const cart = await loadCart(auth.tenantId, conversation.conversationId, config);
+  const funnel = resolveFunnelContext(conversation, {
+    message: text,
+    intent,
+    cartItemCount: cart?.items.length ?? 0,
+  });
+  const subIntent = detectSubIntent(text, intent, funnel.stage);
+  const qualification = mergeQualification(
+    conversation.qualification ?? funnel.qualification,
+    extractQualificationFromMessage(text, marketFromTimezone(timezone))
+  );
+  const funnelOrQualChanged =
+    funnel.changed ||
+    JSON.stringify(qualification) !== JSON.stringify(conversation.qualification ?? {});
+
+  if (funnelOrQualChanged) {
+    await updateConversationFunnel(
+      auth.tenantId,
+      conversation,
+      funnel.stage,
+      config,
+      qualification
+    );
+    conversation.funnelStage = funnel.stage;
+    conversation.qualification = qualification;
+  }
+
+  await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
+    intent,
+    subIntent,
+    funnelStage: funnel.stage,
+  });
+
+  const ragChunks = await retrieveForIntent(auth, text, intent, config, text, {
+    subIntent,
+    objectionsRaised: qualification.objectionsRaised,
+  });
   const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
   const market = marketFromTimezone(timezone);
   const currency = tenantConfig.commerceConnector?.currency ?? (market === "lk" ? "LKR" : "USD");
@@ -180,11 +224,14 @@ export async function runChatOrchestrator(
     channel: input.channel,
     timezone,
     intent,
+    subIntent,
+    funnelStage: funnel.stage,
+    qualification,
     pageUrl,
   });
 
   const llm = createLLMProvider(config);
-  const tools = toolsForIntent(intent, text);
+  const tools = toolsForIntent(intent, text, funnel.stage, subIntent);
   const toolCtx = {
     auth,
     config,
@@ -288,8 +335,42 @@ export async function runChatOrchestrator(
     channel: input.channel,
   });
 
+  const refreshedCart = await loadCart(auth.tenantId, conversation.conversationId, config);
+  let finalFunnel = resolveFunnelContext(conversation, {
+    message: text,
+    intent,
+    cartItemCount: refreshedCart?.items.length ?? 0,
+  });
+  if (toolResults.some((t) => t.tool === "create_checkout_link" && t.success)) {
+    finalFunnel = {
+      ...finalFunnel,
+      stage: "checkout",
+      changed: finalFunnel.stage !== "checkout",
+    };
+  }
+  if (finalFunnel.stage !== funnel.stage) {
+    await updateConversationFunnel(
+      auth.tenantId,
+      conversation,
+      finalFunnel.stage,
+      config,
+      qualification
+    );
+  }
+
+  const suggestedActions = buildSuggestedCtas({
+    funnelStage: finalFunnel.stage,
+    subIntent,
+    toolResults,
+    cart: refreshedCart,
+    channel: input.channel,
+  });
+  replyContent = appendCtaPromptLine(replyContent, suggestedActions);
+
   await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
     intent,
+    subIntent,
+    funnelStage: finalFunnel.stage,
     llmProvider: llm?.name ?? "fallback",
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
@@ -310,8 +391,11 @@ export async function runChatOrchestrator(
       ...(typeof t.result === "object" && t.result ? (t.result as Record<string, unknown>) : {}),
     })),
     intent,
+    subIntent,
+    funnelStage: finalFunnel.stage,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
     handledBy: "bot",
     handlingMode: "bot",
+    suggestedActions,
   };
 }

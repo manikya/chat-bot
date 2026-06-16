@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { funnelStageLabel } from "@/lib/funnel-stage";
+import { formatQualificationSummary } from "@/lib/qualification-summary";
 
 const META_CHANNELS = new Set(["whatsapp", "messenger", "instagram"]);
 
@@ -122,6 +124,7 @@ export default function ConversationThreadPage() {
               {isHuman ? "Human" : "Bot"}
             </Badge>
             <Badge variant="outline">{detail.status}</Badge>
+            <Badge variant="outline">{funnelStageLabel(detail.funnelStage)}</Badge>
           </div>
         </div>
         {canReply && (
@@ -239,6 +242,17 @@ export default function ConversationThreadPage() {
             )}
           </CardContent>
         </Card>
+
+        {formatQualificationSummary(detail.qualification) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Shopper context</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {formatQualificationSummary(detail.qualification)}
+            </CardContent>
+          </Card>
+        )}
 
         {detail.cart && (
           <Card>

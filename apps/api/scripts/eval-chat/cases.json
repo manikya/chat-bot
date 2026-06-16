@@ -1,0 +1,51 @@
+[
+  {
+    "id": "greeting",
+    "message": "Hi there!",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "greeting"
+    }
+  },
+  {
+    "id": "product-search",
+    "message": "Show me your best sellers",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "funnelStage": ["compare", "discover"]
+    }
+  },
+  {
+    "id": "faq",
+    "message": "What is your return policy?",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "faq"
+    }
+  },
+  {
+    "id": "mixed-faq-product",
+    "message": "Do you deliver to Colombo and what shoes do you have?",
+    "expect": {
+      "nonEmptyReply": true
+    }
+  },
+  {
+    "id": "objection-price",
+    "message": "This seems too expensive — do you have a return policy?",
+    "expect": {
+      "nonEmptyReply": true,
+      "funnelStage": "objection",
+      "subIntent": "faq_objection"
+    }
+  },
+  {
+    "id": "budget-qualify",
+    "message": "Looking for shoes under 5000 rupees",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product"
+    }
+  }
+]

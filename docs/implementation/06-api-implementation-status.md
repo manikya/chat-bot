@@ -7,7 +7,8 @@
 **AWS dev admin:** `https://d3g8dfkodwqrza.cloudfront.net`  
 **AWS dev widget CDN:** `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js`  
 **AWS dev ingest SFN:** `commercechat-dev-ingest`  
-**AWS dev vectors:** `commercechat-dev-vectors`
+**AWS dev vectors:** `commercechat-dev-vectors`  
+**Chat quality:** Phases 1–4 shipped — see [07-chat-quality-roadmap.md](07-chat-quality-roadmap.md)
 
 ---
 
@@ -51,8 +52,13 @@
 | 2026-06-16 | **Shopify widget on/off:** `GET/PATCH /api/v1/commerce/shopify/widget`, ScriptTag install/remove, admin + Shopify app toggles (matches WordPress) |
 | 2026-06-16 | **Catalog auto-sync:** Shopify product webhooks (`PRODUCTS_*` → `/shopify-app/webhooks`); WooCommerce `POST /webhooks/commerce/woocommerce` + plugin hooks |
 | 2026-06-16 | **Widget Dawn fix:** `commercechat-root` custom element host + `api_url` query param; Shopify ScriptTag cache bust `&v=4` |
+| 2026-06-16 | **Chat quality Phases 2–4:** funnel stage, sub-intents, qualification, `compare_products` / `get_related_products`, CTAs, FAQ objection tags |
+| 2026-06-16 | **`POST /api/v1/widget/cart`** — direct add-to-cart (no LLM); widget `v1.js` card/chip actions |
+| 2026-06-16 | **Eval suite:** `apps/api/scripts/eval-chat/` + `npm run eval:chat` (6 golden cases; dev verified 6/6) |
+| 2026-06-16 | **Admin:** conversation funnel badge + shopper context card; analytics `funnelStageBreakdown` + `subIntentBreakdown` |
+| 2026-06-16 | **AWS deploy:** API `commercechat-dev-2026-06-16T20-05-02-022Z.json`; widget CDN invalidation `20-05-35` |
 
-**Git (local `main`):** `4b98a64` — Shopify widget toggle, catalog webhooks, Dawn bubble fix.
+**Git (local `main`):** chat quality roadmap + widget cart (uncommitted at doc time).
 
 ---
 
@@ -71,7 +77,8 @@ flowchart TB
   end
   ORCH[runChatOrchestrator]
   WH & W & C --> ORCH
-  ORCH --> INTENT[detectIntent]
+  ORCH --> INTENT[detectIntent + detectSubIntent]
+  ORCH --> FUNNEL[resolveFunnelContext]
   ORCH --> RAG[retrieveKnowledge]
   ORCH --> LLM[OpenAILLMProvider]
   ORCH --> TOOLS[executeTool]
@@ -88,7 +95,7 @@ See [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md) §4–7 for system
 
 | Category | Count |
 |----------|------:|
-| **Implemented** (real Lambda + DynamoDB) | **~85 routes** |
+| **Implemented** (real Lambda + DynamoDB) | **~86 routes** |
 | **Mock only** (UI works; fixture data) | **0 routes** |
 | **Not started** (no handler, no mock) | 5+ routes |
 | **Phase 2** (MFA, payment gateway, custom domains) | 4+ routes |
@@ -162,6 +169,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 | `GET` | `/api/v1/conversations/{id}/messages` | `conversations` | Yes |
 | `GET` | `/api/v1/widget/config` | `widget` | Yes |
 | `POST` | `/api/v1/widget/chat` | `widget` | Yes (embed) |
+| `POST` | `/api/v1/widget/cart` | `widget` | Yes (embed add-to-cart) |
 | `POST` | `/api/v1/widget/chat/stream` | `widget` | Yes (embed SSE) |
 | `GET` | `/api/v1/dashboard/stats` | `dashboard-stats` | Yes |
 | `GET` | `/api/v1/analytics` | `analytics` | Yes |
@@ -190,7 +198,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 
 **Also built (not a route):**
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
-- Chat orchestrator — `packages/core/src/chat/`
+- Chat orchestrator — `packages/core/src/chat/` ([07-chat-quality-roadmap.md](07-chat-quality-roadmap.md): funnel, sub-intents, CTAs, `compare_products`, `get_related_products`)
 - Messenger inbound/outbound — `packages/core/src/meta/messenger-*.ts`, `process-messenger-inbound.ts`
 - Meta credentials — Secrets Manager `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_USE_SECRETS_MANAGER=true`; else `.data/meta/*.json`
 - Meta token refresh — EventBridge `cron(0 3 * * ? *)` UTC + optional `POST /internal/cron/meta-token-refresh`
@@ -241,7 +249,7 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 | 1 | **Payment gateway** | Checkout stub exists; wire Sri Lankan provider + `POST /webhooks/payment` for paid plans |
 | 2 | **Meta production** | Custom domain for webhooks/OAuth; submit App Review for WhatsApp live |
 | 3 | **Instagram DM E2E** | Handler + OAuth shipped; validate on AWS dev with real IG test account |
-| 4 | **CI/CD** | GitHub Actions → `deploy:aws:full` + `deploy:admin` on merge to `main` |
+| 4 | **CI/CD** | GitHub Actions → `deploy:aws` + `deploy:admin` + `eval:chat` on merge |
 | 5 | **Custom domains** | `api.commercechat.com`, `app.*`, `cdn.*` — ACM + Route 53 |
 
 ### Medium term
@@ -267,6 +275,7 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 - **Website crawl on AWS** — `crawl.json` in data S3 bucket
 - **WordPress plugin CDN** — `widgetScriptUrl` from register-cloud / widget-bootstrap
 - **Shopify widget toggle** — `widgetConfig.widgetEnabled` + ScriptTag sync; admin Knowledge card + Shopify app `/app`
+- **Chat quality Phases 1–4** — funnel/sub-intent on messages; `cta.ts`; widget cart API; eval suite
 
 ---
 
@@ -282,7 +291,7 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 | Usage, billing, dashboard | Usage overview, billing plans/checkout/cancel/reactivate | — |
 | **Analytics** | `GET /api/v1/analytics` (date range, funnel, channels) | — |
 | Knowledge (page-voice) | Pro+ conversation ingest, export JSON | — |
-| Conversations | List, thread, messages | — |
+| Conversations | List, thread, messages, funnel badge, shopper context | — |
 | Widget / API keys | Config, regen-key, embed snippet | — |
 | Channels | WhatsApp + Messenger + Instagram connect/disconnect/health, Meta webhooks | — |
 
@@ -341,6 +350,16 @@ npm run dev                   # API :3001 + Admin :3000
 
 **Widget demo:** Regenerate API key in Settings → API keys, then open  
 `http://localhost:3001/widget/demo.html?key=pk_live_...` while `npm run dev` is running.
+
+**Eval chat (dev or local):**
+
+```bash
+API_URL=https://fimfx57xwl.execute-api.us-east-1.amazonaws.com \
+WIDGET_API_KEY=pk_live_... \
+npm run eval:chat
+```
+
+Local API requires `S3_VECTORS_AWS_*` in env when `S3_VECTORS_BUCKET` is set (see `apps/api/.env`).
 
 **Meta Messenger (local):**
 

@@ -11,10 +11,19 @@ export interface SearchProductHit {
 export function extractSearchProducts(
   toolResults: Array<{ tool: string; success: boolean; result: unknown }>
 ): SearchProductHit[] {
-  const search = toolResults.find((t) => t.tool === "search_products" && t.success);
-  if (!search) return [];
-  const data = search.result as { products?: SearchProductHit[] };
-  return data.products ?? [];
+  return extractProductHitsFromTools(toolResults);
+}
+
+export function extractProductHitsFromTools(
+  toolResults: Array<{ tool: string; success: boolean; result: unknown }>
+): SearchProductHit[] {
+  for (const name of ["search_products", "compare_products", "get_related_products"] as const) {
+    const hit = toolResults.find((t) => t.tool === name && t.success);
+    if (!hit) continue;
+    const data = hit.result as { products?: SearchProductHit[] };
+    if (data.products?.length) return data.products;
+  }
+  return [];
 }
 
 function formatProductLine(p: SearchProductHit, currency: string, channel?: string): string {
@@ -53,7 +62,7 @@ export function enrichReplyWithProductSearch(
   currency: string,
   options?: { channel?: string }
 ): string {
-  const products = extractSearchProducts(toolResults);
+  const products = extractProductHitsFromTools(toolResults);
   if (!products.length) return reply;
   if (reply.trim() && replyAlreadyMentionsProducts(reply, products) && reply.length > 60) {
     return reply;

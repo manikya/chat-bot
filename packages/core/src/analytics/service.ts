@@ -54,6 +54,8 @@ export async function getConversationAnalytics(
   const messagesByDay = Object.fromEntries(dayKeys(from, to).map((d) => [d, 0]));
   const messagesByChannel: Record<string, number> = {};
   const intents: Record<string, number> = {};
+  const subIntents: Record<string, number> = {};
+  const funnelStages: Record<string, number> = {};
   const productSearches: Record<string, number> = {};
 
   let conversationsTotal = 0;
@@ -110,6 +112,16 @@ export async function getConversationAnalytics(
       const intent = metadata.intent as string | undefined;
       if (intent) {
         intents[intent] = (intents[intent] ?? 0) + 1;
+      }
+
+      const funnelStage = metadata.funnelStage as string | undefined;
+      if (funnelStage) {
+        funnelStages[funnelStage] = (funnelStages[funnelStage] ?? 0) + 1;
+      }
+
+      const subIntent = metadata.subIntent as string | undefined;
+      if (subIntent) {
+        subIntents[subIntent] = (subIntents[subIntent] ?? 0) + 1;
       }
 
       const toolCalls = metadata.toolCalls as string[] | undefined;
@@ -169,6 +181,12 @@ export async function getConversationAnalytics(
     intentBreakdown: Object.entries(intents)
       .sort((a, b) => b[1] - a[1])
       .map(([intent, count]) => ({ intent, count })),
+    funnelStageBreakdown: Object.entries(funnelStages)
+      .sort((a, b) => b[1] - a[1])
+      .map(([stage, count]) => ({ stage, count })),
+    subIntentBreakdown: Object.entries(subIntents)
+      .sort((a, b) => b[1] - a[1])
+      .map(([subIntent, count]) => ({ subIntent, count })),
     topProducts: Object.entries(productSearches)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)

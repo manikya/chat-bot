@@ -177,6 +177,7 @@ export interface Conversation {
   customerName?: string;
   status: string;
   handlingMode?: "bot" | "human";
+  funnelStage?: "discover" | "compare" | "objection" | "cart" | "checkout";
   assignedToUserId?: string | null;
   manualReplySupported?: boolean;
   messageCount: number;
@@ -272,6 +273,8 @@ export interface ConversationAnalytics {
   messagesByDay: Array<{ date: string; messages: number }>;
   channelBreakdown: Array<{ channel: string; count: number }>;
   intentBreakdown: Array<{ intent: string; count: number }>;
+  funnelStageBreakdown?: Array<{ stage: string; count: number }>;
+  subIntentBreakdown?: Array<{ subIntent: string; count: number }>;
   topProducts: Array<{ label: string; count: number }>;
   funnel: {
     conversations: number;
@@ -288,5 +291,12 @@ export interface CartItem {
 }
 
 export interface ConversationDetail extends Conversation {
+  qualification?: {
+    budget?: { min?: number; max?: number };
+    category?: string;
+    recipient?: string;
+    constraints?: string[];
+    objectionsRaised?: string[];
+  };
   cart?: { items: CartItem[]; subtotal: number; currency: string };
 }

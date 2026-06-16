@@ -49,6 +49,42 @@ Shared schema passed to all LLM providers via [04-llm-provider-router.md](04-llm
 }
 ```
 
+### `compare_products`
+
+```json
+{
+  "name": "compare_products",
+  "description": "Side-by-side comparison of two or more SKUs",
+  "parameters": {
+    "properties": {
+      "skus": {
+        "type": "array",
+        "items": { "type": "string" },
+        "minItems": 2,
+        "maxItems": 4
+      }
+    },
+    "required": ["skus"]
+  }
+}
+```
+
+### `get_related_products`
+
+```json
+{
+  "name": "get_related_products",
+  "description": "Find complementary or similar products for a given SKU",
+  "parameters": {
+    "properties": {
+      "sku": { "type": "string" },
+      "limit": { "type": "integer", "default": 3 }
+    },
+    "required": ["sku"]
+  }
+}
+```
+
 ### `add_to_cart`
 
 ```json

@@ -1,12 +1,16 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiError, ErrorCodes, ok } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
+import { addToCart } from "../chat/cart";
+import { resolveConversation } from "../chat/conversation";
+import { buildSuggestedCtas } from "../chat/cta";
 import { runChatOrchestrator } from "../chat/orchestrator";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { buildWidgetEmbedPlaceholder } from "./embed";
 import { assertWidgetChatRateLimit, assertWidgetConfigRateLimit } from "./rate-limit";
 import { assertTenantOperational, resolveTenantProfile, tenantIsOperational } from "../tenant/status";
+import type { WidgetAction } from "@commercechat/shared";
 
 export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
   await assertWidgetConfigRateLimit(tenantId, config);
@@ -45,6 +49,13 @@ export interface WidgetChatBody {
   metadata?: Record<string, unknown>;
 }
 
+export interface WidgetCartBody {
+  sessionId: string;
+  sku: string;
+  quantity?: number;
+  variant?: string;
+}
+
 export interface WidgetProductCard {
   type: "product";
   sku: string;
@@ -58,17 +69,7 @@ export interface WidgetProductCard {
   inStock: boolean;
 }
 
-function buildSuggestedActions(toolResults?: Array<{ tool: string; success: boolean; [key: string]: unknown }>) {
-  if (buildProductCards(toolResults).length > 0) return [];
-  const search = toolResults?.find((t) => t.tool === "search_products" && t.success);
-  const products = search?.products as Array<{ sku: string; name: string; price: number; currency?: string }> | undefined;
-  if (!products?.length) return [];
-  return products.slice(0, 3).map((p) => ({
-    type: "product" as const,
-    sku: p.sku,
-    label: `${p.name} — ${formatPrice(p.price, p.currency)}`,
-  }));
-}
+const PRODUCT_TOOL_NAMES = ["search_products", "compare_products", "get_related_products"] as const;
 
 function formatPrice(price: number, currency?: string) {
   const code = currency || "USD";
@@ -80,43 +81,65 @@ function formatPrice(price: number, currency?: string) {
   }
 }
 
-export function buildProductCards(toolResults?: Array<{ tool: string; success: boolean; [key: string]: unknown }>): WidgetProductCard[] {
-  const search = toolResults?.find((t) => t.tool === "search_products" && t.success);
-  const products = search?.products as
-    | Array<{
-        sku: string;
-        name: string;
-        description?: string;
-        price: number;
-        currency?: string;
-        imageUrl?: string;
-        imageUrls?: string[];
-        url?: string;
-        inStock?: boolean;
-      }>
-    | undefined;
-  if (!products?.length) return [];
-  return products.slice(0, 5).map((p) => ({
-    type: "product" as const,
-    sku: p.sku,
-    name: p.name,
-    description: p.description,
-    price: p.price,
-    currency: p.currency || "USD",
-    imageUrl: p.imageUrl,
-    imageUrls: p.imageUrls,
-    url: p.url,
-    inStock: p.inStock !== false,
-  }));
+type ToolRow = { tool: string; success: boolean; products?: Array<Record<string, unknown>> };
+
+export function buildProductCards(toolResults?: ToolRow[]): WidgetProductCard[] {
+  for (const toolName of PRODUCT_TOOL_NAMES) {
+    const hit = toolResults?.find((t) => t.tool === toolName && t.success);
+    const products = hit?.products as
+      | Array<{
+          sku: string;
+          name: string;
+          description?: string;
+          price: number;
+          currency?: string;
+          imageUrl?: string;
+          imageUrls?: string[];
+          url?: string;
+          inStock?: boolean;
+        }>
+      | undefined;
+    if (!products?.length) continue;
+    return products.slice(0, 5).map((p) => ({
+      type: "product" as const,
+      sku: p.sku,
+      name: p.name,
+      description: p.description,
+      price: p.price,
+      currency: p.currency || "USD",
+      imageUrl: p.imageUrl,
+      imageUrls: p.imageUrls,
+      url: p.url,
+      inStock: p.inStock !== false,
+    }));
+  }
+  return [];
 }
 
 export function toWidgetChatResponse(body: WidgetChatBody, result: Awaited<ReturnType<typeof runChatOrchestrator>>) {
+  const suggestedActions: WidgetAction[] =
+    result.suggestedActions ??
+    buildSuggestedCtas({
+      funnelStage: result.funnelStage,
+      subIntent: result.subIntent,
+      toolResults: (result.toolResults ?? []).map((t) => ({
+        tool: t.tool,
+        success: t.success,
+        result: t,
+      })),
+      cart: null,
+      channel: "web",
+    });
+
   return {
     sessionId: body.sessionId,
     conversationId: result.conversationId,
     reply: result.reply,
-    suggestedActions: buildSuggestedActions(result.toolResults),
-    productCards: buildProductCards(result.toolResults),
+    intent: result.intent,
+    subIntent: result.subIntent,
+    funnelStage: result.funnelStage,
+    suggestedActions,
+    productCards: buildProductCards(result.toolResults as ToolRow[] | undefined),
   };
 }
 
@@ -154,4 +177,54 @@ export async function widgetChat(tenantId: string, body: WidgetChatBody, config:
   );
 
   return ok(toWidgetChatResponse(body, result));
+}
+
+export async function widgetAddToCart(tenantId: string, body: WidgetCartBody, config: CoreConfig) {
+  if (!body.sessionId?.trim()) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "sessionId is required", 400);
+  }
+  if (!body.sku?.trim()) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "sku is required", 400);
+  }
+
+  const quantity = Math.max(1, Math.min(99, Number(body.quantity ?? 1)));
+  await assertWidgetChatRateLimit(tenantId, body.sessionId.trim(), config);
+  await assertTenantOperational(tenantId, config);
+
+  const conversation = await resolveConversation(
+    tenantId,
+    "web",
+    body.sessionId.trim(),
+    config
+  );
+
+  const outcome = await addToCart(
+    tenantId,
+    conversation.conversationId,
+    body.sku.trim(),
+    quantity,
+    body.variant,
+    config
+  );
+
+  if (!outcome.success) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, outcome.error, 400);
+  }
+
+  const item = outcome.cart.items.find((i) => i.sku === body.sku.trim());
+  const message = item
+    ? `Added ${item.name} to your cart (${quantity} × ${formatPrice(item.unitPrice, outcome.cart.currency)}).`
+    : `Added item to your cart.`;
+
+  return ok({
+    sessionId: body.sessionId,
+    conversationId: conversation.conversationId,
+    sku: body.sku.trim(),
+    cart: {
+      items: outcome.cart.items,
+      subtotal: outcome.cart.subtotal,
+      currency: outcome.cart.currency,
+    },
+    message,
+  });
 }

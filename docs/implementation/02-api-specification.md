@@ -1169,20 +1169,78 @@ Synchronous chat for MVP (streaming in Phase 2).
   "data": {
     "sessionId": "web_sess_abc",
     "conversationId": "conv_web_xyz",
+    "intent": "product",
+    "funnelStage": "discover",
+    "subIntent": "product_browse",
     "reply": {
       "type": "text",
       "content": "Yes! Here are our blue sneakers..."
     },
     "suggestedActions": [
-      { "type": "product", "sku": "SHOE-BLU-9", "label": "Blue Runner — $89.99" }
+      {
+        "type": "product",
+        "sku": "SHOE-BLU-9",
+        "label": "Blue Runner — $89.99",
+        "action": "add_to_cart"
+      },
+      {
+        "type": "checkout",
+        "label": "View cart",
+        "action": "checkout",
+        "message": "Show my cart"
+      }
     ]
   }
 }
 ```
 
+`funnelStage`: `discover` | `compare` | `objection` | `cart` | `checkout`  
+`subIntent`: e.g. `product_browse`, `product_compare`, `objection_shipping` (see [07-chat-quality-roadmap.md](07-chat-quality-roadmap.md))  
+`suggestedActions[].action`: `view` | `add_to_cart` | `checkout` — widget uses `add_to_cart` for direct cart API (§8.4).
+
 ---
 
-### 8.3 POST `/api/v1/widget/chat/stream` (Phase 2)
+### 8.3 POST `/api/v1/widget/cart`
+
+Direct add-to-cart without LLM (widget product cards / CTA chips).
+
+**Auth:** `X-API-Key` (widget public key)
+
+**Request:**
+
+```json
+{
+  "sessionId": "web_sess_abc",
+  "sku": "SHOE-BLU-9",
+  "quantity": 1,
+  "variant": "Size 9"
+}
+```
+
+**Response 200:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "web_sess_abc",
+    "conversationId": "conv_web_xyz",
+    "sku": "SHOE-BLU-9",
+    "message": "Added Blue Runner to your cart (1 × $89.99).",
+    "cart": {
+      "items": [{ "sku": "SHOE-BLU-9", "name": "Blue Runner", "quantity": 1, "unitPrice": 89.99 }],
+      "subtotal": 89.99,
+      "currency": "USD"
+    }
+  }
+}
+```
+
+**Errors:** `400` — unknown SKU, out of stock, validation error.
+
+---
+
+### 8.4 POST `/api/v1/widget/chat/stream` (Phase 2)
 
 **Response:** `text/event-stream` (SSE)
 
@@ -1601,6 +1659,7 @@ Send a message in the onboarding simulator (wraps internal chat).
 | `/auth/login`         | 10/min per IP                 |
 | `/auth/signup`        | 5/min per IP                  |
 | `/api/v1/widget/chat` | 30/min per API key            |
+| `/api/v1/widget/cart` | 30/min per API key            |
 | Admin APIs            | 100/min per tenant            |
 | Webhooks              | No limit (signature verified) |
 
@@ -1661,6 +1720,7 @@ Send a message in the onboarding simulator (wraps internal chat).
 | GET       | `/api/v1/conversations/{id}/messages`      | Bearer     | MVP   |
 | GET       | `/api/v1/widget/config`                    | API Key    | MVP   |
 | POST      | `/api/v1/widget/chat`                      | API Key    | MVP   |
+| POST      | `/api/v1/widget/cart`                      | API Key    | MVP   |
 | GET/POST  | `/webhooks/meta`                           | Signature  | MVP   |
 | GET       | `/health`                                  | —          | MVP   |
 | GET/POST  | `/api/v1/billing/*`                        | Bearer     | P2    |

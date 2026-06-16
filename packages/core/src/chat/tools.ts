@@ -1,6 +1,6 @@
-import type { AuthContext, ChatIntent } from "@commercechat/shared";
+import type { AuthContext, ChatIntent, ChatSubIntent, FunnelStage } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
-import { getProductBySku, getStoreCurrency, searchProductCache, type ProductRecord } from "../catalog/products";
+import { getProductBySku, getRelatedProducts, getStoreCurrency, searchProductCache, type ProductRecord } from "../catalog/products";
 import { lookupWordPressOrder } from "../commerce/wordpress/service";
 import { getTenantConfig } from "../tenant/service";
 import { retrieveKnowledge } from "../ingest/retrieve";
@@ -73,15 +73,70 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
       required: ["orderId"],
     },
   },
+  compare_products: {
+    name: "compare_products",
+    description: "Compare 2–4 products by SKU (price, stock, category, description)",
+    parameters: {
+      type: "object",
+      properties: {
+        skus: {
+          type: "array",
+          items: { type: "string" },
+          description: "Product SKUs to compare",
+        },
+      },
+      required: ["skus"],
+    },
+  },
+  get_related_products: {
+    name: "get_related_products",
+    description: "Get related products in the same category as a SKU or category name",
+    parameters: {
+      type: "object",
+      properties: {
+        sku: { type: "string" },
+        category: { type: "string" },
+        limit: { type: "integer", default: 5 },
+      },
+      required: [],
+    },
+  },
 };
 
-export function toolsForIntent(intent: ChatIntent, message?: string): ToolDefinition[] {
+export function toolsForIntent(
+  intent: ChatIntent,
+  message?: string,
+  funnelStage?: FunnelStage,
+  subIntent?: ChatSubIntent
+): ToolDefinition[] {
   const names: string[] = [];
   const wantsProducts = messageMentionsProducts(message ?? "");
-  if (intent === "product" || intent === "checkout") {
+  const inCartFlow = funnelStage === "cart" || funnelStage === "checkout";
+
+  if (subIntent === "order_status") {
+    return [TOOL_DEFINITIONS.get_order_status!];
+  }
+  if (subIntent === "cart_review") {
+    names.push("get_cart");
+  }
+  if (subIntent === "checkout_ready" || subIntent === "cart_review") {
+    names.push("get_cart", "create_checkout_link");
+  }
+  if (subIntent === "faq_objection") {
+    names.push("get_order_status");
+    if (wantsProducts) names.push("search_products", "get_product_details");
+    return [...new Set(names)].map((n) => TOOL_DEFINITIONS[n]!);
+  }
+  if (subIntent === "product_compare" || subIntent === "product_detail" || subIntent === "product_browse") {
+    names.push("search_products", "get_product_details", "add_to_cart", "get_related_products");
+  }
+  if (subIntent === "product_compare" || funnelStage === "compare") {
+    names.push("compare_products");
+  }
+  if (intent === "product" || intent === "checkout" || funnelStage === "compare") {
     names.push("search_products", "get_product_details", "add_to_cart");
   }
-  if (intent === "checkout") {
+  if (intent === "checkout" || inCartFlow) {
     names.push("get_cart", "create_checkout_link", "get_order_status");
   }
   if (intent === "faq") {
@@ -93,7 +148,7 @@ export function toolsForIntent(intent: ChatIntent, message?: string): ToolDefini
   if ((intent === "greeting" || intent === "unknown") && wantsProducts) {
     names.push("search_products", "get_product_details");
   }
-  return names.map((n) => TOOL_DEFINITIONS[n]!);
+  return [...new Set(names)].map((n) => TOOL_DEFINITIONS[n]!);
 }
 
 async function mergeProductSearchResults(
@@ -145,6 +200,22 @@ async function mergeProductSearchResults(
   return ordered.slice(0, limit);
 }
 
+function productDto(p: ProductRecord) {
+  return {
+    sku: p.sku,
+    name: p.name,
+    description: p.description,
+    price: p.price,
+    currency: p.currency,
+    category: p.category,
+    inStock: p.inStock,
+    imageUrl: p.imageUrl,
+    imageUrls: p.imageUrls,
+    url: p.productUrl,
+    variants: p.variants,
+  };
+}
+
 export interface ToolExecutionContext {
   auth: AuthContext;
   config: CoreConfig;
@@ -191,18 +262,46 @@ export async function executeTool(
       return {
         success: true,
         result: {
-          products: merged.map((p) => ({
-            sku: p.sku,
-            name: p.name,
-            description: p.description,
-            price: p.price,
-            currency: p.currency,
-            inStock: p.inStock,
-            imageUrl: p.imageUrl,
-            imageUrls: p.imageUrls,
-            url: p.productUrl,
-          })),
+          products: merged.map((p) => productDto(p)),
           totalFound: merged.length,
+        },
+      };
+    }
+    case "compare_products": {
+      const rawSkus = args.skus;
+      const skus = Array.isArray(rawSkus)
+        ? rawSkus.map((s) => String(s).trim()).filter(Boolean)
+        : [];
+      if (skus.length < 2) {
+        return { result: { error: "Provide at least 2 SKUs to compare" }, success: false };
+      }
+      const loaded = await Promise.all(
+        skus.slice(0, 4).map((sku) => getProductBySku(ctx.auth.tenantId, sku, ctx.config))
+      );
+      const products = loaded.filter((p): p is ProductRecord => p != null);
+      if (products.length < 2) {
+        return { result: { error: "Could not find enough products to compare" }, success: false };
+      }
+      return {
+        success: true,
+        result: {
+          products: products.map((p) => productDto(p)),
+          comparedSkus: products.map((p) => p.sku),
+        },
+      };
+    }
+    case "get_related_products": {
+      const limit = Number(args.limit ?? 5);
+      const related = await getRelatedProducts(ctx.auth.tenantId, ctx.config, {
+        sku: args.sku ? String(args.sku) : undefined,
+        category: args.category ? String(args.category) : undefined,
+        limit,
+      });
+      return {
+        success: true,
+        result: {
+          products: related.map((p) => productDto(p)),
+          totalFound: related.length,
         },
       };
     }

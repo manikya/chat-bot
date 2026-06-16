@@ -1,10 +1,11 @@
-import type { ChatIntent } from "@commercechat/shared";
+import type { ChatIntent, ChatSubIntent, FunnelStage } from "@commercechat/shared";
 import {
   LK_CHECKOUT_KEYWORDS,
   LK_FAQ_KEYWORDS,
   LK_GREETING_PATTERN,
   LK_PRODUCT_KEYWORDS,
 } from "./locale";
+import { messageSignalsCompare, messageSignalsObjection } from "./funnel";
 
 const FAQ_KEYWORDS = LK_FAQ_KEYWORDS;
 const PRODUCT_KEYWORDS = LK_PRODUCT_KEYWORDS;
@@ -25,8 +26,58 @@ export function messageMentionsProducts(message: string): boolean {
   return PRODUCT_KEYWORDS.some((k) => lower.includes(k));
 }
 
-export function ragSourceTypesForIntent(intent: ChatIntent, message?: string): string[] {
+export function detectSubIntent(
+  message: string,
+  intent: ChatIntent,
+  funnelStage: FunnelStage
+): ChatSubIntent {
+  const lower = message.toLowerCase();
+
+  if (/\b(order\s*#?\s*\w+|track\s+(my\s+)?order|where is my order|order status)\b/i.test(message)) {
+    return "order_status";
+  }
+
+  if (intent === "checkout" || funnelStage === "checkout") {
+    return "checkout_ready";
+  }
+
+  if (funnelStage === "cart" || /\b(my cart|what'?s in my cart|cart items)\b/i.test(lower)) {
+    return "cart_review";
+  }
+
+  if (intent === "faq") {
+    if (funnelStage === "objection" || messageSignalsObjection(message)) {
+      return "faq_objection";
+    }
+    return "faq_policy";
+  }
+
+  if (intent === "product" || messageMentionsProducts(message)) {
+    if (messageSignalsCompare(message) || funnelStage === "compare") {
+      return "product_compare";
+    }
+    if (/\b(sku|details|tell me more|specs?|specification)\b/i.test(message)) {
+      return "product_detail";
+    }
+    return "product_browse";
+  }
+
+  if (intent === "checkout") return "checkout_ready";
+
+  return "product_browse";
+}
+
+export function ragSourceTypesForIntent(
+  intent: ChatIntent,
+  message?: string,
+  subIntent?: ChatSubIntent
+): string[] {
   const wantsProducts = messageMentionsProducts(message ?? "");
+  if (subIntent === "faq_objection") {
+    return wantsProducts
+      ? ["faq", "website", "catalog", "conversation"]
+      : ["faq", "website", "conversation"];
+  }
   switch (intent) {
     case "faq":
       return wantsProducts

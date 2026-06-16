@@ -20,6 +20,8 @@ AI-powered e-commerce chatbot SaaS for **WhatsApp**, **Facebook Messenger**, **I
 
 🛒 **Commerce:** Shopify OAuth app + widget toggle · WooCommerce plugin with catalog webhooks · auto product sync on catalog changes
 
+🧪 **Chat quality eval:** `npm run eval:chat` — golden cases against local or AWS dev API (see [07-chat-quality-roadmap.md](implementation/07-chat-quality-roadmap.md))
+
 ---
 
 ## Function specifications
@@ -59,6 +61,7 @@ Ready-to-build artifacts derived from the function specs:
 | 04  | [Onboarding & Registration](implementation/04-onboarding-and-registration.md) | Signup, verify, wizard steps, team invites |
 | 05  | [UI Inventory & Actions](implementation/05-ui-inventory.md) | All screens, elements, and user actions |
 | 06  | [API Implementation Status](implementation/06-api-implementation-status.md) | Built vs mock vs remaining endpoints |
+| 07  | [Chat Quality Roadmap](implementation/07-chat-quality-roadmap.md) | Sales funnel phases 1–4, eval, widget CTAs |
 
 
 ---

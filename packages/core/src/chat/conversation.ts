@@ -1,6 +1,6 @@
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { generateId } from "@commercechat/shared";
-import type { ChatIntent, ConversationHandlingMode } from "@commercechat/shared";
+import type { ChatIntent, ConversationHandlingMode, FunnelStage, QualificationState } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
@@ -28,6 +28,8 @@ export interface ConversationState {
   handlingMode?: ConversationHandlingMode;
   assignedToUserId?: string;
   handoffAt?: string;
+  funnelStage?: FunnelStage;
+  qualification?: QualificationState;
   messageCount: number;
   lastInboundAt?: string;
   lastOutboundAt?: string;
@@ -79,6 +81,7 @@ export async function resolveConversation(
     externalUserId,
     status: "active",
     handlingMode: "bot",
+    funnelStage: "discover",
     messageCount: 0,
     createdAt: now,
     updatedAt: now,
@@ -263,6 +266,45 @@ export async function updateConversationProfile(
   );
 }
 
+export async function updateConversationFunnel(
+  tenantId: string,
+  conversation: Pick<ConversationState, "channel" | "externalUserId">,
+  funnelStage: FunnelStage,
+  config: CoreConfig,
+  qualification?: QualificationState
+) {
+  const db = getDocClient(config);
+  const now = new Date().toISOString();
+  const names: Record<string, string> = {
+    "#funnelStage": "funnelStage",
+    "#updatedAt": "updatedAt",
+  };
+  const values: Record<string, unknown> = {
+    ":funnelStage": funnelStage,
+    ":updatedAt": now,
+  };
+  const setParts = ["#funnelStage = :funnelStage", "#updatedAt = :updatedAt"];
+
+  if (qualification !== undefined) {
+    names["#qualification"] = "qualification";
+    values[":qualification"] = qualification;
+    setParts.push("#qualification = :qualification");
+  }
+
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: {
+        PK: Keys.tenantPk(tenantId),
+        SK: Keys.conversation(conversation.channel, conversation.externalUserId),
+      },
+      UpdateExpression: `SET ${setParts.join(", ")}`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    })
+  );
+}
+
 export async function listTenantConversations(
   tenantId: string,
   config: CoreConfig,
@@ -329,6 +371,7 @@ export async function listTenantConversations(
       customerName: customerDisplayName(c),
       status: c.status,
       handlingMode: c.handlingMode ?? "bot",
+      funnelStage: c.funnelStage ?? "discover",
       assignedToUserId: c.assignedToUserId ?? null,
       messageCount: c.messageCount,
       lastInboundAt: c.lastInboundAt ?? c.createdAt,

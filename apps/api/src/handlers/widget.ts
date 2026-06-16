@@ -7,7 +7,9 @@ import {
   runChatOrchestrator,
   toWidgetChatResponse,
   verifyWidgetApiKey,
+  widgetAddToCart,
   widgetChat,
+  type WidgetCartBody,
   type WidgetChatBody,
 } from "@commercechat/core";
 import { ApiError, ErrorCodes } from "@commercechat/shared";
@@ -21,6 +23,11 @@ export const configHandler = createTenantHandler(async (_event, tenantId) =>
 export const chatHandler = createApiKeyHandler(async (event, tenantId) => {
   const body = parseBody<WidgetChatBody>(event);
   return widgetChat(tenantId, body, loadConfig());
+});
+
+export const cartHandler = createApiKeyHandler(async (event, tenantId) => {
+  const body = parseBody<WidgetCartBody>(event);
+  return widgetAddToCart(tenantId, body, loadConfig());
 });
 
 export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) => {

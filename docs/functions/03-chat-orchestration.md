@@ -1,8 +1,9 @@
 # Function Spec: Chat Orchestration
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
-**Version:** 1.1  
-**Implementation:** `packages/core/src/chat/orchestrator.ts`
+**Version:** 1.2  
+**Implementation:** `packages/core/src/chat/orchestrator.ts`  
+**Related:** [07-chat-quality-roadmap.md](../implementation/07-chat-quality-roadmap.md) (funnel, sub-intents, CTAs)
 
 ---
 
@@ -62,8 +63,9 @@ flowchart TD
   B -->|no| X[Reject]
   B --> C[reserveMessageQuota]
   C --> D[Load tenant config + conversation history]
-  D --> E[detectIntent]
-  E --> F[Persist inbound MSG]
+  D --> E[detectIntent + detectSubIntent]
+  E --> E2[resolveFunnelContext + qualification]
+  E2 --> F[Persist inbound MSG]
   F --> G[retrieveForIntent RAG]
   G --> H[buildSystemPrompt + load cart]
   H --> I[createLLMProvider]
@@ -91,14 +93,18 @@ Numbered steps (spec):
 6.  Persist inbound message to DynamoDB
 7.  Load conversation history + cart
 8.  Detect intent (faq | product | checkout | greeting | unknown)
-9.  Retrieve RAG context (filtered by intent + source_type)
-10. Build LLM messages array (system + history + user)
-11. Call OpenAI via createLLMProvider (model per intent from tenant llmConfig)
-12. If tool_calls → execute tools → loop (max 3 rounds)
-13. Fallback reply if no LLM or empty response
-14. Persist outbound message(s) to DynamoDB
-15. Increment usage counters (messages, tokens)
-16. Return reply to channel handler (Meta send / widget SSE / JSON)
+9.  Detect sub-intent (browse, compare, detail, objection_*, etc.)
+10. Resolve funnel stage (discover → compare → objection → cart → checkout)
+11. Update qualification slots (budget, category, recipient, objections)
+12. Retrieve RAG context (filtered by intent + source_type; objection FAQ tag boost)
+13. Build LLM messages array (system + history + user + funnel hints)
+14. Call OpenAI via createLLMProvider (model per intent from tenant llmConfig)
+15. If tool_calls → execute tools → loop (max 3 rounds)
+16. Build suggestedActions (CTAs) for web channel
+17. Fallback reply if no LLM or empty response
+18. Persist outbound message(s) to DynamoDB (with funnelStage, subIntent)
+19. Increment usage counters (messages, tokens)
+20. Return reply to channel handler (Meta send / widget SSE / JSON)
 ```
 
 ---
@@ -109,7 +115,7 @@ Numbered steps (spec):
 
 | PK | SK | Attributes |
 |----|-----|------------|
-| `TENANT#<id>` | `CONV#<channel>#<externalUserId>` | conversationId, cartId, lastInboundAt, lastOutboundAt, status |
+| `TENANT#<id>` | `CONV#<channel>#<externalUserId>` | conversationId, cartId, funnelStage, qualification, lastInboundAt, lastOutboundAt, status |
 | `TENANT#<id>` | `MSG#<conversationId>#<timestamp>` | role, content, channel, tokenCount |
 
 ### Conversation state object
@@ -121,6 +127,13 @@ Numbered steps (spec):
   "channel": "whatsapp",
   "externalUserId": "919876543210",
   "cartId": "cart_xyz",
+  "funnelStage": "discover",
+  "qualification": {
+    "budget": "under_50",
+    "category": "sneakers",
+    "recipient": null,
+    "objections": []
+  },
   "status": "active",
   "lastInboundAt": "2026-06-06T12:00:00Z",
   "messageCount": 14,
@@ -147,7 +160,28 @@ Rule-based classifier first (fast, no extra LLM cost):
 | First message in session | `greeting` |
 | Default | `product` |
 
-### Phase 2
+### Phase 2+ (shipped)
+
+Sub-intents refine product/checkout turns (`packages/core/src/chat/intent.ts`):
+
+| Sub-intent | Typical signals |
+|------------|-----------------|
+| `product_browse` | open-ended search, gifts, recommendations |
+| `product_compare` | vs, difference, which is better |
+| `product_detail` | specific SKU, specs, sizing |
+| `objection_price` / `objection_shipping` / … | cost, delivery, returns concerns |
+
+Funnel stage (`packages/core/src/chat/funnel.ts`) advances from conversation + cart state:
+
+| Stage | Meaning |
+|-------|---------|
+| `discover` | browsing, qualifying |
+| `compare` | comparing options |
+| `objection` | handling concerns |
+| `cart` | items in cart |
+| `checkout` | checkout link / order status |
+
+### Future
 
 Lightweight LLM classifier (GPT-4.1 nano) when rules confidence < 0.6.
 
@@ -189,7 +223,7 @@ flowchart LR
   INTENT[intent] --> TOOLS[toolsForIntent]
   TOOLS --> LLM[OpenAI chat]
   LLM -->|tool_calls| EXEC[executeTool]
-  EXEC --> CATALOG[search_products / cart / checkout]
+  EXEC --> CATALOG[search_products / compare / related / cart / checkout]
   EXEC --> ORDERS[get_order_status]
   EXEC --> LLM
 ```
@@ -210,6 +244,8 @@ See [06-ecommerce-tools.md](06-ecommerce-tools.md) for full specs.
 |------|--------------|
 | `search_products` | intent = product, checkout |
 | `get_product_details` | intent = product, checkout |
+| `compare_products` | sub-intent = product_compare |
+| `get_related_products` | intent = product (post-search / upsell) |
 | `add_to_cart` | intent = product, checkout |
 | `get_cart` | intent = checkout |
 | `create_checkout_link` | intent = checkout |
@@ -230,6 +266,8 @@ See [06-ecommerce-tools.md](06-ecommerce-tools.md) for full specs.
 
 - Markdown supported
 - Product cards (JSON → widget renders)
+- `suggestedActions` with `action`: `view` | `add_to_cart` | `checkout`
+- Widget `add_to_cart` calls `POST /api/v1/widget/cart` directly (no chat round-trip)
 - Streaming via SSE
 
 ### Response splitter
@@ -315,6 +353,8 @@ Current cart: {{cartSummary}}
   "conversationId": "conv_abc",
   "channel": "whatsapp",
   "intent": "product",
+  "subIntent": "product_browse",
+  "funnelStage": "discover",
   "llmProvider": "openai",
   "llmModel": "gpt-4o-mini",
   "inputTokens": 2100,

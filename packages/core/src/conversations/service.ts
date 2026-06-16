@@ -44,6 +44,8 @@ export async function getConversationDetail(
     lastInboundAt: conv.lastInboundAt ?? conv.createdAt,
     updatedAt: conv.updatedAt,
     ...conversationHandlingDto(conv),
+    funnelStage: conv.funnelStage ?? "discover",
+    qualification: conv.qualification ?? undefined,
     cart: cart?.items.length
       ? { items: cart.items, subtotal: cart.subtotal, currency: cart.currency }
       : undefined,

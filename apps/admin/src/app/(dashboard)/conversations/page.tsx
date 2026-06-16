@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { funnelStageLabel } from "@/lib/funnel-stage";
 
 const CHANNELS = ["all", "whatsapp", "web", "messenger", "instagram"] as const;
 
@@ -66,6 +67,7 @@ export default function ConversationsPage() {
                 <TableHead>Customer</TableHead>
                 <TableHead>Channel</TableHead>
                 <TableHead>Handling</TableHead>
+                <TableHead>Funnel</TableHead>
                 <TableHead>Messages</TableHead>
                 <TableHead>Last activity</TableHead>
                 <TableHead></TableHead>
@@ -80,6 +82,9 @@ export default function ConversationsPage() {
                     <Badge variant={c.handlingMode === "human" ? "default" : "outline"}>
                       {c.handlingMode === "human" ? "Human" : "Bot"}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{funnelStageLabel(c.funnelStage)}</Badge>
                   </TableCell>
                   <TableCell>{c.messageCount}</TableCell>
                   <TableCell className="text-muted-foreground">{new Date(c.updatedAt).toLocaleString()}</TableCell>

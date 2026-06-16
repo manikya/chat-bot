@@ -117,6 +117,41 @@ export async function getProductBySku(
   return res.Item as ProductRecord;
 }
 
+export async function getRelatedProducts(
+  tenantId: string,
+  config: CoreConfig,
+  options?: { sku?: string; category?: string; excludeSkus?: string[]; limit?: number }
+): Promise<ProductRecord[]> {
+  const limit = options?.limit ?? 5;
+  const exclude = new Set((options?.excludeSkus ?? []).map((s) => s.toUpperCase()));
+  let category = options?.category?.toLowerCase();
+
+  if (options?.sku) {
+    exclude.add(options.sku.toUpperCase());
+    const base = await getProductBySku(tenantId, options.sku, config);
+    if (base?.category) category = base.category.toLowerCase();
+  }
+
+  const items = (await listProductItems(tenantId, config)) as ProductRecord[];
+  const inCategory = items.filter((p) => {
+    if (exclude.has(p.sku.toUpperCase())) return false;
+    if (!category) return true;
+    return p.category?.toLowerCase() === category;
+  });
+
+  const picked = inCategory.slice(0, limit);
+  if (picked.length >= limit) return picked;
+
+  const seen = new Set(picked.map((p) => p.sku));
+  for (const p of items) {
+    if (picked.length >= limit) break;
+    if (exclude.has(p.sku.toUpperCase()) || seen.has(p.sku)) continue;
+    picked.push(p);
+    seen.add(p.sku);
+  }
+  return picked.slice(0, limit);
+}
+
 export async function searchProductCache(
   tenantId: string,
   query: string,

@@ -215,10 +215,16 @@ Validate `Origin` header against allowlist.
 └─────────────────────────┘
 ```
 
-Button clicks send structured message to API:
+Button clicks:
+
+- **Add to cart** — `POST /api/v1/widget/cart` (direct; no LLM)
+- **Details / chips** — `POST /api/v1/widget/chat` with message text or structured action
+
 ```json
 { "action": "add_to_cart", "sku": "SHOE-BLU-9" }
 ```
+
+`suggestedActions` from chat API may include `action: "add_to_cart"` — widget `handleWidgetAction()` routes these to the cart endpoint.
 
 ---
 
@@ -248,7 +254,7 @@ Versioned URLs: `widget/v1.2.3/bundle.js` for cache busting.
 
 | Function | Trigger | Responsibility |
 |----------|---------|----------------|
-| `chat-api` | API Gateway POST | Sync orchestrator + SSE |
+| `widget` | API Gateway POST | Sync orchestrator (`/widget/chat`, `/widget/cart`) + SSE |
 | `widget-config` | API Gateway GET | Return tenant widget config |
 
 ---
@@ -275,6 +281,7 @@ Sent to `POST /api/v1/analytics/events` (batched, fire-and-forget).
 - [x] Widget respects `enabled: false` from config API
 - [ ] SSE streaming renders tokens incrementally
 - [~] Product action chips render when API returns `suggestedActions`
+- [x] Add-to-cart CTA calls `/api/v1/widget/cart` directly (`v1.js`)
 - [ ] Rich product cards (image + add-to-cart) render in message list
 - [x] Session persists on page reload (`localStorage`)
 - [ ] Rate limit triggers gracefully

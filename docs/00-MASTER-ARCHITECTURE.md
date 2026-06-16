@@ -74,6 +74,8 @@ The platform runs on **AWS serverless**, uses a **switchable LLM layer** (OpenAI
 | [03](implementation/03-task-plan.md) | Task Plan | Sprint backlog with dependencies and milestones |
 | [04](implementation/04-onboarding-and-registration.md) | Onboarding & Registration | Signup, email verify, shop wizard, team invites |
 | [05](implementation/05-ui-inventory.md) | UI Inventory & Actions | Screens, UI elements, and merchant/shopper actions |
+| [06](implementation/06-api-implementation-status.md) | API Implementation Status | Built vs mock vs remaining endpoints |
+| [07](implementation/07-chat-quality-roadmap.md) | Chat Quality Roadmap | Sales funnel phases 1–4, eval suite, widget CTAs |
 
 ---
 

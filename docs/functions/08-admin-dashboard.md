@@ -69,7 +69,8 @@ Step 6: Copy widget embed code
 | Feature | Spec |
 |---------|------|
 | List | Filter by channel, date, status; paginated |
-| Thread view | Full message history; customer ID masked |
+| Thread view | Full message history; customer ID masked; **funnel stage badge** + **shopper context** (qualification slots) |
+| Analytics | `funnelStageBreakdown`, `subIntentBreakdown` on dashboard |
 | Search | Full-text on conversation content (OpenSearch — Phase 3; DynamoDB scan MVP) |
 | Export | CSV download (Pro plan) |
 | Manual reply (Phase 3) | Human takeover |

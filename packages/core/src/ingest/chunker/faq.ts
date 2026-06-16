@@ -4,6 +4,8 @@ import type { ChunkMetadata, VectorChunk } from "../types";
 export interface FaqItem {
   question: string;
   answer: string;
+  /** Optional tags for retrieval e.g. objection:price */
+  tags?: string[];
 }
 
 export function chunkFaqItems(
@@ -18,6 +20,7 @@ export function chunkFaqItems(
       question: item.question.trim(),
       title: item.question.trim(),
       crawled_at: syncedAt,
+      ...(item.tags?.length ? { tags: item.tags } : {}),
     },
   }));
 }
