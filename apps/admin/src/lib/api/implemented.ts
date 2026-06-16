@@ -50,6 +50,8 @@ export const IMPLEMENTED_ROUTES = [
   "POST /api/v1/commerce/shopify/sync",
   "DELETE /api/v1/commerce/shopify",
   "GET /api/v1/commerce/shopify/widget-bootstrap",
+  "GET /api/v1/commerce/shopify/widget",
+  "PATCH /api/v1/commerce/shopify/widget",
   "GET /api/v1/team",
   "PATCH /api/v1/team/:userId",
   "DELETE /api/v1/team/:userId",
@@ -85,6 +87,7 @@ export const IMPLEMENTED_ROUTES = [
   "POST /api/v1/billing/cancel",
   "POST /api/v1/billing/reactivate",
   "POST /webhooks/payment",
+  "POST /webhooks/commerce/woocommerce",
 ] as const;
 
 export const REAL_API_DOMAINS = [

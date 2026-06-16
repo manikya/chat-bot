@@ -62,6 +62,8 @@ export interface TenantConfig {
     primaryColor: string;
     position: string;
     suggestedQuestions: string[];
+    /** When false, widget is hidden and Shopify ScriptTag is removed. Default true. */
+    widgetEnabled?: boolean;
   };
   featureFlags: Record<string, boolean>;
 }

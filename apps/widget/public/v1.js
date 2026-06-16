@@ -25,7 +25,17 @@
     return;
   }
 
+  var scriptUrlParams = null;
+  try {
+    scriptUrlParams = new URL(script.src).searchParams;
+  } catch (e) {
+    scriptUrlParams = null;
+  }
+
   var apiBase = script.getAttribute("data-api-url");
+  if (!apiBase && scriptUrlParams) {
+    apiBase = scriptUrlParams.get("api_url");
+  }
   if (!apiBase) {
     try {
       var u = new URL(script.src);
@@ -52,9 +62,14 @@
     position: "bottom-right",
   };
 
-  var root = document.createElement("div");
+  var root = document.createElement("commercechat-root");
   root.id = "commercechat-widget";
   root.setAttribute("data-cc-root", "1");
+  // Dawn and other Shopify themes hide empty divs (div:empty { display:none }). Use a
+  // custom element host so theme resets do not hide the shadow root.
+  root.style.cssText =
+    "display:block!important;position:fixed;inset:0;z-index:2147483000;pointer-events:none;" +
+    "width:0;height:0;margin:0;padding:0;border:0;overflow:visible;background:transparent;";
   var shadow = root.attachShadow({ mode: "open" });
 
   var style = document.createElement("style");
@@ -65,16 +80,20 @@
   container.className = "cc-root";
   shadow.appendChild(container);
 
-  document.body.appendChild(root);
+  function mountRoot() {
+    if (!document.body) return false;
+    if (!root.isConnected) document.body.appendChild(root);
+    return true;
+  }
 
   function getStyles() {
     return (
       ".cc-root{font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.4;}" +
       ".cc-bubble{position:fixed;z-index:2147483000;width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;" +
-      "box-shadow:0 4px 20px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;}" +
+      "box-shadow:0 4px 20px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;pointer-events:auto;}" +
       ".cc-bubble-br{bottom:20px;right:20px}.cc-bubble-bl{bottom:20px;left:20px}" +
       ".cc-panel{position:fixed;z-index:2147483001;width:380px;max-width:calc(100vw - 24px);height:520px;max-height:calc(100vh - 100px);" +
-      "background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden;}" +
+      "background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden;pointer-events:auto;}" +
       ".cc-panel-br{bottom:88px;right:20px}.cc-panel-bl{bottom:88px;left:20px}" +
       ".cc-header{padding:14px 16px;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center;}" +
       ".cc-close{background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;opacity:.9}" +
@@ -122,6 +141,7 @@
   }
 
   function render() {
+    if (!mountRoot()) return;
     container.innerHTML = "";
     container.style.setProperty("--cc-primary", state.primaryColor);
 
@@ -557,21 +577,41 @@
     });
   }
 
-  fetch(apiBase + "/api/v1/widget/config", {
-    headers: { "X-API-Key": apiKey },
-  })
-    .then(function (res) {
-      return res.json();
+  function boot() {
+    fetch(apiBase + "/api/v1/widget/config", {
+      headers: { "X-API-Key": apiKey },
     })
-    .then(function (json) {
-      if (json.success && json.data) {
-        state.config = json.data;
-        state.primaryColor = json.data.primaryColor || state.primaryColor;
-        state.position = json.data.position || state.position;
-      }
-      render();
-    })
-    .catch(function () {
-      render();
-    });
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (json) {
+        if (json.success && json.data) {
+          if (json.data.enabled === false) {
+            console.info("[CommerceChat] Widget disabled for this store");
+            return;
+          }
+          state.config = json.data;
+          state.primaryColor = json.data.primaryColor || state.primaryColor;
+          state.position = json.data.position || state.position;
+        }
+        render();
+      })
+      .catch(function () {
+        render();
+      });
+  }
+
+  function start() {
+    if (mountRoot()) {
+      boot();
+      return;
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", start, { once: true });
+    } else {
+      setTimeout(start, 0);
+    }
+  }
+
+  start();
 })();

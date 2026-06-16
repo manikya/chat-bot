@@ -63,7 +63,7 @@ The merchant pastes their CommerceChat `pk_live_…` key when prompted (also sho
 
 ### 5. Sync products
 
-CommerceChat admin → **Knowledge → Shopify** → **Sync products**
+Catalog updates automatically via Shopify product webhooks. Use **Knowledge → Shopify → Sync products** for a full manual refresh.
 
 ---
 

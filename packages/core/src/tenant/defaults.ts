@@ -36,6 +36,7 @@ export function defaultTenantConfig(storeName: string, options?: { timezone?: st
       primaryColor: "#4F46E5",
       position: "bottom-right",
       suggestedQuestions: defaultSuggestedQuestions(market),
+      widgetEnabled: true,
     },
     featureFlags: {
       conversationIngest: false,

@@ -10,14 +10,14 @@ export const WOOCOMMERCE_PLUGIN_INSTALL_STEPS = [
   "Download the CommerceChat Connector plugin (.zip)",
   "In WordPress: Plugins → Add New → Upload Plugin → choose the zip → Install → Activate",
   "Go to Settings → CommerceChat (or WooCommerce → CommerceChat) → Generate API key",
-  "Paste your store URL and API key below, then connect",
+  "Paste your store URL and API key below, then connect — products sync automatically on changes",
 ] as const;
 
 export const SHOPIFY_APP_INSTALL_STEPS = [
   "Copy your widget API key below (pk_live_…)",
   "Click Install in Shopify and approve the CommerceChat app",
   "In Shopify Admin, paste your API key on the CommerceChat connect screen",
-  "Return here and sync products to import your catalog",
+  "Products sync automatically when you add or edit items in Shopify",
 ] as const;
 
 export function normalizeShopDomain(input: string): string {

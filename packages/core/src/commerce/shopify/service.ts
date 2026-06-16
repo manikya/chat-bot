@@ -1,4 +1,4 @@
-import { PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand, QueryCommand, UpdateCommand, GetCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiError, ErrorCodes, generateId, ok, type AuthContext } from "@commercechat/shared";
 import type { CoreConfig } from "../../config";
 import { getDocClient } from "../../db/client";
@@ -10,7 +10,9 @@ import {
   fetchShopifyShop,
   normalizeShopDomain,
   validateConnectShopifyBody,
+  ensureShopifyProductWebhooks,
 } from "./client";
+import { syncCommerceChatScriptTag, removeCommerceChatScriptTags } from "./widget-script";
 import {
   deleteShopifyCredentials,
   loadShopifyCredentials,
@@ -18,8 +20,50 @@ import {
 } from "./credentials";
 import type { ConnectShopifyBody, ShopifyProduct } from "./types";
 import { getWidgetConfig } from "../../widget/service";
+import { queueCommerceCatalogSync } from "../catalog-sync-trigger";
 
 const SHOPIFY_SOURCE_NAME = "Shopify store";
+
+async function putShopRouting(shopDomain: string, tenantId: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.shopRoutingPk(shopDomain),
+        SK: Keys.shopRoutingSk(),
+        tenantId,
+        shopDomain,
+        connectedAt: new Date().toISOString(),
+      },
+    })
+  );
+}
+
+async function deleteShopRouting(shopDomain: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  await db.send(
+    new DeleteCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.shopRoutingPk(shopDomain), SK: Keys.shopRoutingSk() },
+    })
+  );
+}
+
+export async function resolveTenantByShopDomain(
+  shopDomain: string,
+  config: CoreConfig
+): Promise<string | null> {
+  const shop = normalizeShopDomain(shopDomain);
+  const db = getDocClient(config);
+  const res = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.shopRoutingPk(shop), SK: Keys.shopRoutingSk() },
+    })
+  );
+  return (res.Item?.tenantId as string) ?? null;
+}
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -52,7 +96,7 @@ export function shopifyProductToCatalog(product: ShopifyProduct, shopDomain: str
   };
 }
 
-async function findShopifySourceId(tenantId: string, config: CoreConfig): Promise<string | null> {
+export async function findShopifySourceId(tenantId: string, config: CoreConfig): Promise<string | null> {
   const db = getDocClient(config);
   const res = await db.send(
     new QueryCommand({
@@ -117,19 +161,119 @@ export async function getShopifyConnectorStatus(auth: AuthContext, config: CoreC
     shopDomain: creds?.shopDomain ?? (connector as { siteUrl?: string }).siteUrl,
     lastSyncAt: (connector as { lastSyncAt?: string }).lastSyncAt,
     sourceId,
+    widgetEnabled: tenantConfig.data!.widgetConfig?.widgetEnabled !== false,
   });
+}
+
+function readWidgetEnabled(tenantConfig: { widgetConfig?: { widgetEnabled?: boolean } }): boolean {
+  return tenantConfig.widgetConfig?.widgetEnabled !== false;
+}
+
+export async function getShopifyWidgetSettings(auth: AuthContext, config: CoreConfig) {
+  const tenantConfig = await getTenantConfig(auth, config);
+  const creds = await loadShopifyCredentials(auth.tenantId, config);
+  if (!creds) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Shopify is not connected", 400);
+  }
+  return ok({
+    widgetEnabled: readWidgetEnabled(tenantConfig.data!),
+    hasWidgetApiKey: Boolean(creds.widgetApiKey),
+  });
+}
+
+export async function setShopifyWidgetEnabled(
+  auth: AuthContext,
+  enabled: boolean,
+  config: CoreConfig,
+  options?: { widgetApiKey?: string }
+) {
+  const tenantConfig = await getTenantConfig(auth, config);
+  const creds = await loadShopifyCredentials(auth.tenantId, config);
+  if (!creds) {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Shopify is not connected", 400);
+  }
+
+  const widgetApiKey = options?.widgetApiKey ?? creds.widgetApiKey;
+  const nextCreds =
+    options?.widgetApiKey && options.widgetApiKey !== creds.widgetApiKey
+      ? { ...creds, widgetApiKey: options.widgetApiKey, updatedAt: new Date().toISOString() }
+      : creds;
+
+  if (options?.widgetApiKey) {
+    await saveShopifyCredentials(auth.tenantId, nextCreds, config);
+  }
+
+  await updateTenantConfig(
+    auth,
+    {
+      widgetConfig: {
+        ...tenantConfig.data!.widgetConfig,
+        widgetEnabled: enabled,
+      },
+    },
+    config
+  );
+
+  try {
+    await syncCommerceChatScriptTag(nextCreds, widgetApiKey, enabled, config);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, message, 400);
+  }
+
+  return ok({ widgetEnabled: enabled });
+}
+
+export async function getShopifyWidgetSettingsForTenant(tenantId: string, config: CoreConfig) {
+  const db = getDocClient(config);
+  const configRes = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.config() },
+    })
+  );
+  if (!configRes.Item) {
+    return { widgetEnabled: true };
+  }
+  return { widgetEnabled: readWidgetEnabled(configRes.Item as { widgetConfig?: { widgetEnabled?: boolean } }) };
 }
 
 export async function connectShopifyStore(
   auth: AuthContext,
   body: ConnectShopifyBody,
-  config: CoreConfig
+  config: CoreConfig,
+  connectOptions?: { widgetApiKey?: string }
 ) {
   const creds = validateConnectShopifyBody(body);
   const shop = await fetchShopifyShop(creds, config);
 
-  await saveShopifyCredentials(auth.tenantId, creds, config);
+  const storedCreds = {
+    ...creds,
+    ...(connectOptions?.widgetApiKey ? { widgetApiKey: connectOptions.widgetApiKey } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+  await saveShopifyCredentials(auth.tenantId, storedCreds, config);
+  await putShopRouting(creds.shopDomain, auth.tenantId, config);
   const sourceId = await ensureShopifySource(auth, creds.shopDomain, config);
+
+  const webhookUrl = `${config.apiPublicUrl.replace(/\/$/, "")}/shopify-app/webhooks`;
+  try {
+    await ensureShopifyProductWebhooks(creds, webhookUrl, config);
+  } catch (err) {
+    console.warn(
+      "[shopify] product webhook registration failed",
+      creds.shopDomain,
+      err instanceof Error ? err.message : err
+    );
+  }
+
+  void queueCommerceCatalogSync(auth.tenantId, "shopify", config).catch((err) => {
+    console.warn(
+      "[shopify] initial catalog sync queue failed",
+      auth.tenantId,
+      err instanceof Error ? err.message : err
+    );
+  });
 
   await updateTenantConfig(
     auth,
@@ -143,9 +287,24 @@ export async function connectShopifyStore(
         currency: shop.currency,
         lastSyncAt: undefined,
       },
+      widgetConfig: {
+        widgetEnabled: true,
+      },
     },
     config
   );
+
+  if (connectOptions?.widgetApiKey) {
+    try {
+      await syncCommerceChatScriptTag(storedCreds, connectOptions.widgetApiKey, true, config);
+    } catch (err) {
+      console.warn(
+        "[shopify] widget script tag install failed",
+        creds.shopDomain,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
 
   return ok({
     connected: true,
@@ -157,7 +316,22 @@ export async function connectShopifyStore(
 }
 
 export async function disconnectShopifyStore(auth: AuthContext, config: CoreConfig) {
+  const creds = await loadShopifyCredentials(auth.tenantId, config);
+  if (creds) {
+    try {
+      await removeCommerceChatScriptTags(creds);
+    } catch (err) {
+      console.warn(
+        "[shopify] script tag removal failed",
+        creds.shopDomain,
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
   await deleteShopifyCredentials(auth.tenantId, config);
+  if (creds?.shopDomain) {
+    await deleteShopRouting(creds.shopDomain, config);
+  }
 
   const sourceId = await findShopifySourceId(auth.tenantId, config);
   if (sourceId) {
@@ -215,6 +389,14 @@ export async function touchShopifySyncTimestamp(auth: AuthContext, config: CoreC
     },
     config
   );
+}
+
+export async function ensureShopifyWebhooksForTenant(tenantId: string, config: CoreConfig) {
+  const creds = await loadShopifyCredentials(tenantId, config);
+  if (!creds) return;
+  await putShopRouting(creds.shopDomain, tenantId, config);
+  const webhookUrl = `${config.apiPublicUrl.replace(/\/$/, "")}/shopify-app/webhooks`;
+  await ensureShopifyProductWebhooks(creds, webhookUrl, config);
 }
 
 export async function getShopifyWidgetBootstrap(tenantId: string, config: CoreConfig) {

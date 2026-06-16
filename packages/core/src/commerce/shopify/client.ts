@@ -45,7 +45,11 @@ function adminUrl(creds: ShopifyCredentials, path: string): string {
 async function shopifyRequest<T>(
   creds: ShopifyCredentials,
   path: string,
-  options?: { method?: string; query?: Record<string, string | number | undefined> }
+  options?: {
+    method?: string;
+    query?: Record<string, string | number | undefined>;
+    body?: unknown;
+  }
 ): Promise<T> {
   const url = new URL(adminUrl(creds, path));
   if (options?.query) {
@@ -63,6 +67,7 @@ async function shopifyRequest<T>(
         Accept: "application/json",
         "Content-Type": "application/json",
       },
+      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
@@ -97,6 +102,17 @@ export async function fetchShopifyShop(
 ): Promise<ShopifyShopStatus> {
   const res = await shopifyRequest<{ shop: ShopifyShopStatus }>(creds, "/shop.json");
   return res.shop;
+}
+
+/** Returns false when Shopify rejects the offline access token (e.g. after app reinstall). */
+export async function verifyShopifyAccessToken(creds: ShopifyCredentials): Promise<boolean> {
+  try {
+    await fetchShopifyShop(creds, {} as CoreConfig);
+    return true;
+  } catch (err) {
+    if (err instanceof ApiError && err.statusCode === 401) return false;
+    throw err;
+  }
 }
 
 export async function fetchAllShopifyProducts(
@@ -153,4 +169,42 @@ export async function fetchShopifyOrderByName(
     { query: { status: "any", name: orderName, limit: 1 } }
   );
   return res.orders?.[0] ?? null;
+}
+
+const PRODUCT_WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete"] as const;
+
+export async function listShopifyWebhooks(creds: ShopifyCredentials, _config: CoreConfig) {
+  const res = await shopifyRequest<{ webhooks: Array<{ id: number; topic: string; address: string }> }>(
+    creds,
+    "/webhooks.json"
+  );
+  return res.webhooks ?? [];
+}
+
+export async function createShopifyWebhook(
+  creds: ShopifyCredentials,
+  topic: string,
+  address: string,
+  config: CoreConfig
+) {
+  await shopifyRequest(creds, "/webhooks.json", {
+    method: "POST",
+    body: { webhook: { topic, address, format: "json" } },
+  });
+}
+
+/** Register product catalog webhooks pointing at CommerceChat (idempotent). */
+export async function ensureShopifyProductWebhooks(
+  creds: ShopifyCredentials,
+  callbackUrl: string,
+  config: CoreConfig
+) {
+  const address = callbackUrl.replace(/\/$/, "");
+  const existing = await listShopifyWebhooks(creds, config);
+  for (const topic of PRODUCT_WEBHOOK_TOPICS) {
+    const registered = existing.some((w) => w.topic === topic && w.address === address);
+    if (!registered) {
+      await createShopifyWebhook(creds, topic, address, config);
+    }
+  }
 }

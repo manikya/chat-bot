@@ -33,7 +33,8 @@ export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
     primaryColor: tenantConfig.widgetConfig?.primaryColor ?? "#4F46E5",
     position: tenantConfig.widgetConfig?.position ?? "bottom-right",
     suggestedQuestions: tenantConfig.widgetConfig?.suggestedQuestions ?? [],
-    enabled: tenantIsOperational(status),
+    enabled:
+      tenantIsOperational(status) && tenantConfig.widgetConfig?.widgetEnabled !== false,
     embedCode: buildWidgetEmbedPlaceholder(prefix, config),
   });
 }

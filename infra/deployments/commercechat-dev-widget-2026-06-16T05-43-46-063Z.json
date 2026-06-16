@@ -1,0 +1,12 @@
+{
+  "createdAt": "2026-06-16T05:43:46.064Z",
+  "status": "success",
+  "stackName": "commercechat-dev-widget",
+  "environment": "dev",
+  "region": "us-east-1",
+  "accountId": "960884446408",
+  "widgetCdnUrl": "https://dtm79sin0m5bg.cloudfront.net",
+  "widgetScriptUrl": "https://dtm79sin0m5bg.cloudfront.net/widget/v1.js",
+  "bucket": "commercechat-dev-widget-960884446408-us-east-1",
+  "distributionId": "E2GLZI9BA4AGIY"
+}

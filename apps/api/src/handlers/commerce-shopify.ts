@@ -1,15 +1,18 @@
 import {
   connectShopifyStore,
   disconnectShopifyStore,
+  ensureShopifyWebhooksForTenant,
   getShopifyConnectorStatus,
   getShopifyWidgetBootstrap,
+  getShopifyWidgetSettings,
   loadConfig,
+  setShopifyWidgetEnabled,
   syncKnowledgeSource,
   type ConnectShopifyBody,
 } from "@commercechat/core";
 import { ApiError, ErrorCodes } from "@commercechat/shared";
 import { createApiKeyHandler, createHandler } from "../lib/handler";
-import { parseBody } from "../lib/apigw";
+import { getApiKey, parseBody } from "../lib/apigw";
 
 export const statusHandler = createHandler(
   async (_event, auth) => getShopifyConnectorStatus(auth!, loadConfig()),
@@ -27,10 +30,43 @@ export const connectHandler = createHandler(
 /** Store API key (pk_live_*) — Shopify app calls after OAuth to link the shop. */
 export const connectStoreHandler = createApiKeyHandler(async (event, tenantId) => {
   const body = parseBody<ConnectShopifyBody>(event);
+  const widgetApiKey = getApiKey(event);
   return connectShopifyStore(
     { tenantId, userId: "store", role: "admin", email: "store@commercechat" },
     body,
-    loadConfig()
+    loadConfig(),
+    { widgetApiKey: widgetApiKey ?? undefined }
+  );
+});
+
+export const widgetSettingsHandler = createHandler(
+  async (_event, auth) => getShopifyWidgetSettings(auth!, loadConfig()),
+  { requireAuth: true }
+);
+
+export const widgetPatchHandler = createHandler(
+  async (event, auth) => {
+    const body = parseBody<{ widgetEnabled?: boolean }>(event);
+    if (typeof body.widgetEnabled !== "boolean") {
+      throw new ApiError(ErrorCodes.VALIDATION_ERROR, "widgetEnabled must be a boolean", 400);
+    }
+    return setShopifyWidgetEnabled(auth!, body.widgetEnabled, loadConfig());
+  },
+  { requireAuth: true }
+);
+
+/** Shopify app / storefront toggle using widget API key. */
+export const widgetPatchStoreHandler = createApiKeyHandler(async (event, tenantId) => {
+  const body = parseBody<{ widgetEnabled?: boolean }>(event);
+  if (typeof body.widgetEnabled !== "boolean") {
+    throw new ApiError(ErrorCodes.VALIDATION_ERROR, "widgetEnabled must be a boolean", 400);
+  }
+  const widgetApiKey = getApiKey(event);
+  return setShopifyWidgetEnabled(
+    { tenantId, userId: "store", role: "admin", email: "store@commercechat" },
+    body.widgetEnabled,
+    loadConfig(),
+    { widgetApiKey: widgetApiKey ?? undefined }
   );
 });
 
@@ -46,7 +82,17 @@ export const syncHandler = createHandler(
     if (!sourceId) {
       throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Shopify is not connected", 400);
     }
-    return syncKnowledgeSource(auth!, sourceId, loadConfig());
+    const config = loadConfig();
+    try {
+      await ensureShopifyWebhooksForTenant(auth!.tenantId, config);
+    } catch (err) {
+      console.warn(
+        "[shopify] webhook repair failed",
+        auth!.tenantId,
+        err instanceof Error ? err.message : err
+      );
+    }
+    return syncKnowledgeSource(auth!, sourceId, config);
   },
   { requireAuth: true, successStatus: 202 }
 );

@@ -38,8 +38,16 @@ export {
   disconnectShopifyStore,
   getShopifyConnectorStatus,
   getShopifyWidgetBootstrap,
+  getShopifyWidgetSettings,
+  getShopifyWidgetSettingsForTenant,
+  setShopifyWidgetEnabled,
   normalizeShopDomain,
+  resolveTenantByShopDomain,
+  ensureShopifyWebhooksForTenant,
 } from "./commerce/shopify/service";
+export { verifyShopifyAccessToken } from "./commerce/shopify/client";
+export { queueCommerceCatalogSync } from "./commerce/catalog-sync-trigger";
+export type { CatalogSyncQueueResult, CommerceConnectorType } from "./commerce/catalog-sync-trigger";
 export type { ConnectShopifyBody } from "./commerce/shopify/types";
 export * from "./onboarding/service";
 export * from "./knowledge/service";

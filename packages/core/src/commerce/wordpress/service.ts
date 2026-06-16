@@ -27,6 +27,7 @@ import {
   validateConnectBody,
 } from "./client";
 import type { ConnectWordPressBody, WordPressOrder, WordPressProduct } from "./types";
+import { queueCommerceCatalogSync } from "../catalog-sync-trigger";
 
 const WOOCOMMERCE_SOURCE_NAME = "WooCommerce store";
 
@@ -73,7 +74,7 @@ export function formatOrderForChat(order: WordPressOrder): Record<string, unknow
   };
 }
 
-async function findWooCommerceSourceId(tenantId: string, config: CoreConfig): Promise<string | null> {
+export async function findWooCommerceSourceId(tenantId: string, config: CoreConfig): Promise<string | null> {
   const db = getDocClient(config);
   const res = await db.send(
     new QueryCommand({
@@ -167,6 +168,14 @@ export async function connectWordPressStore(
   }
 
   const sourceId = await ensureWooCommerceSource(auth, creds.siteUrl, config);
+
+  void queueCommerceCatalogSync(auth.tenantId, "woocommerce", config).catch((err) => {
+    console.warn(
+      "[woocommerce] initial catalog sync queue failed",
+      auth.tenantId,
+      err instanceof Error ? err.message : err
+    );
+  });
 
   await updateTenantConfig(
     auth,

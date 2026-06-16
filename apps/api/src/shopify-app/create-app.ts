@@ -4,6 +4,7 @@ import {
   DeliveryMethod,
   LogSeverity,
   shopifyApi,
+  type Session,
 } from "@shopify/shopify-api";
 import "@shopify/shopify-api/adapters/node";
 import { DynamoSessionStorage, claimOAuthCode, releaseOAuthCode } from "./dynamo-session-storage";
@@ -17,8 +18,42 @@ import {
   saveOAuthState,
   verifyOAuthCallbackHmac,
 } from "./oauth";
+import { loadConfig, queueCommerceCatalogSync, resolveTenantByShopDomain, getShopifyWidgetSettingsForTenant, setShopifyWidgetEnabled, verifyShopifyAccessToken } from "@commercechat/core";
 
 const BASE_PATH = "/shopify-app";
+
+async function loadVerifiedSession(
+  sessionStorage: DynamoSessionStorage,
+  shopify: ReturnType<typeof shopifyApi>,
+  shop: string
+): Promise<Session | undefined> {
+  const sessionId = shopify.session.getOfflineId(shop);
+  const session = await sessionStorage.loadSession(sessionId);
+  if (!session?.accessToken) return undefined;
+
+  const valid = await verifyShopifyAccessToken({
+    shopDomain: shop,
+    accessToken: session.accessToken,
+    updatedAt: new Date().toISOString(),
+  });
+  if (!valid) {
+    console.warn("[shopify-app] stale access token cleared for", shop);
+    await sessionStorage.deleteSession(sessionId);
+    return undefined;
+  }
+  return session;
+}
+
+async function handleShopifyProductWebhook(shop: string, topic: string) {
+  const config = loadConfig();
+  const tenantId = await resolveTenantByShopDomain(shop, config);
+  if (!tenantId) {
+    console.warn("[shopify-webhook] no tenant for shop", shop, topic);
+    return;
+  }
+  const result = await queueCommerceCatalogSync(tenantId, "shopify", config);
+  console.log("[shopify-webhook] product catalog sync", { shop, topic, tenantId, ...result });
+}
 
 function escapeHtml(value: string) {
   return value
@@ -80,42 +115,6 @@ async function commerceChatConnect(
   }
 }
 
-async function ensureWidgetScriptTag(
-  shopify: ReturnType<typeof shopifyApi>,
-  session: { shop: string; accessToken: string },
-  apiKey: string,
-  commerceChatApiUrl: string
-) {
-  const client = new shopify.clients.Rest({ session: session as never });
-  const bootstrapRes = await fetch(`${commerceChatApiUrl}/api/v1/commerce/shopify/widget-bootstrap`, {
-    headers: { "X-API-Key": apiKey },
-  });
-  const bootstrap = (await bootstrapRes.json()) as {
-    data?: { widgetScriptUrl?: string; apiPublicUrl?: string };
-  };
-  const widgetCdn = (process.env.WIDGET_CDN_URL ?? "").replace(/\/$/, "");
-  const scriptUrl =
-    bootstrap.data?.widgetScriptUrl ??
-    (widgetCdn ? `${widgetCdn}/widget/v1.js` : `${commerceChatApiUrl}/widget/v1.js`);
-  const src = `${scriptUrl}?api_key=${encodeURIComponent(apiKey)}`;
-
-  const existing = await client.get({ path: "script_tags" });
-  const tags = (existing.body as { script_tags?: Array<{ id: number; src: string }> }).script_tags ?? [];
-  const already = tags.some((t) => t.src.includes("commercechat") || t.src.includes("api_key="));
-  if (!already) {
-    await client.post({
-      path: "script_tags",
-      data: {
-        script_tag: {
-          event: "onload",
-          src,
-          display_scope: "online_store",
-        },
-      },
-    });
-  }
-}
-
 export function createShopifyApp() {
   const cfg = shopifyConfig();
   const app = express();
@@ -174,11 +173,11 @@ export function createShopifyApp() {
       return;
     }
 
-    const sessionId = shopify.session.getOfflineId(shop);
-    const session = await sessionStorage.loadSession(sessionId);
+    const session = await loadVerifiedSession(sessionStorage, shopify, shop);
     const authParams = new URLSearchParams({ shop });
     if (typeof req.query.host === "string") authParams.set("host", req.query.host);
     const authUrl = `${cfg.appUrl}/auth?${authParams.toString()}`;
+    const reauthUrl = `${cfg.appUrl}/auth?${authParams.toString()}&force=1`;
 
     if (!session?.accessToken) {
       res.status(200).type("html").send(
@@ -192,17 +191,59 @@ export function createShopifyApp() {
       return;
     }
 
+    const tenantId = await resolveTenantByShopDomain(shop, loadConfig());
+    const widgetSettings = tenantId
+      ? await getShopifyWidgetSettingsForTenant(tenantId, loadConfig())
+      : { widgetEnabled: true };
+    const saved = req.query.saved === "1";
+    const connected = req.query.connected === "1";
+    const reauth = req.query.reauth === "1";
+
+    if (tenantId) {
+      void setShopifyWidgetEnabled(
+        { tenantId, userId: "shopify-app", role: "admin", email: "shopify-app@commercechat" },
+        widgetSettings.widgetEnabled,
+        loadConfig()
+      ).catch((err) =>
+        console.warn("[shopify-app] widget script sync failed", err instanceof Error ? err.message : err)
+      );
+
+      res.status(200).type("html").send(
+        shopifyPageShell(
+          "CommerceChat",
+          `<h1>CommerceChat</h1>
+          ${connected ? "<p><strong>Store connected.</strong> Your catalog will sync automatically. Turn the chat widget on below if it is not already enabled.</p>" : ""}
+          ${saved ? "<p><strong>Widget setting saved.</strong></p>" : ""}
+          ${!connected && !saved ? "<p>Your store is connected to CommerceChat.</p>" : ""}
+          <form method="POST" action="${cfg.appUrl}/app/widget">
+            <input type="hidden" name="shop" value="${escapeHtml(shop)}" />
+            <label style="display:flex;align-items:center;gap:0.5rem;font-weight:500;margin-top:1rem;">
+              <input type="checkbox" name="widgetEnabled" value="1" ${widgetSettings.widgetEnabled ? "checked" : ""} />
+              Show chat widget on storefront
+            </label>
+            <p style="font-size:0.9rem;">Turn off to remove the chat bubble from your shop. Product sync continues.</p>
+            <button type="submit">Save widget setting</button>
+          </form>
+          <p style="margin-top:1.5rem;font-size:0.9rem;">Manage catalog sync in <strong>CommerceChat Admin → Knowledge → Shopify</strong>.</p>
+          <p style="margin-top:1rem;font-size:0.9rem;"><a href="https://${escapeHtml(shop)}/admin" target="_blank" rel="noopener">Return to Shopify Admin</a></p>`
+        )
+      );
+      return;
+    }
+
     res.status(200).type("html").send(
       shopifyPageShell(
         "CommerceChat",
         `<h1>CommerceChat</h1>
+        ${reauth ? "<p><strong>Your Shopify authorization expired.</strong> Click <em>Authorize app</em> below, then paste your API key again.</p>" : ""}
         <p>Paste your CommerceChat widget API key from the admin dashboard (Settings → API keys).</p>
         <form method="POST" action="${cfg.appUrl}/app/connect">
           <input type="hidden" name="shop" value="${escapeHtml(shop)}" />
           <label for="apiKey">Widget API key</label>
           <input id="apiKey" name="apiKey" type="password" placeholder="pk_live_..." required />
           <button type="submit">Connect store</button>
-        </form>`
+        </form>
+        <p style="margin-top:1rem;font-size:0.9rem;"><a href="${escapeHtml(reauthUrl)}">Re-authorize Shopify app</a></p>`
       )
     );
   });
@@ -215,7 +256,11 @@ export function createShopifyApp() {
         return;
       }
 
-      const existing = await sessionStorage.loadSession(shopify.session.getOfflineId(shop));
+      if (req.query.force === "1") {
+        await sessionStorage.deleteSession(shopify.session.getOfflineId(shop));
+      }
+
+      const existing = await loadVerifiedSession(sessionStorage, shopify, shop);
       if (existing?.accessToken) {
         res.redirect(`${cfg.appUrl}/app?shop=${encodeURIComponent(shop)}`);
         return;
@@ -270,7 +315,7 @@ export function createShopifyApp() {
         return;
       }
 
-      const existing = await sessionStorage.loadSession(shopify.session.getOfflineId(shop));
+      const existing = await loadVerifiedSession(sessionStorage, shopify, shop);
       if (existing?.accessToken) {
         redirectToApp(shop);
         return;
@@ -284,7 +329,7 @@ export function createShopifyApp() {
 
       const claimed = await claimOAuthCode(code);
       if (!claimed) {
-        const again = await sessionStorage.loadSession(shopify.session.getOfflineId(shop));
+        const again = await loadVerifiedSession(sessionStorage, shopify, shop);
         if (again?.accessToken) {
           redirectToApp(shop);
           return;
@@ -302,7 +347,7 @@ export function createShopifyApp() {
       console.error("Shopify OAuth callback failed", message);
 
       if (shop && /already used|authorization code was not found/i.test(message)) {
-        const existing = await sessionStorage.loadSession(shopify.session.getOfflineId(shop));
+        const existing = await loadVerifiedSession(sessionStorage, shopify, shop);
         if (existing?.accessToken) {
           redirectToApp(shop);
           return;
@@ -327,7 +372,7 @@ export function createShopifyApp() {
     }
 
     const sessionId = shopify.session.getOfflineId(shop);
-    const session = await sessionStorage.loadSession(sessionId);
+    const session = await loadVerifiedSession(sessionStorage, shopify, shop);
     if (!session?.accessToken) {
       res.redirect(`${cfg.appUrl}/auth?shop=${encodeURIComponent(shop)}`);
       return;
@@ -335,16 +380,48 @@ export function createShopifyApp() {
 
     try {
       await commerceChatConnect(cfg.commerceChatApiUrl, shop, session.accessToken, apiKey);
-      await ensureWidgetScriptTag(shopify, { shop, accessToken: session.accessToken }, apiKey, cfg.commerceChatApiUrl);
-      res.setHeader("Content-Type", "text/html");
-      res.send(`<!DOCTYPE html><html><body style="font-family:system-ui;max-width:480px;margin:2rem auto">
-        <h1>Connected</h1>
-        <p>Your Shopify store is linked to CommerceChat. Open <strong>Knowledge → Shopify</strong> in the admin and click <strong>Sync products</strong>.</p>
-        <p><a href="${cfg.appUrl}/app?shop=${encodeURIComponent(shop)}">Back</a></p>
-      </body></html>`);
+      res.redirect(`${cfg.appUrl}/app?shop=${encodeURIComponent(shop)}&connected=1`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Connect failed";
+      if (/Shopify API error \(401\)/i.test(message)) {
+        await sessionStorage.deleteSession(sessionId);
+        res.redirect(`${cfg.appUrl}/app?shop=${encodeURIComponent(shop)}&reauth=1`);
+        return;
+      }
       res.status(500).send(message);
+    }
+  });
+
+  router.post("/app/widget", express.urlencoded({ extended: true }), async (req, res) => {
+    const shop = sanitizeShopDomain(String(req.body.shop ?? ""));
+    const enabled = req.body.widgetEnabled === "1" || req.body.widgetEnabled === true;
+    if (!shop) {
+      res.status(400).send("Shop is required");
+      return;
+    }
+
+    const session = await loadVerifiedSession(sessionStorage, shopify, shop);
+    if (!session?.accessToken) {
+      res.redirect(`${cfg.appUrl}/auth?shop=${encodeURIComponent(shop)}`);
+      return;
+    }
+
+    const tenantId = await resolveTenantByShopDomain(shop, loadConfig());
+    if (!tenantId) {
+      res.status(400).send("Store not connected — paste your API key on the connect screen first.");
+      return;
+    }
+
+    try {
+      await setShopifyWidgetEnabled(
+        { tenantId, userId: "shopify-app", role: "admin", email: "shopify-app@commercechat" },
+        enabled,
+        loadConfig()
+      );
+      res.redirect(`${cfg.appUrl}/app?shop=${encodeURIComponent(shop)}&saved=1`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not update widget setting";
+      res.status(400).send(message);
     }
   });
 
@@ -367,6 +444,27 @@ export function createShopifyApp() {
       callback: async (_topic, shop) => {
         const sessionId = shopify.session.getOfflineId(shop);
         await sessionStorage.deleteSession(sessionId);
+      },
+    },
+    PRODUCTS_CREATE: {
+      deliveryMethod: DeliveryMethod.Http,
+      callbackUrl: `${BASE_PATH}/webhooks`,
+      callback: async (_topic, shop) => {
+        await handleShopifyProductWebhook(shop, "products/create");
+      },
+    },
+    PRODUCTS_UPDATE: {
+      deliveryMethod: DeliveryMethod.Http,
+      callbackUrl: `${BASE_PATH}/webhooks`,
+      callback: async (_topic, shop) => {
+        await handleShopifyProductWebhook(shop, "products/update");
+      },
+    },
+    PRODUCTS_DELETE: {
+      deliveryMethod: DeliveryMethod.Http,
+      callbackUrl: `${BASE_PATH}/webhooks`,
+      callback: async (_topic, shop) => {
+        await handleShopifyProductWebhook(shop, "products/delete");
       },
     },
   });

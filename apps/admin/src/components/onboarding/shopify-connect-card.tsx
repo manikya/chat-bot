@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 type Props = {
   defaultStoreUrl?: string;
@@ -39,6 +40,9 @@ export function ShopifyConnectCard({
   const [shopLabel, setShopLabel] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [widgetEnabled, setWidgetEnabled] = useState(true);
+  const [widgetToggling, setWidgetToggling] = useState(false);
+  const widgetScriptSynced = useRef(false);
 
   const refreshStatus = useCallback(() => {
     return api.commerce
@@ -48,6 +52,7 @@ export function ShopifyConnectCard({
         setConnected(isConnected);
         setShopLabel(r.data.shopDomain);
         setLastSyncAt(r.data.lastSyncAt);
+        setWidgetEnabled(r.data.widgetEnabled !== false);
         if (r.data.shopDomain) setShopDomain(r.data.shopDomain);
         if (isConnected) onConnected?.();
         return isConnected;
@@ -66,6 +71,15 @@ export function ShopifyConnectCard({
   useEffect(() => {
     void refreshStatus();
   }, [refreshStatus]);
+
+  // Push the latest widget bundle URL to Shopify ScriptTags (theme-safe host + cache bust).
+  useEffect(() => {
+    if (!connected || !widgetEnabled || widgetScriptSynced.current) return;
+    widgetScriptSynced.current = true;
+    void api.commerce.setShopifyWidgetEnabled(true).catch(() => {
+      widgetScriptSynced.current = false;
+    });
+  }, [connected, widgetEnabled]);
 
   const connectManual = async () => {
     if (!shopDomain.trim()) {
@@ -120,6 +134,21 @@ export function ShopifyConnectCard({
     }
   };
 
+  const toggleWidget = async (enabled: boolean) => {
+    setWidgetToggling(true);
+    try {
+      await api.commerce.setShopifyWidgetEnabled(enabled);
+      setWidgetEnabled(enabled);
+      toast.success(enabled ? "Chat widget enabled on storefront" : "Chat widget disabled");
+      onStatusChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update widget setting");
+      void refreshStatus();
+    } finally {
+      setWidgetToggling(false);
+    }
+  };
+
   const installUrl = shopifyAppInstallUrl(shopDomain);
   const normalizedShop = normalizeShopDomain(shopDomain);
 
@@ -132,7 +161,7 @@ export function ShopifyConnectCard({
         </div>
         {!compact && (
           <p className="text-xs text-muted-foreground">
-            Products sync from your Shopify store. You can skip website crawl and CSV upload.
+            Products sync automatically when your catalog changes. Manual sync is still available below.
           </p>
         )}
         {lastSyncAt && (
@@ -140,6 +169,22 @@ export function ShopifyConnectCard({
             Last sync {new Date(lastSyncAt).toLocaleString()}
           </p>
         )}
+        <div className="flex items-center justify-between gap-3 rounded-md border bg-background/80 px-3 py-2">
+          <div className="space-y-0.5">
+            <Label htmlFor="shopify-widget-toggle" className="text-sm font-medium">
+              Chat widget on storefront
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Same as WooCommerce — off removes the bubble; products still sync.
+            </p>
+          </div>
+          <Switch
+            id="shopify-widget-toggle"
+            checked={widgetEnabled}
+            disabled={widgetToggling}
+            onCheckedChange={(checked) => void toggleWidget(checked)}
+          />
+        </div>
         {manageActions && (
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" onClick={syncProducts} disabled={syncing}>

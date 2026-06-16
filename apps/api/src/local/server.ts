@@ -44,6 +44,8 @@ import {
   statusHandler as shopifyStatusHandler,
   syncHandler as shopifySyncHandler,
   widgetBootstrapHandler as shopifyWidgetBootstrapHandler,
+  widgetSettingsHandler as shopifyWidgetSettingsHandler,
+  widgetPatchHandler as shopifyWidgetPatchHandler,
 } from "../handlers/commerce-shopify";
 import { handler as teamHandler } from "../handlers/team";
 import { deleteHandler as teamDeleteHandler, patchHandler as teamPatchHandler } from "../handlers/team-member";
@@ -61,6 +63,7 @@ import { handler as cronMetaTokenRefreshHandler } from "../handlers/cron-meta-to
 import { handler as cronBillingLifecycleHandler } from "../handlers/cron-billing-lifecycle";
 import { loadConfig } from "@commercechat/core";
 import { handler as webhookPaymentHandler } from "../handlers/webhook-payment";
+import { woocommerceCatalogHandler } from "../handlers/webhook-commerce";
 import {
   plansHandler as billingPlansHandler,
   subscriptionHandler as billingSubscriptionHandler,
@@ -95,6 +98,7 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/webhooks/meta", handler: webhookMetaHandler },
   { method: "POST", path: "/webhooks/meta", handler: webhookMetaHandler },
   { method: "POST", path: "/webhooks/payment", handler: webhookPaymentHandler },
+  { method: "POST", path: "/webhooks/commerce/woocommerce", handler: woocommerceCatalogHandler },
   { method: "GET", path: "/api/v1/billing/plans", handler: billingPlansHandler },
   { method: "GET", path: "/api/v1/billing/subscription", handler: billingSubscriptionHandler },
   { method: "GET", path: "/api/v1/billing/overview", handler: billingOverviewHandler },
@@ -152,6 +156,8 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/commerce/shopify/sync", handler: shopifySyncHandler },
   { method: "DELETE", path: "/api/v1/commerce/shopify", handler: shopifyDisconnectHandler },
   { method: "GET", path: "/api/v1/commerce/shopify/widget-bootstrap", handler: shopifyWidgetBootstrapHandler },
+  { method: "GET", path: "/api/v1/commerce/shopify/widget", handler: shopifyWidgetSettingsHandler },
+  { method: "PATCH", path: "/api/v1/commerce/shopify/widget", handler: shopifyWidgetPatchHandler },
   { method: "GET", path: "/api/v1/team", handler: teamHandler },
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },

@@ -1,6 +1,8 @@
 export interface ShopifyCredentials {
   shopDomain: string;
   accessToken: string;
+  /** pk_live_ key used in storefront ScriptTag (set when connecting via Shopify app). */
+  widgetApiKey?: string;
   updatedAt: string;
 }
 

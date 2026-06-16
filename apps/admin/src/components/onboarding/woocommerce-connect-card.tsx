@@ -72,7 +72,7 @@ export function WooCommerceConnectCard({ defaultSiteUrl, compact, onConnected }:
         </div>
         {!compact && (
           <p className="text-xs text-muted-foreground">
-            Products sync from your WordPress store. You can skip website crawl and CSV upload.
+            Products sync automatically when your catalog changes in WordPress.
           </p>
         )}
       </div>

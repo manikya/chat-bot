@@ -7,7 +7,7 @@ Install this plugin on the merchant's WooCommerce site. CommerceChat pulls produ
 1. Copy `commercechat-connector/` to `wp-content/plugins/` and activate.
 2. **Settings → CommerceChat** → **Generate new API key** → copy key.
 3. In CommerceChat Admin → **Knowledge** → enter store URL + API key → **Connect WooCommerce**.
-4. Click **Sync products** to embed catalog into the knowledge base.
+4. Products sync on connect and **automatically** when you add, edit, or delete products in WooCommerce (plugin v0.2.1+). Use **Sync products** in admin for a full manual refresh.
 
 ## API
 
