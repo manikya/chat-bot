@@ -18,6 +18,12 @@ const CATEGORY_KEYWORDS = [
   "jewelry",
   "perfume",
   "skincare",
+  "brass",
+  "silver",
+  "wood",
+  "wooden",
+  "ceramic",
+  "glass",
 ];
 
 const RECIPIENT_PATTERNS = [
@@ -181,8 +187,8 @@ export function missingQualificationSlot(
   qualification?: QualificationState
 ): "budget" | "category" | "recipient" | null {
   if (funnelStage !== "discover") return null;
-  if (!qualification?.category) return "category";
   if (!qualification?.budget?.max && !qualification?.budget?.min) return "budget";
+  if (!qualification?.category) return "category";
   if (!qualification?.recipient) return "recipient";
   return null;
 }

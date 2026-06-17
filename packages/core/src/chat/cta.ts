@@ -16,12 +16,15 @@ function formatPriceLabel(price: number, currency?: string): string {
 }
 
 function productActions(products: SearchProductHit[], max = 3): WidgetAction[] {
-  return products.slice(0, max).map((p) => ({
-    type: "product" as const,
-    sku: p.sku,
-    label: `${p.name} — ${formatPriceLabel(p.price, p.currency)}`,
-    action: "add_to_cart" as const,
-  }));
+  return products
+    .filter((p) => p.inStock !== false)
+    .slice(0, max)
+    .map((p) => ({
+      type: "product" as const,
+      sku: p.sku,
+      label: `${p.name} — ${formatPriceLabel(p.price, p.currency)}`,
+      action: "add_to_cart" as const,
+    }));
 }
 
 export function buildSuggestedCtas(input: {
@@ -30,11 +33,27 @@ export function buildSuggestedCtas(input: {
   toolResults: Array<{ tool: string; success: boolean; result: unknown }>;
   cart: CartState | null;
   channel?: string;
+  gateProductSearch?: boolean;
+  market?: "default" | "lk";
 }): WidgetAction[] {
-  const { funnelStage, subIntent, toolResults, cart, channel } = input;
+  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market = "default" } =
+    input;
   const products = extractProductHitsFromTools(toolResults);
-  const hasCards = products.length > 0;
+  const inStockProducts = products.filter((p) => p.inStock !== false);
+  const hasCards = inStockProducts.length > 0;
   const cartCount = cart?.items.length ?? 0;
+
+  if (gateProductSearch) {
+    const low = market === "lk" ? "Under LKR 3,000" : "Under $50";
+    const high = market === "lk" ? "Above LKR 5,000" : "Above $100";
+    const lowMsg = market === "lk" ? "My budget is under LKR 3,000" : "My budget is under $50";
+    const highMsg = market === "lk" ? "Budget is above LKR 5,000" : "Budget is above $100";
+    return [
+      { type: "message", label: low, message: lowMsg },
+      { type: "message", label: "Gift ideas", message: "It's for a gift — show me options" },
+      { type: "message", label: high, message: highMsg },
+    ];
+  }
 
   if (subIntent === "checkout_ready" || funnelStage === "checkout") {
     return [
@@ -82,7 +101,7 @@ export function buildSuggestedCtas(input: {
   }
 
   if (subIntent === "product_compare" || funnelStage === "compare") {
-    if (products.length) return productActions(products, 3);
+    if (inStockProducts.length) return productActions(inStockProducts, 3);
     return [
       {
         type: "message",
@@ -94,11 +113,18 @@ export function buildSuggestedCtas(input: {
 
   if (funnelStage === "discover" || subIntent === "product_browse") {
     if (hasCards && channel === "web") {
-      return cartCount > 0
-        ? [{ type: "checkout", label: "Checkout", action: "checkout", message: "Checkout" }]
-        : [];
+      return productActions(inStockProducts, 2);
     }
-    if (products.length) return productActions(products, 2);
+    if (inStockProducts.length) return productActions(inStockProducts, 2);
+    if (products.length) {
+      return [
+        {
+          type: "message",
+          label: "Similar in stock",
+          message: "Show similar items that are in stock",
+        },
+      ];
+    }
     return [
       {
         type: "message",
@@ -113,13 +139,18 @@ export function buildSuggestedCtas(input: {
     ];
   }
 
-  if (products.length && !hasCards) return productActions(products, 3);
+  if (inStockProducts.length) return productActions(inStockProducts, 3);
   return [];
 }
 
-export function appendCtaPromptLine(reply: string, ctas: WidgetAction[]): string {
+export function appendCtaPromptLine(
+  reply: string,
+  ctas: WidgetAction[],
+  options?: { gateProductSearch?: boolean }
+): string {
   const trimmed = reply.trim();
   if (!trimmed || !ctas.length) return reply;
+  if (options?.gateProductSearch) return trimmed;
   if (trimmed.endsWith("?")) return reply;
 
   const primary = ctas[0]!;

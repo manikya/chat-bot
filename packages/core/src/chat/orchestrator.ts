@@ -21,8 +21,9 @@ import { extractQualificationFromMessage, mergeQualification } from "./qualifica
 import { boostObjectionFaqChunks } from "./rag-boost";
 import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
-import { enrichReplyWithProductSearch, formatProductListForReply } from "./product-reply";
+import { enrichReplyWithProductSearch, formatProductListForReply, sanitizeReplyText } from "./product-reply";
 import { appendCtaPromptLine, buildSuggestedCtas } from "./cta";
+import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 import { assertTenantOperational } from "../tenant/status";
@@ -131,7 +132,12 @@ function generateFallbackReply(
   return `Thanks for your message. I'm still learning about this store — could you tell me more about what you're looking for? You asked: "${userMessage.slice(0, 120)}"`;
 }
 
-function shouldRunProductSearch(intent: ChatIntent, message: string): boolean {
+function shouldRunProductSearch(
+  intent: ChatIntent,
+  message: string,
+  gateProductSearch: boolean
+): boolean {
+  if (gateProductSearch) return false;
   return intent === "product" || intent === "checkout" || messageMentionsProducts(message);
 }
 
@@ -226,6 +232,13 @@ export async function runChatOrchestrator(
   const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
   const market = marketFromTimezone(timezone);
   const currency = tenantConfig.commerceConnector?.currency ?? (market === "lk" ? "LKR" : "USD");
+  const gateProductSearch = shouldGateProductSearch({
+    funnelStage: funnel.stage,
+    subIntent,
+    qualification,
+    message: text,
+    market,
+  });
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,
     timezone,
@@ -237,7 +250,7 @@ export async function runChatOrchestrator(
   });
 
   const llm = createLLMProvider(config);
-  const tools = toolsForIntent(intent, text, funnel.stage, subIntent);
+  const tools = toolsForIntent(intent, text, funnel.stage, subIntent, { gateProductSearch });
   const toolCtx = {
     auth,
     config,
@@ -263,7 +276,7 @@ export async function runChatOrchestrator(
       tenantConfig.llmConfig.models[intent === "faq" ? "faq" : intent === "checkout" ? "checkout" : "product"] ??
       config.llmModel;
     const temperature = tenantConfig.llmConfig.temperature ?? 0.4;
-    const maxOutputTokens = tenantConfig.llmConfig.maxOutputTokens ?? 800;
+    const maxOutputTokens = Math.min(tenantConfig.llmConfig.maxOutputTokens ?? 800, gateProductSearch ? 200 : 500);
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await llm.chat({
@@ -303,42 +316,57 @@ export async function runChatOrchestrator(
     if (!replyContent && intent === "greeting") {
       replyContent = tenantConfig.prompts.greeting;
     }
+
+    if (gateProductSearch && replyContent && replyContent.split(/\s+/).length > 100) {
+      replyContent = discoverQualifyPrompt(text, market);
+    }
   }
 
   if (!replyContent) {
-    if (shouldRunProductSearch(intent, text)) {
+    if (gateProductSearch) {
+      replyContent = discoverQualifyPrompt(text, market);
+    } else if (shouldRunProductSearch(intent, text, gateProductSearch)) {
       const { result, success } = await executeTool(
         "search_products",
-        JSON.stringify({ query: text, limit: 5 }),
+        JSON.stringify({ query: text, limit: 3 }),
         toolCtx
       );
       toolResults.push({ tool: "search_products", success, result });
     }
-    replyContent = generateFallbackReply(
-      intent,
-      tenantConfig.prompts.greeting,
-      text,
-      ragChunks,
-      toolResults,
-      currency,
-      input.channel
-    );
+    if (!replyContent) {
+      replyContent = generateFallbackReply(
+        intent,
+        tenantConfig.prompts.greeting,
+        text,
+        ragChunks,
+        toolResults,
+        currency,
+        input.channel
+      );
+    }
   }
 
   if (
-    shouldRunProductSearch(intent, text) &&
+    shouldRunProductSearch(intent, text, gateProductSearch) &&
     !toolResults.some((t) => t.tool === "search_products" && t.success)
   ) {
     const { result, success } = await executeTool(
       "search_products",
-      JSON.stringify({ query: text, limit: 5 }),
+      JSON.stringify({
+        query: text,
+        limit: 3,
+        maxPrice: qualification.budget?.max,
+        minPrice: qualification.budget?.min,
+      }),
       toolCtx
     );
     toolResults.push({ tool: "search_products", success, result });
   }
 
+  replyContent = sanitizeReplyText(replyContent, input.channel);
   replyContent = enrichReplyWithProductSearch(replyContent, toolResults, currency, {
     channel: input.channel,
+    skipListAppend: gateProductSearch,
   });
 
   const refreshedCart = await loadCart(auth.tenantId, conversation.conversationId, config);
@@ -375,8 +403,10 @@ export async function runChatOrchestrator(
     toolResults,
     cart: refreshedCart,
     channel: input.channel,
+    gateProductSearch,
+    market,
   });
-  replyContent = appendCtaPromptLine(replyContent, suggestedActions);
+  replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
 
   await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
     intent,

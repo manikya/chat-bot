@@ -40,7 +40,7 @@ export function formatProductListForReply(
   currency: string,
   options?: { channel?: string; max?: number }
 ): string {
-  const max = options?.max ?? 5;
+  const max = options?.max ?? 3;
   const list = products.slice(0, max).map((p) => formatProductLine(p, currency, options?.channel));
   if (!list.length) return "";
   return `Here are some options:\n\n${list.join("\n")}`;
@@ -56,19 +56,35 @@ function replyAlreadyMentionsProducts(reply: string, products: SearchProductHit[
   });
 }
 
+/** Strip markdown images and links clutter — product cards carry visuals on web. */
+export function sanitizeReplyText(reply: string, channel?: string): string {
+  let text = reply.trim();
+  text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, "");
+  if (channel === "web") {
+    text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1");
+  }
+  text = text.replace(/\n{3,}/g, "\n\n").trim();
+  return text;
+}
+
 export function enrichReplyWithProductSearch(
   reply: string,
   toolResults: Array<{ tool: string; success: boolean; result: unknown }>,
   currency: string,
-  options?: { channel?: string }
+  options?: { channel?: string; skipListAppend?: boolean }
 ): string {
+  const cleaned = sanitizeReplyText(reply, options?.channel);
+  if (options?.skipListAppend || options?.channel === "web") {
+    return cleaned;
+  }
+
   const products = extractProductHitsFromTools(toolResults);
-  if (!products.length) return reply;
-  if (reply.trim() && replyAlreadyMentionsProducts(reply, products) && reply.length > 60) {
-    return reply;
+  if (!products.length) return cleaned;
+  if (cleaned.trim() && replyAlreadyMentionsProducts(cleaned, products) && cleaned.length > 60) {
+    return cleaned;
   }
   const summary = formatProductListForReply(products, currency, options);
-  if (!reply.trim()) return summary;
-  if (reply.toLowerCase().includes("here are some options")) return reply;
-  return `${reply.trim()}\n\n${summary}`;
+  if (!cleaned.trim()) return summary;
+  if (cleaned.toLowerCase().includes("here are some options")) return cleaned;
+  return `${cleaned}\n\n${summary}`;
 }

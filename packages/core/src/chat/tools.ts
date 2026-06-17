@@ -107,8 +107,12 @@ export function toolsForIntent(
   intent: ChatIntent,
   message?: string,
   funnelStage?: FunnelStage,
-  subIntent?: ChatSubIntent
+  subIntent?: ChatSubIntent,
+  options?: { gateProductSearch?: boolean }
 ): ToolDefinition[] {
+  if (options?.gateProductSearch) {
+    return [];
+  }
   const names: string[] = [];
   const wantsProducts = messageMentionsProducts(message ?? "");
   const inCartFlow = funnelStage === "cart" || funnelStage === "checkout";
@@ -200,6 +204,22 @@ async function mergeProductSearchResults(
   return ordered.slice(0, limit);
 }
 
+function rankProductsForRecommend(
+  products: ProductRecord[],
+  options?: { maxBudget?: number; limit?: number }
+): ProductRecord[] {
+  const limit = options?.limit ?? 5;
+  const inStock = products.filter((p) => p.inStock !== false);
+  const pool = inStock.length > 0 ? inStock : products;
+  const sorted = [...pool].sort((a, b) => b.price - a.price);
+  if (options?.maxBudget != null) {
+    const inBudget = sorted.filter((p) => p.price <= options.maxBudget!);
+    const above = sorted.filter((p) => p.price > options.maxBudget!);
+    return [...inBudget, ...above].slice(0, limit);
+  }
+  return sorted.slice(0, limit);
+}
+
 function productDto(p: ProductRecord) {
   return {
     sku: p.sku,
@@ -257,13 +277,17 @@ export async function executeTool(
         cacheHits,
         ctx.config,
         storeCurrency,
-        limit
+        Math.max(limit, 8)
       );
+      const ranked = rankProductsForRecommend(merged, {
+        maxBudget: args.maxPrice as number | undefined,
+        limit,
+      });
       return {
         success: true,
         result: {
-          products: merged.map((p) => productDto(p)),
-          totalFound: merged.length,
+          products: ranked.map((p) => productDto(p)),
+          totalFound: ranked.length,
         },
       };
     }

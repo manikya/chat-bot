@@ -16,7 +16,7 @@ function intentHints(intent?: ChatIntent): string {
     case "faq":
       return "\n- Answer policy and shipping questions from FAQ/website context first";
     case "product":
-      return "\n- Recommend products from catalog search; include price and stock when available";
+      return "\n- After discovery is complete, recommend from search_products; max 3 items, one line each (name, price, stock)\n- Do not list products on the first vague browse — ask budget or use-case first";
     case "checkout":
       return "\n- Help complete the purchase; confirm cart before sharing checkout links";
     case "greeting":
@@ -36,7 +36,7 @@ function formatCartSummary(cart: CartState | null, currency: string): string {
 function funnelHints(stage?: FunnelStage): string {
   switch (stage) {
     case "discover":
-      return "\n- Shopper is browsing: ask one helpful question (budget, who it is for, or category) if preferences are unknown";
+      return "\n- Shopper is browsing: if budget or use-case is unknown, ask ONE short question — do NOT call search_products yet\n- Keep replies under 80 words; no markdown images (cards show photos)";
     case "compare":
       return "\n- Shopper is comparing options: highlight differences; suggest 2–3 clear picks with prices";
     case "objection":
@@ -111,8 +111,12 @@ Rules:
 - If the answer is not in context or tools, say you are not sure and ask a clarifying question
 - For shipping, returns, and policies: prefer website and FAQ sources
 - When conversation examples (Customer/Owner pairs) appear in context, match the owner's tone and phrasing
-- Be friendly and concise
+- Be friendly and concise (max ~80 words on web, ~60 on mobile chat)
 - When recommending products, use search_products — do not guess catalog items
+- Prefer in-stock items; mention out-of-stock once without add-to-cart
+- Do not use markdown images or long spec lists in replies — product cards handle visuals
+- Do not repeat the same product in prose and a bullet list
+- Gift / premium stores: when showing options, lead with higher-value in-stock picks within budget
 - Confirm before adding to cart
 - If unsure, ask a clarifying question${languageRulesForMarket(market)}${channelRules(options?.channel)}${intentHints(options?.intent)}${funnelHints(options?.funnelStage)}${subIntentHints(options?.subIntent)}${qualificationHints(options?.funnelStage, options?.qualification)}`;
 
