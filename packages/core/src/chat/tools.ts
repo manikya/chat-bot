@@ -131,7 +131,10 @@ export function toolsForIntent(
     if (wantsProducts) names.push("search_products", "get_product_details");
     return [...new Set(names)].map((n) => TOOL_DEFINITIONS[n]!);
   }
-  if (subIntent === "product_compare" || subIntent === "product_detail" || subIntent === "product_browse") {
+  if (
+    (subIntent === "product_compare" || subIntent === "product_detail" || subIntent === "product_browse") &&
+    (intent === "product" || intent === "checkout" || funnelStage === "compare")
+  ) {
     names.push("search_products", "get_product_details", "add_to_cart", "get_related_products");
   }
   if (subIntent === "product_compare" || funnelStage === "compare") {

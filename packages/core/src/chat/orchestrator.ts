@@ -15,7 +15,7 @@ import {
   resolveConversation,
   updateConversationFunnel,
 } from "./conversation";
-import { detectIntent, detectSubIntent, messageMentionsProducts, ragSourceTypesForIntent } from "./intent";
+import { detectIntent, detectSubIntent, isGreetingOnlyMessage, messageMentionsProducts, ragSourceTypesForIntent } from "./intent";
 import { resolveFunnelContext } from "./funnel";
 import { extractQualificationFromMessage, mergeQualification } from "./qualification";
 import { boostObjectionFaqChunks } from "./rag-boost";
@@ -137,8 +137,16 @@ function shouldRunProductSearch(
   message: string,
   gateProductSearch: boolean
 ): boolean {
-  if (gateProductSearch) return false;
+  if (gateProductSearch || isGreetingOnlyMessage(message) || intent === "greeting") return false;
   return intent === "product" || intent === "checkout" || messageMentionsProducts(message);
+}
+
+const PRODUCT_SURFACE_TOOLS = new Set(["search_products", "compare_products", "get_related_products"]);
+
+function stripProductToolResults(
+  toolResults: Array<{ tool: string; success: boolean; result: unknown }>
+) {
+  return toolResults.filter((t) => !PRODUCT_SURFACE_TOOLS.has(t.tool));
 }
 
 export async function runChatOrchestrator(
@@ -364,9 +372,11 @@ export async function runChatOrchestrator(
   }
 
   replyContent = sanitizeReplyText(replyContent, input.channel);
-  replyContent = enrichReplyWithProductSearch(replyContent, toolResults, currency, {
+  const surfaceProducts = intent !== "greeting" && !isGreetingOnlyMessage(text);
+  const finalToolResults = surfaceProducts ? toolResults : stripProductToolResults(toolResults);
+  replyContent = enrichReplyWithProductSearch(replyContent, finalToolResults, currency, {
     channel: input.channel,
-    skipListAppend: gateProductSearch,
+    skipListAppend: gateProductSearch || !surfaceProducts,
   });
 
   const refreshedCart = await loadCart(auth.tenantId, conversation.conversationId, config);
@@ -400,7 +410,7 @@ export async function runChatOrchestrator(
   const suggestedActions = buildSuggestedCtas({
     funnelStage: finalFunnel.stage,
     subIntent,
-    toolResults,
+    toolResults: finalToolResults,
     cart: refreshedCart,
     channel: input.channel,
     gateProductSearch,
@@ -415,7 +425,7 @@ export async function runChatOrchestrator(
     llmProvider: llm?.name ?? "fallback",
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
-    toolCalls: toolResults.map((t) => t.tool),
+    toolCalls: finalToolResults.map((t) => t.tool),
   });
 
   await incrementUsage(auth.tenantId, config, {
@@ -426,7 +436,7 @@ export async function runChatOrchestrator(
   return {
     conversationId: conversation.conversationId,
     reply: { type: "text", content: replyContent },
-    toolResults: toolResults.map((t) => ({
+    toolResults: finalToolResults.map((t) => ({
       tool: t.tool,
       success: t.success,
       ...(typeof t.result === "object" && t.result ? (t.result as Record<string, unknown>) : {}),

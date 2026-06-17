@@ -11,12 +11,27 @@ const FAQ_KEYWORDS = LK_FAQ_KEYWORDS;
 const PRODUCT_KEYWORDS = LK_PRODUCT_KEYWORDS;
 const CHECKOUT_KEYWORDS = LK_CHECKOUT_KEYWORDS;
 
+/** Short opener with no shopping ask — works on any turn, not only the first message. */
+export function isGreetingOnlyMessage(message: string): boolean {
+  const trimmed = message.trim();
+  if (!LK_GREETING_PATTERN.test(trimmed)) return false;
+  if (messageMentionsProducts(trimmed)) return false;
+  if (
+    /\b(do you have|show me|looking for|i want|i need|how much|price|order|ship|deliver|return|gift for)\b/i.test(
+      trimmed
+    )
+  ) {
+    return false;
+  }
+  return trimmed.split(/\s+/).length <= 10;
+}
+
 export function detectIntent(message: string, isFirstMessage: boolean): ChatIntent {
   const lower = message.toLowerCase();
   if (CHECKOUT_KEYWORDS.some((k) => lower.includes(k))) return "checkout";
   if (FAQ_KEYWORDS.some((k) => lower.includes(k))) return "faq";
   if (PRODUCT_KEYWORDS.some((k) => lower.includes(k))) return "product";
-  if (isFirstMessage && LK_GREETING_PATTERN.test(message.trim())) return "greeting";
+  if (isGreetingOnlyMessage(message)) return "greeting";
   if (isFirstMessage) return "unknown";
   return "product";
 }
@@ -50,6 +65,10 @@ export function detectSubIntent(
       return "faq_objection";
     }
     return "faq_policy";
+  }
+
+  if (intent === "greeting") {
+    return messageMentionsProducts(message) ? "product_browse" : "faq_policy";
   }
 
   if (intent === "product" || messageMentionsProducts(message)) {

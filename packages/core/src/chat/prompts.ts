@@ -20,7 +20,7 @@ function intentHints(intent?: ChatIntent): string {
     case "checkout":
       return "\n- Help complete the purchase; confirm cart before sharing checkout links";
     case "greeting":
-      return "\n- Welcome briefly; offer to help find products if they seem ready to shop";
+      return "\n- Welcome briefly; do NOT call search_products or show product cards unless the customer asks for items";
     default:
       return "";
   }
