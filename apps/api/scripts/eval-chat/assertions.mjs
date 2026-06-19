@@ -36,5 +36,31 @@ export function assertCase(out, expect) {
     failures.push(`reply shorter than ${expect.replyMinLength}`);
   }
 
+  if (expect.replyIncludes) {
+    const reply = String(out.reply || "").toLowerCase();
+    for (const text of expect.replyIncludes) {
+      if (!reply.includes(String(text).toLowerCase())) {
+        failures.push(`reply missing "${text}"`);
+      }
+    }
+  }
+
+  if (expect.replyExcludes) {
+    const reply = String(out.reply || "").toLowerCase();
+    for (const text of expect.replyExcludes) {
+      if (reply.includes(String(text).toLowerCase())) {
+        failures.push(`reply should not include "${text}"`);
+      }
+    }
+  }
+
+  if (expect.maxProductCards != null && Number(out.productCards || 0) > expect.maxProductCards) {
+    failures.push(`productCards expected <= ${expect.maxProductCards}, got ${out.productCards ?? 0}`);
+  }
+
+  if (expect.minSuggestedActions != null && Number(out.suggestedActions || 0) < expect.minSuggestedActions) {
+    failures.push(`suggestedActions expected >= ${expect.minSuggestedActions}, got ${out.suggestedActions ?? 0}`);
+  }
+
   return failures;
 }

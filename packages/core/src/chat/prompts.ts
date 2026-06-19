@@ -16,7 +16,7 @@ function intentHints(intent?: ChatIntent): string {
     case "faq":
       return "\n- Answer policy and shipping questions from FAQ/website context first";
     case "product":
-      return "\n- After discovery is complete, recommend from search_products; max 3 items, one line each (name, price, stock)\n- Do not list products on the first vague browse — ask budget or use-case first";
+      return "\n- Use search_products with the customer's words as query; pass category when known from shopper preferences\n- After discovery is complete, recommend max 3 in-stock items (name, price, stock); match category, name, and description";
     case "checkout":
       return "\n- Help complete the purchase; confirm cart before sharing checkout links";
     case "greeting":

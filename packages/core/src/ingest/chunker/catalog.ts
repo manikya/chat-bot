@@ -3,13 +3,15 @@ import type { CatalogProduct } from "../parsers/catalog-csv";
 import type { ChunkMetadata, VectorChunk } from "../types";
 
 export function catalogProductToText(product: CatalogProduct): string {
+  const categoryText =
+    product.categories?.length ? product.categories.join(", ") : product.category;
   const parts = [
     product.name,
-    product.category,
+    categoryText ? `Categories: ${categoryText}` : null,
     product.description,
     `$${product.price.toFixed(2)}`,
     `SKU: ${product.sku}`,
-  ];
+  ].filter(Boolean);
   if (product.sizes) parts.push(`Sizes: ${product.sizes}`);
   if (product.colors) parts.push(`Colors: ${product.colors}`);
   if (product.tags) parts.push(`Tags: ${product.tags}`);
@@ -30,7 +32,7 @@ export function chunkCatalogProducts(
       source_type: "catalog",
       sku: product.sku,
       title: product.name,
-      section: product.category,
+      section: product.categories?.length ? product.categories.join(", ") : product.category,
       crawled_at: syncedAt,
     },
   }));

@@ -75,9 +75,17 @@ export function extractBudgetFromMessage(
 
 export function extractCategoryFromMessage(message: string): string | undefined {
   const lower = message.toLowerCase();
+
+  const material = lower.match(
+    /\b(brass|silver|gold|wooden|wood|ceramic|glass|copper|steel|leather|cotton|silk)\b/
+  );
+  if (material?.[1]) return material[1];
+
   for (const cat of CATEGORY_KEYWORDS) {
+    if (cat === "gift") continue;
     if (lower.includes(cat)) return cat;
   }
+  if (lower.includes("gift")) return "gift";
   const lookingFor = message.match(/\b(?:looking for|need|want)\s+(?:a|an|some)?\s*([a-z][a-z\s-]{2,24})/i);
   if (lookingFor?.[1]) {
     const phrase = lookingFor[1].trim().toLowerCase();

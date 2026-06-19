@@ -4,7 +4,8 @@
     "message": "Hi there!",
     "expect": {
       "nonEmptyReply": true,
-      "intent": "greeting"
+      "intent": "greeting",
+      "maxProductCards": 0
     }
   },
   {
@@ -46,6 +47,35 @@
     "expect": {
       "nonEmptyReply": true,
       "intent": "product"
+    }
+  },
+  {
+    "id": "vague-product-browse-gates",
+    "message": "Do you have something nice for a gift?",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "funnelStage": "discover",
+      "maxProductCards": 0,
+      "minSuggestedActions": 1
+    }
+  },
+  {
+    "id": "explicit-budget-product-search",
+    "message": "Show me gifts under LKR 3000",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"]
+    }
+  },
+  {
+    "id": "sku-detail",
+    "message": "Tell me more about SKU GZ002",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "subIntent": "product_detail"
     }
   }
 ]

@@ -21,7 +21,13 @@ import { extractQualificationFromMessage, mergeQualification } from "./qualifica
 import { boostObjectionFaqChunks } from "./rag-boost";
 import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
-import { enrichReplyWithProductSearch, formatProductListForReply, sanitizeReplyText } from "./product-reply";
+import {
+  buildNoProductResultsReply,
+  enrichReplyWithProductSearch,
+  formatProductListForReply,
+  productSearchWasEmpty,
+  sanitizeReplyText,
+} from "./product-reply";
 import { appendCtaPromptLine, buildSuggestedCtas } from "./cta";
 import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
 import { executeTool, toolsForIntent } from "./tools";
@@ -37,6 +43,10 @@ export interface OrchestratorInput {
   externalUserId: string;
   message: string;
   metadata?: { pageUrl?: string; [key: string]: unknown };
+}
+
+export interface OrchestratorOptions {
+  onToken?: (token: string) => void | Promise<void>;
 }
 
 async function loadTenantContext(auth: AuthContext, config: CoreConfig) {
@@ -152,7 +162,8 @@ function stripProductToolResults(
 export async function runChatOrchestrator(
   auth: AuthContext,
   input: OrchestratorInput,
-  config: CoreConfig
+  config: CoreConfig,
+  options?: OrchestratorOptions
 ): Promise<ChatResult> {
   const text = input.message?.trim();
   if (!text) throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Message is required", 400);
@@ -266,6 +277,7 @@ export async function runChatOrchestrator(
     checkoutBaseUrl: tenantConfig.commerceConnector.checkoutBaseUrl,
     channel: input.channel,
     externalUserId: input.externalUserId,
+    qualification,
   };
 
   const messages: ChatMessage[] = [
@@ -287,13 +299,19 @@ export async function runChatOrchestrator(
     const maxOutputTokens = Math.min(tenantConfig.llmConfig.maxOutputTokens ?? 800, gateProductSearch ? 200 : 500);
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await llm.chat({
+      const request = {
         model,
         messages,
         tools: tools.length ? tools : undefined,
         temperature,
         maxOutputTokens,
-      });
+      };
+      const response =
+        options?.onToken && llm.streamChat
+          ? await llm.streamChat(request, async (event) => {
+              if (event.type === "token") await options.onToken?.(event.text);
+            })
+          : await llm.chat(request);
       totalInputTokens += response.usage.inputTokens;
       totalOutputTokens += response.usage.outputTokens;
 
@@ -336,7 +354,13 @@ export async function runChatOrchestrator(
     } else if (shouldRunProductSearch(intent, text, gateProductSearch)) {
       const { result, success } = await executeTool(
         "search_products",
-        JSON.stringify({ query: text, limit: 3 }),
+        JSON.stringify({
+          query: text,
+          limit: 3,
+          category: qualification.category,
+          maxPrice: qualification.budget?.max,
+          minPrice: qualification.budget?.min,
+        }),
         toolCtx
       );
       toolResults.push({ tool: "search_products", success, result });
@@ -363,12 +387,28 @@ export async function runChatOrchestrator(
       JSON.stringify({
         query: text,
         limit: 3,
+        category: qualification.category,
         maxPrice: qualification.budget?.max,
         minPrice: qualification.budget?.min,
       }),
       toolCtx
     );
     toolResults.push({ tool: "search_products", success, result });
+  }
+
+  if (
+    !gateProductSearch &&
+    productSearchWasEmpty(toolResults) &&
+    (intent === "product" || subIntent === "product_browse" || subIntent === "product_compare")
+  ) {
+    replyContent = buildNoProductResultsReply({
+      query: text,
+      category: qualification.category,
+      maxPrice: qualification.budget?.max,
+      minPrice: qualification.budget?.min,
+      currency,
+      channel: input.channel,
+    });
   }
 
   replyContent = sanitizeReplyText(replyContent, input.channel);

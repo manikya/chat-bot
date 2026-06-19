@@ -6,6 +6,7 @@ export interface CatalogProduct {
   description: string;
   price: number;
   category: string;
+  categories?: string[];
   currency?: string;
   imageUrl?: string;
   imageUrls?: string[];
@@ -100,17 +101,22 @@ export function parseCatalogCsv(csvText: string): CatalogProduct[] {
     }
 
     const description = col(row, "description");
-    const category = col(row, "category");
-    if (!description || !category) {
+    const categoryRaw = col(row, "category");
+    if (!description || !categoryRaw) {
       throw new ApiError(ErrorCodes.VALIDATION_ERROR, `Row ${i + 1}: description and category are required`, 400);
     }
+    const categoryParts = categoryRaw
+      .split(/[,|;]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     products.push({
       sku,
       name,
       description,
       price,
-      category,
+      category: categoryParts[0] ?? categoryRaw,
+      categories: categoryParts.length > 1 ? categoryParts : undefined,
       imageUrl: col(row, "image_url") || col(row, "imageurl") || undefined,
       sizes: col(row, "sizes") || undefined,
       colors: col(row, "colors") || undefined,

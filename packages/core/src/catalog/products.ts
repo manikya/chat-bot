@@ -3,6 +3,13 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import type { CatalogProduct } from "../ingest/parsers/catalog-csv";
+import {
+  categoryFilterMatches,
+  productCategoryList,
+  rankProductsByRelevance,
+  searchTermsFromQuery,
+  scoreProductRelevance,
+} from "./product-search";
 
 export async function getStoreCurrency(tenantId: string, config: CoreConfig): Promise<string> {
   const db = getDocClient(config);
@@ -54,6 +61,7 @@ export async function upsertProductCache(
           price: product.price,
           currency: product.currency ?? fallbackCurrency,
           category: product.category,
+          categories: product.categories?.length ? product.categories : undefined,
           inStock: product.inStock,
           imageUrl: product.imageUrl,
           imageUrls: product.imageUrls,
@@ -93,6 +101,7 @@ export interface ProductRecord {
   price: number;
   currency: string;
   category?: string;
+  categories?: string[];
   inStock: boolean;
   imageUrl?: string;
   imageUrls?: string[];
@@ -124,19 +133,21 @@ export async function getRelatedProducts(
 ): Promise<ProductRecord[]> {
   const limit = options?.limit ?? 5;
   const exclude = new Set((options?.excludeSkus ?? []).map((s) => s.toUpperCase()));
-  let category = options?.category?.toLowerCase();
+  let categoryHints: string[] = [];
 
   if (options?.sku) {
     exclude.add(options.sku.toUpperCase());
     const base = await getProductBySku(tenantId, options.sku, config);
-    if (base?.category) category = base.category.toLowerCase();
+    if (base) categoryHints = productCategoryList(base).map((c) => c.toLowerCase());
+  } else if (options?.category) {
+    categoryHints = [options.category.toLowerCase()];
   }
 
   const items = (await listProductItems(tenantId, config)) as ProductRecord[];
   const inCategory = items.filter((p) => {
     if (exclude.has(p.sku.toUpperCase())) return false;
-    if (!category) return true;
-    return p.category?.toLowerCase() === category;
+    if (!categoryHints.length) return true;
+    return categoryHints.some((hint) => categoryFilterMatches(p, hint));
   });
 
   const picked = inCategory.slice(0, limit);
@@ -158,30 +169,9 @@ export async function searchProductCache(
   config: CoreConfig,
   options?: { category?: string; maxPrice?: number; minPrice?: number; limit?: number }
 ): Promise<ProductRecord[]> {
-  const items = await listProductItems(tenantId, config);
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const items = (await listProductItems(tenantId, config)) as ProductRecord[];
   const limit = options?.limit ?? 5;
-
-  const scored = items
-    .map((item) => {
-      const record = item as ProductRecord;
-      const haystack = [record.name, record.description, record.category, record.sku, record.variants]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      const matchCount = terms.filter((t) => haystack.includes(t)).length;
-      return { record, matchCount };
-    })
-    .filter(({ record, matchCount }) => {
-      if (matchCount === 0 && terms.length > 0) return false;
-      if (options?.category && record.category?.toLowerCase() !== options.category.toLowerCase()) {
-        return false;
-      }
-      if (options?.maxPrice != null && record.price > options.maxPrice) return false;
-      if (options?.minPrice != null && record.price < options.minPrice) return false;
-      return true;
-    })
-    .sort((a, b) => b.matchCount - a.matchCount);
-
-  return scored.slice(0, limit).map((s) => s.record);
+  return rankProductsByRelevance(items, query, { ...options, limit });
 }
+
+export { productCategoryList, searchTermsFromQuery, scoreProductRelevance, rankProductsByRelevance };

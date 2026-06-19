@@ -9,4 +9,12 @@ export function createLLMProvider(config: CoreConfig): LLMProvider | null {
   return null;
 }
 
-export type { LLMProvider, ChatRequest, ChatResponse, ChatMessage, ToolDefinition, ToolCall } from "./types";
+export type {
+  LLMProvider,
+  ChatRequest,
+  ChatResponse,
+  ChatMessage,
+  ChatStreamEvent,
+  ToolDefinition,
+  ToolCall,
+} from "./types";

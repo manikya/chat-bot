@@ -81,8 +81,6 @@ export function detectSubIntent(
     return "product_browse";
   }
 
-  if (intent === "checkout") return "checkout_ready";
-
   return "product_browse";
 }
 

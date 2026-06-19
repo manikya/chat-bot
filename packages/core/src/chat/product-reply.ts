@@ -3,9 +3,13 @@ import { formatMoney } from "./locale";
 export interface SearchProductHit {
   sku: string;
   name: string;
+  description?: string;
   price: number;
   currency?: string;
   inStock?: boolean;
+  imageUrl?: string;
+  imageUrls?: string[];
+  url?: string;
 }
 
 export function extractSearchProducts(
@@ -87,4 +91,35 @@ export function enrichReplyWithProductSearch(
   if (!cleaned.trim()) return summary;
   if (cleaned.toLowerCase().includes("here are some options")) return cleaned;
   return `${cleaned}\n\n${summary}`;
+}
+
+export function productSearchWasEmpty(
+  toolResults: Array<{ tool: string; success: boolean; result: unknown }>
+): boolean {
+  return toolResults.some((t) => {
+    if (!["search_products", "compare_products", "get_related_products"].includes(t.tool)) return false;
+    if (!t.success) return false;
+    const data = t.result as { products?: unknown[]; totalFound?: number };
+    return data.totalFound === 0 || (Array.isArray(data.products) && data.products.length === 0);
+  });
+}
+
+export function buildNoProductResultsReply(input: {
+  query: string;
+  category?: string;
+  maxPrice?: number;
+  minPrice?: number;
+  currency: string;
+  channel?: string;
+}): string {
+  const parts: string[] = [];
+  if (input.category) parts.push(input.category);
+  if (input.maxPrice != null) parts.push(`under ${formatMoney(input.maxPrice, input.currency)}`);
+  if (input.minPrice != null) parts.push(`from ${formatMoney(input.minPrice, input.currency)}`);
+  const scope = parts.length ? ` matching ${parts.join(", ")}` : "";
+  const ending =
+    input.channel === "whatsapp" || input.channel === "messenger" || input.channel === "instagram"
+      ? "Would you like me to try a broader search or show best sellers?"
+      : "Want me to broaden the search or show best sellers instead?";
+  return `I couldn't find in-stock products${scope} for that search. ${ending}`;
 }

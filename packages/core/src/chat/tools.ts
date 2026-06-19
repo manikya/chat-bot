@@ -1,6 +1,13 @@
-import type { AuthContext, ChatIntent, ChatSubIntent, FunnelStage } from "@commercechat/shared";
+import type { AuthContext, ChatIntent, ChatSubIntent, FunnelStage, QualificationState } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
-import { getProductBySku, getRelatedProducts, getStoreCurrency, searchProductCache, type ProductRecord } from "../catalog/products";
+import {
+  getProductBySku,
+  getRelatedProducts,
+  getStoreCurrency,
+  searchProductCache,
+  type ProductRecord,
+} from "../catalog/products";
+import { rankProductsByRelevance } from "../catalog/product-search";
 import { lookupWordPressOrder } from "../commerce/wordpress/service";
 import { getTenantConfig } from "../tenant/service";
 import { retrieveKnowledge } from "../ingest/retrieve";
@@ -164,14 +171,18 @@ async function mergeProductSearchResults(
   cacheHits: ProductRecord[],
   config: CoreConfig,
   storeCurrency: string,
-  limit: number
+  query: string,
+  options?: { category?: string; maxPrice?: number; minPrice?: number; limit?: number }
 ): Promise<ProductRecord[]> {
   const bySku = new Map<string, ProductRecord>();
+  const vectorScores = new Map<string, number>();
+
   for (const p of cacheHits) {
     bySku.set(p.sku, p);
   }
   for (const h of vectorHits) {
     const sku = String(h.chunk.metadata.sku ?? h.chunk.id);
+    vectorScores.set(sku, h.score);
     if (bySku.has(sku)) continue;
     const cached = await getProductBySku(tenantId, sku, config);
     bySku.set(
@@ -179,48 +190,21 @@ async function mergeProductSearchResults(
       cached ?? {
         sku,
         name: h.chunk.metadata.title ?? "Product",
-        description: h.chunk.text.slice(0, 200),
+        description: h.chunk.text.slice(0, 500),
         price: 0,
         currency: storeCurrency,
         inStock: true,
+        category: h.chunk.metadata.section,
         productUrl: h.chunk.metadata.url,
       }
     );
   }
 
-  const ordered: ProductRecord[] = [];
-  const seen = new Set<string>();
-  for (const p of cacheHits) {
-    if (seen.has(p.sku)) continue;
-    seen.add(p.sku);
-    ordered.push(p);
-  }
-  for (const h of vectorHits) {
-    const sku = String(h.chunk.metadata.sku ?? h.chunk.id);
-    if (seen.has(sku)) continue;
-    const item = bySku.get(sku);
-    if (item) {
-      seen.add(sku);
-      ordered.push(item);
-    }
-  }
-  return ordered.slice(0, limit);
-}
-
-function rankProductsForRecommend(
-  products: ProductRecord[],
-  options?: { maxBudget?: number; limit?: number }
-): ProductRecord[] {
-  const limit = options?.limit ?? 5;
-  const inStock = products.filter((p) => p.inStock !== false);
-  const pool = inStock.length > 0 ? inStock : products;
-  const sorted = [...pool].sort((a, b) => b.price - a.price);
-  if (options?.maxBudget != null) {
-    const inBudget = sorted.filter((p) => p.price <= options.maxBudget!);
-    const above = sorted.filter((p) => p.price > options.maxBudget!);
-    return [...inBudget, ...above].slice(0, limit);
-  }
-  return sorted.slice(0, limit);
+  return rankProductsByRelevance([...bySku.values()], query, {
+    ...options,
+    vectorScores,
+    limit: options?.limit ?? 5,
+  });
 }
 
 function productDto(p: ProductRecord) {
@@ -246,6 +230,7 @@ export interface ToolExecutionContext {
   checkoutBaseUrl?: string;
   channel?: string;
   externalUserId?: string;
+  qualification?: QualificationState;
 }
 
 export async function executeTool(
@@ -264,28 +249,37 @@ export async function executeTool(
     case "search_products": {
       const query = String(args.query ?? "");
       const limit = Number(args.limit ?? 5);
+      const categoryFilter =
+        (args.category ? String(args.category) : undefined) ?? ctx.qualification?.category;
+      const maxPrice = (args.maxPrice as number | undefined) ?? ctx.qualification?.budget?.max;
+      const minPrice = (args.minPrice as number | undefined) ?? ctx.qualification?.budget?.min;
+      const searchQuery =
+        categoryFilter && !query.toLowerCase().includes(categoryFilter.toLowerCase())
+          ? `${query} ${categoryFilter}`.trim()
+          : query;
+      const recallLimit = Math.max(limit * 3, 12);
       const storeCurrency = await getStoreCurrency(ctx.auth.tenantId, ctx.config);
       const [vectorHits, cacheHits] = await Promise.all([
-        retrieveKnowledge(ctx.auth, query, ctx.config, { topK: limit, sourceType: "catalog" }),
-        searchProductCache(ctx.auth.tenantId, query, ctx.config, {
-          category: args.category as string | undefined,
-          maxPrice: args.maxPrice as number | undefined,
-          minPrice: args.minPrice as number | undefined,
-          limit,
+        retrieveKnowledge(ctx.auth, searchQuery, ctx.config, {
+          topK: recallLimit,
+          sourceType: "catalog",
+        }),
+        searchProductCache(ctx.auth.tenantId, searchQuery, ctx.config, {
+          category: categoryFilter,
+          maxPrice,
+          minPrice,
+          limit: recallLimit,
         }),
       ]);
-      const merged = await mergeProductSearchResults(
+      const ranked = await mergeProductSearchResults(
         ctx.auth.tenantId,
         vectorHits,
         cacheHits,
         ctx.config,
         storeCurrency,
-        Math.max(limit, 8)
+        searchQuery,
+        { category: categoryFilter, maxPrice, minPrice, limit }
       );
-      const ranked = rankProductsForRecommend(merged, {
-        maxBudget: args.maxPrice as number | undefined,
-        limit,
-      });
       return {
         success: true,
         result: {

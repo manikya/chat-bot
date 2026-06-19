@@ -52,6 +52,7 @@ export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) =>
     await assertWidgetChatRateLimit(tenantId, sessionId, config);
     await assertTenantOperational(tenantId, config);
 
+    const tokenEvents: string[] = [];
     const result = await runChatOrchestrator(
       { tenantId, userId: "widget", role: "viewer", email: "" },
       {
@@ -60,18 +61,25 @@ export const streamHandler = async (event: Parameters<typeof chatHandler>[0]) =>
         message: body.message.trim(),
         metadata: body.metadata,
       },
-      config
+      config,
+      {
+        onToken: (text) => {
+          tokenEvents.push(encodeSseEvent("token", { text }));
+        },
+      }
     );
     const payload = await buildWidgetChatPayload(tenantId, body, result, config);
     const text = payload.reply.content;
-    const chunks = text.match(/.{1,24}(?:\s|$)|\S+/g) ?? [text];
+    const fallbackChunks = text.match(/.{1,24}(?:\s|$)|\S+/g) ?? [text];
     const bodyText =
       encodeSseEvent("start", {
         sessionId: payload.sessionId,
         conversationId: payload.conversationId,
       }) +
       encodeSseEvent("typing", { active: true }) +
-      chunks.map((chunk) => encodeSseEvent("token", { text: chunk })).join("") +
+      (tokenEvents.length
+        ? tokenEvents.join("")
+        : fallbackChunks.map((chunk) => encodeSseEvent("token", { text: chunk })).join("")) +
       payload.productCards.map((card) => encodeSseEvent("product_card", card)).join("") +
       encodeSseEvent("done", {
         sessionId: payload.sessionId,

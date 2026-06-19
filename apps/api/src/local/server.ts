@@ -63,7 +63,15 @@ import { handler as devicesHandler } from "../handlers/devices";
 import { handler as webhookMetaHandler } from "../handlers/webhook-meta";
 import { handler as cronMetaTokenRefreshHandler } from "../handlers/cron-meta-token-refresh";
 import { handler as cronBillingLifecycleHandler } from "../handlers/cron-billing-lifecycle";
-import { loadConfig } from "@commercechat/core";
+import {
+  assertTenantOperational,
+  assertWidgetChatRateLimit,
+  buildWidgetChatPayload,
+  encodeSseEvent,
+  loadConfig,
+  runChatOrchestrator,
+  verifyWidgetApiKey,
+} from "@commercechat/core";
 import { handler as webhookPaymentHandler } from "../handlers/webhook-payment";
 import { woocommerceCatalogHandler } from "../handlers/webhook-commerce";
 import {
@@ -357,6 +365,97 @@ export function createLocalApp() {
       "Content-Type": "application/javascript; charset=utf-8",
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "public, max-age=3600",
+    });
+  });
+
+  app.post("/api/v1/widget/chat/stream", async (c) => {
+    const config = loadConfig();
+    const apiKey = c.req.header("x-api-key");
+    if (!apiKey) {
+      return c.json({ success: false, error: { code: "UNAUTHORIZED", message: "Missing X-API-Key header" } }, 401);
+    }
+
+    const body = await c.req.json<{
+      sessionId?: string;
+      message?: string;
+      metadata?: Record<string, unknown>;
+    }>();
+    const sessionId = body.sessionId?.trim();
+    const message = body.message?.trim();
+    if (!sessionId || !message) {
+      return c.json(
+        { success: false, error: { code: "VALIDATION_ERROR", message: "sessionId and message are required" } },
+        400
+      );
+    }
+
+    const tenantId = await verifyWidgetApiKey(apiKey, config);
+    await assertWidgetChatRateLimit(tenantId, sessionId, config);
+    await assertTenantOperational(tenantId, config);
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(encodeSseEvent(event, data)));
+        };
+
+        try {
+          send("start", { sessionId });
+          send("typing", { active: true });
+          let streamedToken = false;
+          const result = await runChatOrchestrator(
+            { tenantId, userId: "widget", role: "viewer", email: "" },
+            {
+              channel: "web",
+              externalUserId: sessionId,
+              message,
+              metadata: body.metadata,
+            },
+            config,
+            {
+              onToken: (text) => {
+                streamedToken = true;
+                send("token", { text });
+              },
+            }
+          );
+          const payload = await buildWidgetChatPayload(tenantId, { sessionId, message, metadata: body.metadata }, result, config);
+          if (!streamedToken) {
+            const chunks = payload.reply.content.match(/.{1,24}(?:\s|$)|\S+/g) ?? [payload.reply.content];
+            for (const chunk of chunks) send("token", { text: chunk });
+          }
+          for (const card of payload.productCards) send("product_card", card);
+          send("done", {
+            sessionId: payload.sessionId,
+            conversationId: payload.conversationId,
+            reply: payload.reply,
+            intent: payload.intent,
+            subIntent: payload.subIntent,
+            funnelStage: payload.funnelStage,
+            suggestedActions: payload.suggestedActions,
+            suggestedQuestions: payload.suggestedQuestions,
+            productCards: payload.productCards,
+          });
+        } catch (err) {
+          send("error", {
+            message: err instanceof Error ? err.message : "Chat stream failed",
+          });
+        } finally {
+          send("typing", { active: false });
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        ...corsHeaders(),
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
     });
   });
 

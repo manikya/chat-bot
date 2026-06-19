@@ -181,6 +181,18 @@ export async function getBillingSubscription(auth: AuthContext, config: CoreConf
   });
 }
 
+async function safeVectorCount(tenantId: string, config: CoreConfig) {
+  try {
+    return await createVectorStore(config).countByTenant(tenantId);
+  } catch (err) {
+    console.warn(
+      "[billing] vector count unavailable; reporting 0",
+      err instanceof Error ? err.message : err
+    );
+    return 0;
+  }
+}
+
 export async function getBillingOverview(auth: AuthContext, config: CoreConfig) {
   const [subscriptionRes, limitsRes, usage, sources, teamMembers, vectorCount] = await Promise.all([
     getBillingSubscription(auth, config),
@@ -188,7 +200,7 @@ export async function getBillingOverview(auth: AuthContext, config: CoreConfig) 
     getMonthlyUsage(auth.tenantId, config),
     countSources(auth.tenantId, config),
     countTeamMembers(auth.tenantId, config),
-    createVectorStore(config).countByTenant(auth.tenantId),
+    safeVectorCount(auth.tenantId, config),
   ]);
 
   const limits = limitsRes.data!;
