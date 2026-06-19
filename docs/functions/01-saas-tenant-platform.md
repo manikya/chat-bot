@@ -210,7 +210,7 @@ Merchant auth is documented in **[13-custom-auth.md](13-custom-auth.md)**. Summa
 
 | Depends on | Provides to |
 |------------|-------------|
-| DynamoDB, Secrets Manager | All admin functions |
+| DynamoDB | All admin functions |
 | [13 Custom Auth](13-custom-auth.md) | JWT, sessions, MFA |
 | [12 Notifications](12-notifications-email-sms.md) | Verify/reset emails |
 | Stripe (status sync) | Billing function |

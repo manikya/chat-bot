@@ -29,7 +29,7 @@
 | 2026-06-10 | Team remove/role APIs, S3 presigned logo via LocalStack |
 | 2026-06-10 | Billing plans + usage overview APIs, payment webhook stub (no Stripe) |
 | 2026-06-11 | Facebook Messenger OAuth connect, inbound webhook + AI reply, dev connect |
-| 2026-06-11 | Meta creds → Secrets Manager (LocalStack), token refresh cron, 24h window policy |
+| 2026-06-11 | Meta creds → DynamoDB tenant credential records (LocalStack), token refresh cron, 24h window policy |
 | 2026-06-11 | Hard message quota: atomic `reserveMessageQuota`, channel plan limits, Meta quota auto-reply |
 | 2026-06-12 | WooCommerce WordPress connector (plugin + sync + Knowledge UI) |
 | 2026-06-12 | AWS serverless deploy: `npm run deploy:aws` → API Gateway + 39 Lambdas + DynamoDB (stack `commercechat-dev`) |
@@ -200,7 +200,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
 - Chat orchestrator — `packages/core/src/chat/` ([07-chat-quality-roadmap.md](07-chat-quality-roadmap.md): funnel, sub-intents, CTAs, `compare_products`, `get_related_products`)
 - Messenger inbound/outbound — `packages/core/src/meta/messenger-*.ts`, `process-messenger-inbound.ts`
-- Meta credentials — Secrets Manager `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_USE_SECRETS_MANAGER=true`; else `.data/meta/*.json`
+- Meta credentials — DynamoDB tenant credential records `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_BACKEND=dynamodb`; else `.data/meta/*.json`
 - Meta token refresh — EventBridge `cron(0 3 * * ? *)` UTC + optional `POST /internal/cron/meta-token-refresh`
 - Billing lifecycle — EventBridge `cron(0 6 * * ? *)` UTC; trial expiry, cancel-at-period-end, SMTP emails; HTTP requires `x-cron-secret`
 - Plan enforcement — `reserveMessageQuota`, `assertVectorQuota`, `assertTenantOperational` (suspended tenants blocked)

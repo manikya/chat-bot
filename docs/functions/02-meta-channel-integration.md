@@ -40,13 +40,13 @@ sequenceDiagram
     Meta-->>A: Access token, asset IDs
     A->>P: POST /channels/meta/connect
     P->>P: Exchange for long-lived token
-    P->>P: Store in Secrets Manager
+    P->>P: Store in DynamoDB tenant credential records
     P->>P: Write GSI routing records
     P->>Meta: POST subscribed_apps (webhooks)
     P-->>A: Connected channels list
 ```
 
-### Stored credentials (per tenant, Secrets Manager)
+### Stored credentials (per tenant, DynamoDB tenant credential records)
 
 ```json
 {
@@ -170,7 +170,7 @@ Consumer Lambda: `channel-sender-meta`
 
 | Step | Action |
 |------|--------|
-| 1 | Load tenant Meta credentials from Secrets Manager |
+| 1 | Load tenant Meta credentials from DynamoDB tenant credential records |
 | 2 | Check messaging policy (24h window) |
 | 3 | Split long text per channel limits |
 | 4 | Format channel-specific payload |
@@ -328,7 +328,7 @@ interface MessagingPolicy {
    `pages_show_list`, `pages_messaging`, `pages_manage_metadata`, `business_management`
 2. `POST /api/v1/channels/meta/connect-messenger` exchanges code, lists Pages, stores Page access token
 3. Multi-Page accounts return `needsPageSelection` for the merchant to pick a Page
-4. Credentials: AWS Secrets Manager `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_USE_SECRETS_MANAGER=true`; else `.data/meta/*.json` (auto-migrates on read)
+4. Credentials: DynamoDB tenant credential records `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_BACKEND=dynamodb`; else `.data/meta/*.json` (auto-migrates on read)
 5. Routing: `PAGE#<pageId>` GSI maps inbound webhooks to tenant
 6. On connect: `POST /{pageId}/subscribed_apps` with `messages,messaging_postbacks`
 
@@ -358,12 +358,12 @@ Set `META_OAUTH_REDIRECT_URI` or `NEXT_PUBLIC_META_OAUTH_REDIRECT_URI` to match 
 
 Set `META_DEV_PAGE_ID`, `META_DEV_PAGE_ACCESS_TOKEN`, optional `META_DEV_PAGE_NAME` in `apps/api/.env`, then use **Connect Messenger (dev)** on the Channels page.
 
-### Credentials storage (Secrets Manager)
+### Credentials storage (DynamoDB tenant credential records)
 
 | Env | Purpose |
 |-----|---------|
-| `META_SECRETS_USE_SECRETS_MANAGER=true` | Store tokens in AWS Secrets Manager |
-| `SECRETS_MANAGER_ENDPOINT=http://localhost:4566` | LocalStack (add `secretsmanager` to docker-compose `SERVICES`) |
+| `META_SECRETS_BACKEND=dynamodb` | Store tokens in DynamoDB tenant credential records |
+| `DYNAMODB_ENDPOINT=http://localhost:4566` | LocalStack DynamoDB endpoint |
 
 Token refresh cron: `POST /internal/cron/meta-token-refresh` or `META_TOKEN_REFRESH_INTERVAL_MS`.
 

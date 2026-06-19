@@ -58,7 +58,7 @@
 |---|------|-------|------|------|
 | 1.1 | DynamoDB table + GSIs + TTL (CDK) | INF | M | 0.3 |
 | 1.2 | S3 buckets (data, assets) | INF | S | 0.3 |
-| 1.3 | Secrets Manager paths + SSM params | INF | S | 0.3 |
+| 1.3 | DynamoDB tenant credential records paths + SSM params | INF | S | 0.3 |
 | 1.4 | API Gateway + Lambda authorizer (JWT) | BE | M | 1.1 |
 | 1.5 | `POST /auth/signup` — transact write tenant + user + email lookup | BE | L | 1.1, 1.4 |
 | 1.6 | `POST /auth/login` — argon2 verify + JWT + session | BE | M | 1.5 |

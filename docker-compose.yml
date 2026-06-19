@@ -4,7 +4,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=dynamodb,s3,secretsmanager
+      - SERVICES=dynamodb,s3
       - S3_ASSETS_BUCKET=commercechat-assets
       - DEBUG=0
       - PERSISTENCE=1

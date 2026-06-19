@@ -40,7 +40,7 @@ Single region MVP; multi-region Phase 3 for enterprise.
 | S3 | `commercechat-assets` | Widget bundles, admin build |
 | S3 Vectors | Per-tenant indexes | Vector search |
 | KMS | JWT signing + TOTP secret encryption | Custom auth — [13-custom-auth.md](13-custom-auth.md) |
-| Secrets Manager | `/commercechat/*` | API keys, Meta tokens |
+| DynamoDB tenant credential records | `/commercechat/*` | API keys, Meta tokens |
 | SSM Parameter Store | `/commercechat/config/*` | Non-secret config, pricing table |
 | EventBridge | Rules + Scheduler | Token refresh, re-crawl, analytics |
 | Resend | External API | Auth + platform email (primary) |
@@ -144,7 +144,7 @@ Single region MVP; multi-region Phase 3 for enterprise.
   "Action": [
     "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query",
     "sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage",
-    "secretsmanager:GetSecretValue",
+    "dynamodb:GetSecretValue",
     "bedrock:InvokeModel", "bedrock:Converse"
   ],
   "Resource": ["specific ARNs only"]
@@ -251,7 +251,7 @@ All Lambdas use JSON logs:
 - [ ] CDK stacks deploy to staging
 - [ ] All Lambdas have correct IAM roles
 - [ ] SQS DLQ alarms configured
-- [ ] JWT signing key in Secrets Manager / KMS
+- [ ] JWT signing key in DynamoDB tenant credential records / KMS
 - [ ] Auth signup/login flow tested
 - [ ] ACM certificates validated
 - [x] CloudFront distribution serving admin (dev: `commercechat-dev-admin` stack)
@@ -260,7 +260,7 @@ All Lambdas use JSON logs:
 - [x] Deploy IAM policy bootstrap (`npm run ensure:deploy-iam`)
 - [x] Step Functions ingest pipeline on dev (`commercechat-dev-ingest`)
 - [x] EventBridge cron: Meta token refresh (03:00 UTC), billing lifecycle (06:00 UTC)
-- [ ] Secrets Manager secrets created (manual first time)
+- [ ] DynamoDB tenant credential records secrets created (manual first time)
 - [ ] WAF rules attached
 - [ ] Route 53 records pointing to CloudFront/API GW
 - [ ] Meta webhook URL registered in Meta App (production domain)

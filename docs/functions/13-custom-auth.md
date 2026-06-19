@@ -206,7 +206,7 @@ POST /auth/refresh { refreshToken }
 | `iat` | issued at |
 | `iss` | `commercechat.com` |
 
-**Signing:** RS256 (recommended, public key in authorizer) or HS256 (secret in Secrets Manager).
+**Signing:** RS256 (recommended, public key in authorizer) or HS256 (strong secret value).
 
 **Authorizer context passed to Lambdas:**
 ```json
@@ -256,7 +256,7 @@ POST /auth/refresh { refreshToken }
 | Refresh rotation | New refresh token on each use; detect reuse → revoke all sessions |
 | Session revoke | Logout sets `revoked: true`; password change revokes all sessions |
 | MFA attempts | Max 5 per challenge; then invalidate challenge |
-| Secrets | JWT signing key + TOTP encryption key in Secrets Manager / KMS |
+| Secrets | JWT signing key + TOTP encryption key in DynamoDB tenant credential records / KMS |
 | Logs | Never log passwords, OTP codes, TOTP secrets, or refresh tokens |
 
 ---
@@ -344,7 +344,7 @@ All auth emails via **Resend** — see [12-notifications-email-sms.md](12-notifi
 
 | Provides to | Depends on |
 |-------------|------------|
-| All admin APIs (JWT authorizer) | DynamoDB, Secrets Manager |
+| All admin APIs (JWT authorizer) | DynamoDB |
 | [08 Admin Dashboard](08-admin-dashboard.md) | Login UI |
 | [12 Notifications](12-notifications-email-sms.md) | Auth emails |
 | [10 Security](10-security-compliance.md) | Password/session policy |

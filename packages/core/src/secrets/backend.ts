@@ -1,19 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import type { CoreConfig } from "../config";
-import { deleteSecret, getJsonSecret, putJsonSecret } from "./client";
 import { deleteDynamoSecret, getDynamoSecret, putDynamoSecret } from "./dynamo-store";
 
-export type MetaSecretsBackend = "file" | "dynamodb" | "secrets-manager";
+export type MetaSecretsBackend = "file" | "dynamodb";
 
 export function resolveMetaSecretsBackend(config: CoreConfig): MetaSecretsBackend {
   if (config.metaSecretsBackend) return config.metaSecretsBackend;
-  if (config.metaSecretsUseSecretsManager) return "secrets-manager";
-  return "file";
-}
-
-export function isSecretsManagerBackend(config: CoreConfig): boolean {
-  return resolveMetaSecretsBackend(config) === "secrets-manager";
+  return "dynamodb";
 }
 
 function readFileJson<T>(path: string): T | null {
@@ -30,11 +24,6 @@ function writeFileJson(path: string, value: unknown): void {
   writeFileSync(path, JSON.stringify(value, null, 2), "utf8");
 }
 
-function secretsManagerId(config: CoreConfig, tenantId: string, namespace: string): string {
-  const prefix = config.metaSecretsPrefix ?? "commercechat";
-  return `${prefix}/${tenantId}/${namespace}`;
-}
-
 async function migrateToBackend<T>(
   config: CoreConfig,
   tenantId: string,
@@ -46,11 +35,6 @@ async function migrateToBackend<T>(
   if (target === "dynamodb") {
     await putDynamoSecret(config, tenantId, namespace, value);
     console.log(`[secrets] migrated ${namespace} credentials to DynamoDB for`, tenantId);
-    return;
-  }
-  if (target === "secrets-manager") {
-    await putJsonSecret(config, secretsManagerId(config, tenantId, namespace), value);
-    console.log(`[secrets] migrated ${namespace} credentials to Secrets Manager for`, tenantId);
     return;
   }
   writeFileJson(filePath, value);
@@ -69,14 +53,6 @@ async function loadFromAlternateBackends<T>(
     if (fromDdb) {
       await migrateToBackend(config, tenantId, namespace, target, filePath, fromDdb);
       return fromDdb;
-    }
-  }
-
-  if (target !== "secrets-manager") {
-    const fromSm = await getJsonSecret<T>(config, secretsManagerId(config, tenantId, namespace));
-    if (fromSm) {
-      await migrateToBackend(config, tenantId, namespace, target, filePath, fromSm);
-      return fromSm;
     }
   }
 
@@ -110,12 +86,6 @@ export async function loadTenantSecret<T>(
     return loadFromAlternateBackends(config, tenantId, namespace, backend, filePath);
   }
 
-  if (backend === "secrets-manager") {
-    const fromSm = await getJsonSecret<T>(config, secretsManagerId(config, tenantId, namespace));
-    if (fromSm) return fromSm;
-    return loadFromAlternateBackends(config, tenantId, namespace, backend, filePath);
-  }
-
   const fromFile = readFileJson<T>(filePath);
   if (fromFile) return fromFile;
   return loadFromAlternateBackends(config, tenantId, namespace, backend, filePath);
@@ -132,8 +102,6 @@ export async function saveTenantSecret(
 
   if (backend === "dynamodb") {
     await putDynamoSecret(config, tenantId, namespace, value);
-  } else if (backend === "secrets-manager") {
-    await putJsonSecret(config, secretsManagerId(config, tenantId, namespace), value);
   } else {
     writeFileJson(filePath, value);
   }
@@ -157,8 +125,6 @@ export async function deleteTenantSecret(
 
   if (backend === "dynamodb") {
     await deleteDynamoSecret(config, tenantId, namespace);
-  } else if (backend === "secrets-manager") {
-    await deleteSecret(config, secretsManagerId(config, tenantId, namespace));
   }
 
   if (existsSync(filePath)) {

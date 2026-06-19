@@ -62,11 +62,11 @@ Do not tag resources with tenant IDs, customer names, phone numbers, emails, or 
 | `widget-cdn` | Widget CloudFront, widget S3 assets, widget API routes |
 | `chat-runtime` | Chat API/orchestrator, conversation/cart work, chat logs |
 | `knowledge-ingest` | Crawler/parser/embedder, Step Functions, ingest queues, vectors |
-| `meta-channels` | Meta webhooks, sender functions, token refresh, Meta secrets |
+| `meta-channels` | Meta webhooks, sender functions, token refresh, DynamoDB tenant credentials |
 | `billing` | Billing APIs, payment webhook, payment secrets |
 | `storage` | DynamoDB, S3 data/assets, backups/PITR |
 | `observability` | CloudWatch logs, dashboards, alarms, SNS alerts |
-| `security` | WAF, KMS, shared Secrets Manager, SSM parameters |
+| `security` | WAF, KMS, IAM baseline |
 
 The machine-readable manifest is [cost-allocation-tags.json](cost-allocation-tags.json).
 
@@ -294,7 +294,7 @@ See [plugins/shopify-app/README.md](../plugins/shopify-app/README.md).
 ## First Serverless Stack Order
 
 1. `storage`: DynamoDB table, S3 data/assets buckets, KMS keys.
-2. `security`: Secrets Manager/SSM paths, IAM baseline.
+2. `security`: IAM baseline and least-privilege runtime policies.
 3. `api`: API Gateway HTTP API, auth/tenant/widget/chat Lambdas.
 4. `meta`: Meta webhook route, token refresh schedule.
 5. `ingest`: knowledge sync Lambdas, queues, Step Functions.

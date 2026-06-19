@@ -1,4 +1,4 @@
-export type MetaSecretsBackend = "file" | "dynamodb" | "secrets-manager";
+export type MetaSecretsBackend = "file" | "dynamodb";
 
 export interface CoreConfig {
   tableName: string;
@@ -44,11 +44,7 @@ export interface CoreConfig {
   s3PublicUrl?: string;
   s3AccessKeyId?: string;
   s3SecretAccessKey?: string;
-  secretsEndpoint?: string;
-  secretsAccessKeyId?: string;
-  secretsSecretAccessKey?: string;
   metaSecretsBackend?: MetaSecretsBackend;
-  metaSecretsUseSecretsManager: boolean;
   metaSecretsPrefix: string;
   metaTokenRefreshCronSecret?: string;
   billingLifecycleCronSecret?: string;
@@ -64,7 +60,7 @@ export interface CoreConfig {
 
 function parseMetaSecretsBackend(): MetaSecretsBackend | undefined {
   const raw = process.env.META_SECRETS_BACKEND?.trim().toLowerCase();
-  if (raw === "dynamodb" || raw === "secrets-manager" || raw === "file") return raw;
+  if (raw === "dynamodb" || raw === "file") return raw;
   return undefined;
 }
 
@@ -115,11 +111,7 @@ export function loadConfig(): CoreConfig {
     s3PublicUrl: process.env.S3_PUBLIC_URL,
     s3AccessKeyId: process.env.AWS_ACCESS_KEY_ID,
     s3SecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    secretsEndpoint: process.env.SECRETS_MANAGER_ENDPOINT,
-    secretsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     metaSecretsBackend: parseMetaSecretsBackend(),
-    metaSecretsUseSecretsManager: process.env.META_SECRETS_USE_SECRETS_MANAGER === "true",
     metaSecretsPrefix: process.env.META_SECRETS_PREFIX ?? "commercechat",
     metaTokenRefreshCronSecret: process.env.META_TOKEN_REFRESH_CRON_SECRET,
     billingLifecycleCronSecret: process.env.BILLING_LIFECYCLE_CRON_SECRET,

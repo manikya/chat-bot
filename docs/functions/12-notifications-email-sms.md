@@ -113,7 +113,7 @@ sms:
   primary: twilio       # Phase 2+ when enabled
 ```
 
-### Secrets (Secrets Manager)
+### Secrets (DynamoDB tenant credential records)
 
 ```
 /commercechat/platform/email/resend     → { apiKey: "re_..." }
@@ -200,7 +200,7 @@ async function notify(tenantId: string, template: string, data: object): Promise
 | Item | Detail |
 |------|--------|
 | API | `POST https://api.resend.com/emails` |
-| Auth | Bearer token from Secrets Manager |
+| Auth | Bearer token from tenant credential record |
 | Domain | Verify `commercechat.com` in Resend dashboard |
 | Rate limits | Resend plan limits; retry 429 with backoff |
 
@@ -274,7 +274,7 @@ Enable only for **SMS MFA** (Phase 3) or merchant SMS alerts.
 
 | Rule | Detail |
 |------|--------|
-| API keys | Secrets Manager only |
+| API keys | DynamoDB tenant credential records only |
 | Decrypted OTP | Never log; clear from memory after send |
 | Unsubscribe | Platform emails include support link; auth emails exempt |
 | Bounce handling | Configure Resend webhooks → disable bad addresses (Phase 2) |
@@ -321,7 +321,7 @@ Enable only for **SMS MFA** (Phase 3) or merchant SMS alerts.
 
 | Depends on | Provides to |
 |------------|-------------|
-| Secrets Manager, SSM | All functions sending mail |
+| DynamoDB tenant credential records, SSM | All functions sending mail |
 | [13 Custom Auth](13-custom-auth.md) | Auth + MFA email triggers |
 | Resend account + domain | All merchant email |
 | SES verified domain | Optional EmailProvider fallback |

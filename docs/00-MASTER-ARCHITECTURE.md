@@ -196,7 +196,7 @@ ASCII overview (legacy):
 | SMS | Skipped MVP | Twilio via `SmsProvider` (Phase 3, optional) |
 | Billing | Stripe | — |
 | CDN / edge | CloudFront + WAF | — |
-| Secrets | AWS Secrets Manager | SSM Parameter Store (non-secret config) |
+| Secrets | DynamoDB tenant credential records | SSM Parameter Store (non-secret config) |
 | Channels | Meta Graph API | — |
 
 ---
@@ -208,7 +208,7 @@ ASCII overview (legacy):
 - **Partition key:** `TENANT#<tenantId>` on all tenant-owned data
 - **Webhook routing:** GSI lookup by `page_id`, `phone_number_id`, or `ig_user_id`
 - **Vector isolation:** Separate S3 Vectors index namespace per tenant
-- **Secrets:** Per-tenant Meta and commerce tokens in Secrets Manager
+- **Secrets:** Per-tenant Meta and commerce tokens in DynamoDB tenant credential records
 
 ### 6.2 Channel adapter pattern
 

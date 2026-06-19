@@ -157,7 +157,7 @@ function resolveProvider(tenant: TenantConfig, intent: Intent): RouteDecision {
 | Item | Detail |
 |------|--------|
 | SDK | `openai` npm package |
-| Auth | API key from Secrets Manager (`/commercechat/platform/openai`) |
+| Auth | API key from environment or deployment parameter (`/commercechat/platform/openai`) |
 | Tools | OpenAI function calling format |
 | Streaming | `stream: true` for web channel only |
 | Caching | Enable prompt caching for system prompt (stable prefix) |

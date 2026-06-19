@@ -64,7 +64,7 @@
     "security": [
       "WAF",
       "KMS keys",
-      "Secrets Manager shared secrets",
+      "DynamoDB tenant credential records",
       "SSM parameters"
     ]
   },

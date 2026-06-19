@@ -22,7 +22,7 @@
 
 1. **Single table** per environment — tenant isolation via `PK` prefix
 2. **No cross-tenant queries** in application code (except email login GSI)
-3. **Secrets never in DynamoDB** — Meta tokens, API keys in Secrets Manager
+3. **Credential records stay tenant-scoped** — Meta tokens and commerce credentials use encrypted DynamoDB tenant records
 4. **Vectors not in DynamoDB** — embeddings in S3 Vectors; only metadata here
 5. **MFA-ready** user records from day one
 
@@ -294,7 +294,7 @@ SK: CHANNEL#whatsapp
   "phoneNumberId": "444555666",
   "wabaId": "111222333",
   "displayPhone": "+15551234567",
-  "secretsArn": "arn:aws:secretsmanager:...:commercechat/ten_abc123/meta",
+  "credentialsKey": "TENANT#ten_abc123 / SECRET#meta/whatsapp",
   "tokenExpiresAt": "2026-12-01T00:00:00Z",
   "lastHealthCheck": "2026-06-10T08:00:00Z",
   "connectedAt": "2026-06-07T14:00:00Z"
@@ -658,16 +658,16 @@ Metadata per vector: sourceId, source_type, sku, url, title, date
 
 ---
 
-## 6. Secrets Manager (not DynamoDB)
+## 6. DynamoDB Tenant Credential Records
 
 
-| Path                                  | Contents                      |
-| ------------------------------------- | ----------------------------- |
-| `/commercechat/platform/openai`       | Platform OpenAI key           |
-| `/commercechat/platform/email/resend` | Resend API key                |
-| `/commercechat/platform/jwt`          | JWT signing secret or key ref |
-| `/commercechat/<tenantId>/meta`       | Meta page token, WABA IDs     |
-| `/commercechat/<tenantId>/stripe`     | Per-tenant (Phase 2)          |
+| Key pattern | Contents |
+| ----------- | -------- |
+| `TENANT#<tenantId> / SECRET#meta/whatsapp` | WhatsApp access token, WABA IDs |
+| `TENANT#<tenantId> / SECRET#meta/messenger` | Messenger page token and Page ID |
+| `TENANT#<tenantId> / SECRET#meta/instagram` | Instagram channel token and IDs |
+| `TENANT#<tenantId> / SECRET#commerce/wordpress` | WooCommerce credentials |
+| `TENANT#<tenantId> / SECRET#commerce/shopify` | Shopify credentials |
 
 
 ---
@@ -733,6 +733,5 @@ erDiagram
     SOURCE ||--o{ INGEST_JOB : runs
     USER ||--o{ SESSION : has
 ```
-
 
 

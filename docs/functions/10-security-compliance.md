@@ -19,7 +19,7 @@ Define security controls, data privacy requirements, and compliance obligations 
 | Meta webhook spoofing | High | Signature verification |
 | API key abuse | Medium | Rate limits, domain allowlist |
 | PII exposure in logs | High | Scrubbing, log redaction |
-| Token theft (Meta/OpenAI/ESP) | Critical | Secrets Manager, IAM, rotation |
+| Token theft (Meta/OpenAI/ESP) | Critical | DynamoDB tenant credential records, IAM, rotation |
 | Prompt injection | Medium | System prompt rules, tool validation |
 | DDoS on webhooks | Medium | WAF, API Gateway throttling |
 
@@ -48,8 +48,8 @@ Define security controls, data privacy requirements, and compliance obligations 
 
 | Data type | Classification | Storage | Retention |
 |-----------|----------------|---------|-----------|
-| Merchant credentials (Meta tokens) | Secret | Secrets Manager | Until disconnect |
-| ESP API keys (Resend, Twilio) | Secret | Secrets Manager | Rotated on schedule |
+| Merchant credentials (Meta tokens) | Secret | DynamoDB tenant credential records | Until disconnect |
+| ESP API keys (Resend, Twilio) | Secret | DynamoDB tenant credential records | Rotated on schedule |
 | Customer messages | PII | DynamoDB + S3 | Plan-based (90d–1yr) |
 | Conversation exports (uploaded) | PII | S3 (encrypted) | Until source deleted |
 | Product catalog | Business | S3 Vectors | Until source deleted |
@@ -64,7 +64,7 @@ Define security controls, data privacy requirements, and compliance obligations 
 |-------|--------|
 | S3 | SSE-S3 or SSE-KMS |
 | DynamoDB | Encryption at rest (AWS managed) |
-| Secrets Manager | KMS encrypted |
+| DynamoDB tenant credential records | KMS encrypted |
 | In transit | TLS 1.2+ everywhere |
 | CloudFront | HTTPS only |
 
@@ -195,7 +195,7 @@ TTL on DynamoDB message records + S3 lifecycle rules.
 - [ ] DPA template ready
 - [ ] Meta App Review submitted
 - [ ] Encryption at rest enabled on all stores
-- [ ] Secrets in Secrets Manager (no env vars for tokens)
+- [ ] Secrets in DynamoDB tenant credential records (no env vars for tokens)
 - [ ] Resend/SES domain verified; SPF/DKIM/DMARC configured
 - [ ] MFA OTP / TOTP secrets never logged; TOTP secret encrypted at rest
 - [ ] Account lockout after failed login attempts

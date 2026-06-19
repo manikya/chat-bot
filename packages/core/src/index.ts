@@ -13,7 +13,6 @@ export {
 } from "./tenant/logo";
 export { isS3AssetsEnabled } from "./storage/s3";
 export {
-  isSecretsManagerBackend as isSecretsManagerEnabled,
   resolveMetaSecretsBackend,
   type MetaSecretsBackend,
 } from "./secrets/backend";

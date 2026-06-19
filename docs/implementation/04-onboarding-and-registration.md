@@ -295,7 +295,7 @@ PATCH /api/v1/onboarding/step { "step": "channels" }
 1. Admin clicks "Connect WhatsApp"
 2. Meta OAuth popup → authorization code
 3. `POST /api/v1/channels/meta/connect` with code
-4. Backend: exchange token, store in Secrets Manager, write `PHONE#` routing, subscribe webhooks
+4. Backend: exchange token, store in DynamoDB tenant credential records, write `PHONE#` routing, subscribe webhooks
 5. UI shows connected phone number
 
 **Web channel** is auto-enabled at signup (widget key already generated).

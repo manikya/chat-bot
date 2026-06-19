@@ -779,18 +779,6 @@ function buildTemplate({
                   },
                 ],
               },
-              {
-                Effect: "Allow",
-                Action: [
-                  "secretsmanager:GetSecretValue",
-                  "secretsmanager:PutSecretValue",
-                  "secretsmanager:CreateSecret",
-                  "secretsmanager:UpdateSecret",
-                  "secretsmanager:TagResource",
-                  "secretsmanager:DeleteSecret",
-                ],
-                Resource: { "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:commercechat/*" },
-              },
               ...ingestPolicyStatements,
             ],
           },
