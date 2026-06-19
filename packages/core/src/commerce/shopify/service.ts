@@ -70,27 +70,38 @@ function stripHtml(html: string): string {
 }
 
 export function shopifyProductToCatalog(product: ShopifyProduct, shopDomain: string): CatalogProduct {
-  const variant = product.variants?.[0];
+  const variants = product.variants ?? [];
+  const variant = variants[0];
   const sku = variant?.sku?.trim() || `shopify-${product.id}`;
-  const price = parseFloat(variant?.price ?? "0") || 0;
+  const prices = variants
+    .map((v) => parseFloat(v.price ?? "0"))
+    .filter((price) => Number.isFinite(price) && price >= 0);
+  const price = prices.length ? Math.min(...prices) : 0;
   const images = (product.images ?? [])
     .map((img) => img.src)
     .filter((src): src is string => Boolean(src));
   const primaryImage = product.image?.src ?? images[0];
-  const inStock =
-    variant?.inventory_quantity == null
-      ? product.status === "active"
-      : (variant.inventory_quantity ?? 0) > 0;
+  const inStock = variants.some((v) =>
+    v.inventory_quantity == null ? product.status === "active" : (v.inventory_quantity ?? 0) > 0
+  );
+  const categories = [product.product_type, product.vendor]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
 
   return {
     sku,
     name: product.title,
     description: stripHtml(product.body_html || product.title),
     price,
-    category: product.product_type?.trim() || product.vendor?.trim() || "General",
+    category: categories[0] || "General",
+    categories: categories.length ? categories : undefined,
     imageUrl: primaryImage,
     imageUrls: images.length ? images : undefined,
     tags: product.tags?.trim() || undefined,
+    sizes: variants
+      .map((v) => [v.sku, v.price].filter(Boolean).join(": "))
+      .filter(Boolean)
+      .join("; ") || undefined,
     inStock,
     url: `https://${shopDomain}/products/${product.handle}`,
   };

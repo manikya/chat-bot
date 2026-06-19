@@ -7,6 +7,10 @@ export interface ChunkMetadata {
   section?: string;
   crawled_at?: string;
   sku?: string;
+  categories?: string[];
+  price?: number;
+  currency?: string;
+  inStock?: boolean;
   question?: string;
   platform?: string;
   date?: string;

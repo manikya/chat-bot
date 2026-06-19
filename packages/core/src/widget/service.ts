@@ -68,6 +68,7 @@ export interface WidgetProductCard {
   imageUrls?: string[];
   url?: string;
   inStock: boolean;
+  matchReasons?: string[];
 }
 
 const PRODUCT_TOOL_NAMES = ["search_products", "compare_products", "get_related_products"] as const;
@@ -98,6 +99,7 @@ export function buildProductCards(toolResults?: ToolRow[]): WidgetProductCard[] 
           imageUrls?: string[];
           url?: string;
           inStock?: boolean;
+          matchReasons?: string[];
         }>
       | undefined;
     if (!products?.length) continue;
@@ -112,6 +114,7 @@ export function buildProductCards(toolResults?: ToolRow[]): WidgetProductCard[] 
       imageUrls: p.imageUrls,
       url: p.url,
       inStock: p.inStock !== false,
+      matchReasons: p.matchReasons,
     }));
   }
   return [];

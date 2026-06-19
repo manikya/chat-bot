@@ -58,6 +58,41 @@ export function assertCase(out, expect) {
     failures.push(`productCards expected <= ${expect.maxProductCards}, got ${out.productCards ?? 0}`);
   }
 
+  if (expect.minProductCards != null && Number(out.productCards || 0) < expect.minProductCards) {
+    failures.push(`productCards expected >= ${expect.minProductCards}, got ${out.productCards ?? 0}`);
+  }
+
+  if (expect.expectedProductSkus) {
+    const skus = new Set(out.productSkus ?? []);
+    for (const sku of expect.expectedProductSkus) {
+      if (!skus.has(sku)) failures.push(`missing expected product SKU ${sku}`);
+    }
+  }
+
+  if (expect.productNameIncludesAny) {
+    const names = (out.productNames ?? []).join(" ").toLowerCase();
+    const matched = expect.productNameIncludesAny.some((term) =>
+      names.includes(String(term).toLowerCase())
+    );
+    if (!matched) failures.push(`product names missing any of ${expect.productNameIncludesAny.join("|")}`);
+  }
+
+  if (expect.maxProductPrice != null) {
+    const tooExpensive = (out.products ?? []).filter((p) => Number(p.price) > expect.maxProductPrice);
+    if (tooExpensive.length) {
+      failures.push(
+        `products above ${expect.maxProductPrice}: ${tooExpensive
+          .map((p) => `${p.sku ?? p.name}:${p.price}`)
+          .join(", ")}`
+      );
+    }
+  }
+
+  if (expect.noOutOfStockProducts) {
+    const outOfStock = out.outOfStockProducts ?? [];
+    if (outOfStock.length) failures.push(`out-of-stock products returned: ${outOfStock.join(", ")}`);
+  }
+
   if (expect.minSuggestedActions != null && Number(out.suggestedActions || 0) < expect.minSuggestedActions) {
     failures.push(`suggestedActions expected >= ${expect.minSuggestedActions}, got ${out.suggestedActions ?? 0}`);
   }

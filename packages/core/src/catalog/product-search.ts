@@ -140,6 +140,34 @@ export function scoreProductRelevance(record: ProductRecord, terms: string[]): n
   return score;
 }
 
+export function productMatchReasons(
+  record: ProductRecord,
+  query: string,
+  options?: { category?: string; maxPrice?: number; minPrice?: number; vectorScore?: number }
+): string[] {
+  const reasons: string[] = [];
+  const terms = searchTermsFromQuery(query);
+  const name = record.name.toLowerCase();
+  const desc = (record.description ?? "").toLowerCase();
+  const tags = (record.tags ?? "").toLowerCase();
+  const cats = productCategoryList(record).map((c) => c.toLowerCase());
+
+  if (record.inStock !== false) reasons.push("in stock");
+  if (options?.category && categoryFilterMatches(record, options.category)) {
+    reasons.push(`matches ${options.category}`);
+  } else if (terms.some((term) => cats.some((c) => c.includes(term) || term.includes(c)))) {
+    reasons.push("category match");
+  }
+  if (terms.some((term) => name.includes(term))) reasons.push("name match");
+  if (terms.some((term) => desc.includes(term))) reasons.push("description match");
+  if (terms.some((term) => tags.includes(term))) reasons.push("tag match");
+  if (options?.maxPrice != null && record.price <= options.maxPrice) reasons.push("within budget");
+  if (options?.minPrice != null && record.price >= options.minPrice) reasons.push("above minimum budget");
+  if ((options?.vectorScore ?? 0) > 0.2) reasons.push("semantic match");
+
+  return [...new Set(reasons)].slice(0, 4);
+}
+
 export function rankProductsByRelevance(
   products: ProductRecord[],
   query: string,

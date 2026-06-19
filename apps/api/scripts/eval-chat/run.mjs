@@ -13,17 +13,16 @@ import { assertCase } from "./assertions.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API = process.env.API_URL ?? "http://localhost:3001";
 const API_KEY = process.env.WIDGET_API_KEY ?? process.env.API_KEY;
-const SESSION = `eval-${Date.now()}`;
 const cases = JSON.parse(readFileSync(join(__dirname, "cases.json"), "utf8"));
 
-async function chat(message) {
+async function chat(message, sessionId) {
   const path = API_KEY ? "/api/v1/widget/chat" : "/api/v1/chat";
   const headers = { "Content-Type": "application/json" };
   if (API_KEY) headers["X-API-Key"] = API_KEY;
 
   const body = API_KEY
-    ? { sessionId: SESSION, message, metadata: { pageUrl: "https://example.com/products" } }
-    : { message, channel: "test", externalUserId: SESSION };
+    ? { sessionId, message, metadata: { pageUrl: "https://example.com/products" } }
+    : { message, channel: "test", externalUserId: sessionId };
 
   const res = await fetch(`${API}${path}`, {
     method: "POST",
@@ -33,12 +32,20 @@ async function chat(message) {
   const json = await res.json();
   if (!res.ok) throw new Error(`${path} ${res.status}: ${JSON.stringify(json)}`);
   const data = json.data ?? json;
+  const toolProducts =
+    data.toolResults?.find((t) => Array.isArray(t.products))?.products ?? [];
+  const products = data.productCards?.length ? data.productCards : toolProducts;
   return {
     reply: data.reply?.content ?? data.reply ?? "",
     intent: data.intent,
     subIntent: data.subIntent,
     funnelStage: data.funnelStage,
     productCards: data.productCards?.length ?? 0,
+    products,
+    productSkus: products.map((p) => p.sku).filter(Boolean),
+    productNames: products.map((p) => p.name).filter(Boolean),
+    productPrices: products.map((p) => p.price).filter((p) => typeof p === "number"),
+    outOfStockProducts: products.filter((p) => p.inStock === false).map((p) => p.sku || p.name),
     suggestedActions: data.suggestedActions?.length ?? 0,
     tools: (data.toolResults ?? []).map((t) => t.tool).join(", "),
   };
@@ -53,12 +60,18 @@ async function main() {
 
   for (const c of cases) {
     try {
-      const out = await chat(c.message);
+      const sessionId = `eval-${Date.now()}-${c.id}`;
+      const messages = c.messages ?? [c.message];
+      let out;
+      for (const message of messages) {
+        out = await chat(message, sessionId);
+      }
       const failures = assertCase(out, c.expect ?? {});
       const preview = String(out.reply).replace(/\s+/g, " ").slice(0, 140);
       console.log(
         `[${c.id}] intent=${out.intent ?? "?"} sub=${out.subIntent ?? "?"} funnel=${out.funnelStage ?? "?"} ` +
-          `cards=${out.productCards} actions=${out.suggestedActions} tools=${out.tools || "-"}`
+          `cards=${out.productCards} skus=${out.productSkus.join("|") || "-"} ` +
+          `actions=${out.suggestedActions} tools=${out.tools || "-"}`
       );
       console.log(`  → ${preview}${String(out.reply).length > 140 ? "…" : ""}`);
 

@@ -4,6 +4,7 @@ import {
   getProductBySku,
   getRelatedProducts,
   getStoreCurrency,
+  productMatchReasons,
   searchProductCache,
   type ProductRecord,
 } from "../catalog/products";
@@ -15,6 +16,7 @@ import type { ScoredChunk } from "../ingest/types";
 import type { ToolDefinition } from "../llm/types";
 import { addToCart, getOrCreateCart, loadCart } from "./cart";
 import { messageMentionsProducts } from "./intent";
+import { buildProductSearchQuery } from "./product-query";
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   search_products: {
@@ -191,11 +193,13 @@ async function mergeProductSearchResults(
         sku,
         name: h.chunk.metadata.title ?? "Product",
         description: h.chunk.text.slice(0, 500),
-        price: 0,
-        currency: storeCurrency,
-        inStock: true,
+        price: h.chunk.metadata.price ?? 0,
+        currency: h.chunk.metadata.currency ?? storeCurrency,
+        inStock: h.chunk.metadata.inStock ?? true,
         category: h.chunk.metadata.section,
+        categories: h.chunk.metadata.categories,
         productUrl: h.chunk.metadata.url,
+        tags: h.chunk.metadata.tags?.join(", "),
       }
     );
   }
@@ -207,7 +211,10 @@ async function mergeProductSearchResults(
   });
 }
 
-function productDto(p: ProductRecord) {
+function productDto(
+  p: ProductRecord,
+  options?: { query?: string; category?: string; maxPrice?: number; minPrice?: number; vectorScore?: number }
+) {
   return {
     sku: p.sku,
     name: p.name,
@@ -215,11 +222,20 @@ function productDto(p: ProductRecord) {
     price: p.price,
     currency: p.currency,
     category: p.category,
+    categories: p.categories,
     inStock: p.inStock,
     imageUrl: p.imageUrl,
     imageUrls: p.imageUrls,
     url: p.productUrl,
     variants: p.variants,
+    matchReasons: options?.query
+      ? productMatchReasons(p, options.query, {
+          category: options.category,
+          maxPrice: options.maxPrice,
+          minPrice: options.minPrice,
+          vectorScore: options.vectorScore,
+        })
+      : undefined,
   };
 }
 
@@ -231,6 +247,7 @@ export interface ToolExecutionContext {
   channel?: string;
   externalUserId?: string;
   qualification?: QualificationState;
+  pageUrl?: string;
 }
 
 export async function executeTool(
@@ -253,10 +270,15 @@ export async function executeTool(
         (args.category ? String(args.category) : undefined) ?? ctx.qualification?.category;
       const maxPrice = (args.maxPrice as number | undefined) ?? ctx.qualification?.budget?.max;
       const minPrice = (args.minPrice as number | undefined) ?? ctx.qualification?.budget?.min;
-      const searchQuery =
-        categoryFilter && !query.toLowerCase().includes(categoryFilter.toLowerCase())
-          ? `${query} ${categoryFilter}`.trim()
-          : query;
+      const searchQuery = buildProductSearchQuery({
+        message: query,
+        qualification: {
+          ...(ctx.qualification ?? {}),
+          category: categoryFilter,
+          budget: { ...ctx.qualification?.budget, max: maxPrice, min: minPrice },
+        },
+        pageUrl: ctx.pageUrl,
+      });
       const recallLimit = Math.max(limit * 3, 12);
       const storeCurrency = await getStoreCurrency(ctx.auth.tenantId, ctx.config);
       const [vectorHits, cacheHits] = await Promise.all([
@@ -280,10 +302,22 @@ export async function executeTool(
         searchQuery,
         { category: categoryFilter, maxPrice, minPrice, limit }
       );
+      const vectorScores = new Map(
+        vectorHits.map((hit) => [String(hit.chunk.metadata.sku ?? hit.chunk.id), hit.score])
+      );
       return {
         success: true,
         result: {
-          products: ranked.map((p) => productDto(p)),
+          query: searchQuery,
+          products: ranked.map((p) =>
+            productDto(p, {
+              query: searchQuery,
+              category: categoryFilter,
+              maxPrice,
+              minPrice,
+              vectorScore: vectorScores.get(p.sku),
+            })
+          ),
           totalFound: ranked.length,
         },
       };

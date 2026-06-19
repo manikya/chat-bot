@@ -31,6 +31,12 @@ const RECIPIENT_PATTERNS = [
   /\bfor\s+(?:my\s+)?(mom|dad|mother|father|wife|husband|friend|son|daughter|brother|sister)\b/i,
 ];
 
+const CONSTRAINT_PATTERNS = [
+  /\b(red|blue|green|black|white|gold|silver|brass|wooden|wood|ceramic|glass|copper|steel|leather|cotton|silk)\b/gi,
+  /\b(birthday|anniversary|wedding|graduation|housewarming|corporate|valentine|christmas|new year)\b/gi,
+  /\b(small|large|mini|premium|luxury|cheap|affordable|personalized|custom)\b/gi,
+];
+
 function parseBudgetNumber(raw: string, market: ChatMarket): number | undefined {
   const cleaned = raw.replace(/,/g, "").trim();
   const n = Number(cleaned);
@@ -73,8 +79,23 @@ export function extractBudgetFromMessage(
   return undefined;
 }
 
-export function extractCategoryFromMessage(message: string): string | undefined {
+function catalogTermFromMessage(message: string, terms?: string[]): string | undefined {
+  if (!terms?.length) return undefined;
   const lower = message.toLowerCase();
+  return [...terms]
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 3)
+    .sort((a, b) => b.length - a.length)
+    .find((term) => lower.includes(term.toLowerCase()));
+}
+
+export function extractCategoryFromMessage(
+  message: string,
+  options?: { catalogCategories?: string[]; catalogTags?: string[] }
+): string | undefined {
+  const lower = message.toLowerCase();
+  const catalogCategory = catalogTermFromMessage(message, options?.catalogCategories);
+  if (catalogCategory) return catalogCategory;
 
   const material = lower.match(
     /\b(brass|silver|gold|wooden|wood|ceramic|glass|copper|steel|leather|cotton|silk)\b/
@@ -93,6 +114,8 @@ export function extractCategoryFromMessage(message: string): string | undefined 
       return phrase;
     }
   }
+  const catalogTag = catalogTermFromMessage(message, options?.catalogTags);
+  if (catalogTag) return catalogTag;
   return undefined;
 }
 
@@ -117,19 +140,34 @@ export function extractObjectionTypes(message: string): string[] {
   return types;
 }
 
+export function extractConstraintsFromMessage(message: string): string[] {
+  const constraints = new Set<string>();
+  for (const pattern of CONSTRAINT_PATTERNS) {
+    for (const match of message.matchAll(pattern)) {
+      const value = match[1]?.trim().toLowerCase();
+      if (value) constraints.add(value);
+    }
+  }
+  return [...constraints];
+}
+
 export function extractQualificationFromMessage(
   message: string,
-  market: ChatMarket = "default"
+  market: ChatMarket = "default",
+  options?: { catalogCategories?: string[]; catalogTags?: string[] }
 ): QualificationState {
   const patch: QualificationState = {};
   const budget = extractBudgetFromMessage(message, market);
   if (budget) patch.budget = budget;
 
-  const category = extractCategoryFromMessage(message);
+  const category = extractCategoryFromMessage(message, options);
   if (category) patch.category = category;
 
   const recipient = extractRecipientFromMessage(message);
   if (recipient) patch.recipient = recipient;
+
+  const constraints = extractConstraintsFromMessage(message);
+  if (constraints.length) patch.constraints = constraints;
 
   const objections = extractObjectionTypes(message);
   if (objections.length) patch.objectionsRaised = objections;

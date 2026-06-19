@@ -66,7 +66,34 @@
     "expect": {
       "nonEmptyReply": true,
       "intent": "product",
-      "toolsIncludes": ["search_products"]
+      "toolsIncludes": ["search_products"],
+      "maxProductPrice": 3000,
+      "noOutOfStockProducts": true
+    }
+  },
+  {
+    "id": "budget-followup-retains-product-context",
+    "messages": [
+      "Do you have something nice for a gift?",
+      "Under LKR 5000"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "maxProductPrice": 5000,
+      "noOutOfStockProducts": true
+    }
+  },
+  {
+    "id": "material-category-search",
+    "message": "Recommend brass gifts under LKR 5000",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "maxProductPrice": 5000,
+      "noOutOfStockProducts": true
     }
   },
   {

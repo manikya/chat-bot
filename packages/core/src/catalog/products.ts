@@ -6,6 +6,7 @@ import type { CatalogProduct } from "../ingest/parsers/catalog-csv";
 import {
   categoryFilterMatches,
   productCategoryList,
+  productMatchReasons,
   rankProductsByRelevance,
   searchTermsFromQuery,
   scoreProductRelevance,
@@ -174,4 +175,35 @@ export async function searchProductCache(
   return rankProductsByRelevance(items, query, { ...options, limit });
 }
 
-export { productCategoryList, searchTermsFromQuery, scoreProductRelevance, rankProductsByRelevance };
+export async function listCatalogSearchHints(
+  tenantId: string,
+  config: CoreConfig
+): Promise<{ categories: string[]; tags: string[] }> {
+  const items = (await listProductItems(tenantId, config)) as ProductRecord[];
+  const categories = new Set<string>();
+  const tags = new Set<string>();
+
+  for (const item of items) {
+    for (const category of productCategoryList(item)) {
+      const trimmed = category.trim();
+      if (trimmed) categories.add(trimmed);
+    }
+    for (const tag of (item.tags ?? "").split(/[,|;]/)) {
+      const trimmed = tag.trim();
+      if (trimmed) tags.add(trimmed);
+    }
+  }
+
+  return {
+    categories: [...categories].sort((a, b) => a.localeCompare(b)),
+    tags: [...tags].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+export {
+  productCategoryList,
+  productMatchReasons,
+  searchTermsFromQuery,
+  scoreProductRelevance,
+  rankProductsByRelevance,
+};

@@ -16,6 +16,18 @@ const DELETE_BATCH_SIZE = 500;
 
 const ensuredIndexes = new Set<string>();
 
+function joinMetaList(value?: string[]): string | undefined {
+  return value?.length ? value.join(", ") : undefined;
+}
+
+function splitMetaList(value: unknown): string[] | undefined {
+  if (!value) return undefined;
+  return String(value)
+    .split(/[,|;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function chunkToMetadata(chunk: VectorChunk): Record<string, string | number | boolean> {
   const meta: Record<string, string | number | boolean> = {
     sourceId: chunk.sourceId,
@@ -26,6 +38,13 @@ function chunkToMetadata(chunk: VectorChunk): Record<string, string | number | b
   if (chunk.metadata.url) meta.url = chunk.metadata.url;
   if (chunk.metadata.section) meta.section = chunk.metadata.section;
   if (chunk.metadata.sku) meta.sku = chunk.metadata.sku;
+  const categories = joinMetaList(chunk.metadata.categories);
+  if (categories) meta.categories = categories;
+  if (chunk.metadata.price != null) meta.price = chunk.metadata.price;
+  if (chunk.metadata.currency) meta.currency = chunk.metadata.currency;
+  if (chunk.metadata.inStock != null) meta.inStock = chunk.metadata.inStock;
+  const tags = joinMetaList(chunk.metadata.tags);
+  if (tags) meta.tags = tags;
   if (chunk.metadata.platform) meta.platform = chunk.metadata.platform;
   if (chunk.metadata.date) meta.date = chunk.metadata.date;
   if (chunk.metadata.question) meta.question = chunk.metadata.question;
@@ -42,6 +61,11 @@ function metadataToChunk(key: string, metadata: Record<string, unknown>): Vector
   if (metadata.url) chunkMeta.url = String(metadata.url);
   if (metadata.section) chunkMeta.section = String(metadata.section);
   if (metadata.sku) chunkMeta.sku = String(metadata.sku);
+  chunkMeta.categories = splitMetaList(metadata.categories);
+  if (typeof metadata.price === "number") chunkMeta.price = metadata.price;
+  if (metadata.currency) chunkMeta.currency = String(metadata.currency);
+  if (typeof metadata.inStock === "boolean") chunkMeta.inStock = metadata.inStock;
+  chunkMeta.tags = splitMetaList(metadata.tags);
   if (metadata.platform) chunkMeta.platform = String(metadata.platform);
   if (metadata.date) chunkMeta.date = String(metadata.date);
   if (metadata.question) chunkMeta.question = String(metadata.question);

@@ -116,10 +116,19 @@ export function parseCatalogCsv(csvText: string): CatalogProduct[] {
       description,
       price,
       category: categoryParts[0] ?? categoryRaw,
-      categories: categoryParts.length > 1 ? categoryParts : undefined,
+      categories: categoryParts.length ? categoryParts : undefined,
+      currency: col(row, "currency") || undefined,
       imageUrl: col(row, "image_url") || col(row, "imageurl") || undefined,
+      imageUrls:
+        col(row, "image_urls") || col(row, "imageurls")
+          ? (col(row, "image_urls") || col(row, "imageurls"))
+              .split(/[,|;]/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined,
       sizes: col(row, "sizes") || undefined,
       colors: col(row, "colors") || undefined,
+      tags: col(row, "tags") || undefined,
       inStock: parseBool(col(row, "stock") || col(row, "in_stock")),
       url: col(row, "url") || undefined,
     });

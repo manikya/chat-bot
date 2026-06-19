@@ -10,6 +10,7 @@ export interface SearchProductHit {
   imageUrl?: string;
   imageUrls?: string[];
   url?: string;
+  matchReasons?: string[];
 }
 
 export function extractSearchProducts(

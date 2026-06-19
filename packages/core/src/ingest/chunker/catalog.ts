@@ -9,7 +9,7 @@ export function catalogProductToText(product: CatalogProduct): string {
     product.name,
     categoryText ? `Categories: ${categoryText}` : null,
     product.description,
-    `$${product.price.toFixed(2)}`,
+    `${product.currency ?? "USD"} ${product.price.toFixed(2)}`,
     `SKU: ${product.sku}`,
   ].filter(Boolean);
   if (product.sizes) parts.push(`Sizes: ${product.sizes}`);
@@ -33,6 +33,15 @@ export function chunkCatalogProducts(
       sku: product.sku,
       title: product.name,
       section: product.categories?.length ? product.categories.join(", ") : product.category,
+      categories: product.categories?.length ? product.categories : [product.category],
+      price: product.price,
+      currency: product.currency,
+      inStock: product.inStock,
+      tags: product.tags
+        ?.split(/[,|;]/)
+        .map((t) => t.trim())
+        .filter(Boolean),
+      url: product.url,
       crawled_at: syncedAt,
     },
   }));

@@ -1,5 +1,6 @@
 import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type ChatSubIntent, type TenantConfig } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
+import { listCatalogSearchHints } from "../catalog/products";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { retrieveKnowledge } from "../ingest/retrieve";
@@ -30,6 +31,7 @@ import {
 } from "./product-reply";
 import { appendCtaPromptLine, buildSuggestedCtas } from "./cta";
 import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
+import { buildProductSearchQuery } from "./product-query";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 import { assertTenantOperational } from "../tenant/status";
@@ -90,12 +92,20 @@ async function retrieveForIntent(
     sourceTypes = sourceTypes.filter((t) => t !== "conversation");
   }
 
-  const all: ScoredChunk[] = [];
-  for (const sourceType of sourceTypes) {
-    const hits = await retrieveKnowledge(auth, query, config, { topK: 3, sourceType });
-    all.push(...hits);
-    if (all.length >= 5) break;
+  const batches = await Promise.all(
+    sourceTypes.map((sourceType) =>
+      retrieveKnowledge(auth, query, config, { topK: 4, sourceType })
+    )
+  );
+  const byKey = new Map<string, ScoredChunk>();
+  for (const hit of batches.flat()) {
+    const key =
+      hit.chunk.metadata.sku ??
+      `${hit.chunk.metadata.source_type}:${hit.chunk.sourceId}:${hit.chunk.id}`;
+    const existing = byKey.get(key);
+    if (!existing || hit.score > existing.score) byKey.set(key, hit);
   }
+  const all = [...byKey.values()].filter((hit) => hit.score > 0.03);
   if (all.length === 0) {
     return retrieveKnowledge(auth, query, config, { topK: 5 });
   }
@@ -212,9 +222,18 @@ export async function runChatOrchestrator(
     cartItemCount: cart?.items.length ?? 0,
   });
   const subIntent = detectSubIntent(text, intent, funnel.stage);
+  const market = marketFromTimezone(timezone);
+  const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
+  const catalogHints =
+    intent === "product" || messageMentionsProducts(text)
+      ? await listCatalogSearchHints(auth.tenantId, config)
+      : undefined;
   const qualification = mergeQualification(
     conversation.qualification ?? funnel.qualification,
-    extractQualificationFromMessage(text, marketFromTimezone(timezone))
+    extractQualificationFromMessage(text, market, {
+      catalogCategories: catalogHints?.categories,
+      catalogTags: catalogHints?.tags,
+    })
   );
   const funnelOrQualChanged =
     funnel.changed ||
@@ -244,12 +263,16 @@ export async function runChatOrchestrator(
     funnelStage: funnel.stage,
   });
 
-  const ragChunks = await retrieveForIntent(auth, text, intent, config, text, {
+  const productAwareQuery = buildProductSearchQuery({
+    message: text,
+    qualification,
+    pageUrl,
+  });
+  const ragQuery = intent === "product" || messageMentionsProducts(text) ? productAwareQuery : text;
+  const ragChunks = await retrieveForIntent(auth, ragQuery, intent, config, text, {
     subIntent,
     objectionsRaised: qualification.objectionsRaised,
   });
-  const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
-  const market = marketFromTimezone(timezone);
   const currency = tenantConfig.commerceConnector?.currency ?? (market === "lk" ? "LKR" : "USD");
   const gateProductSearch = shouldGateProductSearch({
     funnelStage: funnel.stage,
@@ -278,6 +301,7 @@ export async function runChatOrchestrator(
     channel: input.channel,
     externalUserId: input.externalUserId,
     qualification,
+    pageUrl,
   };
 
   const messages: ChatMessage[] = [
