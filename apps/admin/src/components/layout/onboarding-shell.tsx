@@ -50,9 +50,11 @@ export function OnboardingShell({
       <header className="border-b bg-background">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">
-              CC
-            </div>
+            <img
+              src="/commercechat-logo.svg"
+              alt="CommerceChat"
+              className="h-8 w-8 rounded-lg"
+            />
             <div>
               <span className="font-semibold">CommerceChat Setup</span>
               {minutesLeft != null && minutesLeft > 0 && (

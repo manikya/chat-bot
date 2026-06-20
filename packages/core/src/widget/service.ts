@@ -85,6 +85,13 @@ function formatPrice(price: number, currency?: string) {
 
 type ToolRow = { tool: string; success: boolean; products?: Array<Record<string, unknown>> };
 
+function shortProductDescription(description?: string): string | undefined {
+  const clean = description?.replace(/\s+/g, " ").trim();
+  if (!clean) return undefined;
+  if (clean.length <= 90) return clean;
+  return `${clean.slice(0, 87).replace(/[,.!?;:\s]+$/, "")}...`;
+}
+
 export function buildProductCards(toolResults?: ToolRow[]): WidgetProductCard[] {
   for (const toolName of PRODUCT_TOOL_NAMES) {
     const hit = toolResults?.find((t) => t.tool === toolName && t.success);
@@ -107,7 +114,7 @@ export function buildProductCards(toolResults?: ToolRow[]): WidgetProductCard[] 
       type: "product" as const,
       sku: p.sku,
       name: p.name,
-      description: p.description,
+      description: shortProductDescription(p.description),
       price: p.price,
       currency: p.currency || "USD",
       imageUrl: p.imageUrl,

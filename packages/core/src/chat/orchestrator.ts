@@ -26,11 +26,12 @@ import {
   buildNoProductResultsReply,
   compactReplyText,
   enrichReplyWithProductSearch,
+  extractProductHitsFromTools,
   formatProductListForReply,
   productSearchWasEmpty,
   sanitizeReplyText,
 } from "./product-reply";
-import { appendCtaPromptLine, buildSuggestedCtas } from "./cta";
+import { appendCtaPromptLine, appendEngagementQuestion, buildSuggestedCtas } from "./cta";
 import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
 import { buildProductSearchQuery } from "./product-query";
 import {
@@ -541,6 +542,13 @@ export async function runChatOrchestrator(
     channel: input.channel,
     gateProductSearch,
     market,
+  });
+  replyContent = appendEngagementQuestion(replyContent, {
+    intent,
+    subIntent,
+    funnelStage: finalFunnel.stage,
+    qualification,
+    hasProductResults: extractProductHitsFromTools(finalToolResults).length > 0,
   });
   replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
   replyContent = compactReplyText(replyContent, { channel: input.channel });

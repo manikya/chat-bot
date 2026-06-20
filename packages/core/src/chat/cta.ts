@@ -1,4 +1,4 @@
-import type { ChatSubIntent, FunnelStage, WidgetAction } from "@commercechat/shared";
+import type { ChatIntent, ChatSubIntent, FunnelStage, QualificationState, WidgetAction } from "@commercechat/shared";
 import type { CartState } from "./cart";
 import type { SearchProductHit } from "./product-reply";
 import { extractProductHitsFromTools } from "./product-reply";
@@ -165,4 +165,36 @@ export function appendCtaPromptLine(
     return trimmed;
   }
   return reply;
+}
+
+export function appendEngagementQuestion(
+  reply: string,
+  input: {
+    intent?: ChatIntent;
+    funnelStage?: FunnelStage;
+    subIntent?: ChatSubIntent;
+    qualification?: QualificationState;
+    hasProductResults?: boolean;
+  }
+): string {
+  const trimmed = reply.trim();
+  if (!trimmed || trimmed.endsWith("?")) return reply;
+  if (input.intent !== "product" && input.subIntent !== "product_browse") return reply;
+  if (input.funnelStage === "cart" || input.funnelStage === "checkout" || input.funnelStage === "objection") {
+    return reply;
+  }
+
+  const qualification = input.qualification;
+  let question: string | null = null;
+  if (!qualification?.budget?.max && !qualification?.budget?.min) {
+    question = "What budget should I stay within?";
+  } else if (!qualification?.recipient) {
+    question = "Who is this for?";
+  } else if (!qualification?.constraints?.length) {
+    question = "Is it for gifting, home, or personal use?";
+  } else if (!input.hasProductResults && !qualification?.category) {
+    question = "What type of item are you looking for?";
+  }
+
+  return question ? `${trimmed}\n\n${question}` : reply;
 }

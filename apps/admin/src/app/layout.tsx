@@ -6,6 +6,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CommerceChat Admin",
   description: "AI e-commerce chatbot for WhatsApp and web",
+  icons: {
+    icon: "/commercechat-logo.svg",
+    shortcut: "/commercechat-logo.svg",
+    apple: "/commercechat-logo.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

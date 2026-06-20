@@ -51,9 +51,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-            CC
-          </div>
+          <img
+            src="/commercechat-logo.svg"
+            alt="CommerceChat"
+            className="h-8 w-8 rounded-lg"
+          />
           <div>
             <p className="text-sm font-semibold text-sidebar-foreground">CommerceChat</p>
             <p className="text-xs text-muted-foreground truncate max-w-[140px]">{tenant?.storeName}</p>

@@ -61,6 +61,10 @@
     messages: [],
     primaryColor: "#4F46E5",
     position: "bottom-right",
+    viewportHeight: null,
+    viewportTop: 0,
+    inputFocused: false,
+    inputDraft: "",
   };
 
   function activeSuggestedQuestions() {
@@ -78,6 +82,17 @@
     if (data.suggestedQuestions && data.suggestedQuestions.length) {
       state.suggestedQuestions = data.suggestedQuestions;
     }
+  }
+
+  function logoSvg(size) {
+    var s = size || 28;
+    return (
+      '<svg width="' + s + '" height="' + s + '" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<rect width="64" height="64" rx="16" fill="#EAF7FF"/>' +
+      '<path d="M17 43.5L29.3 21.8C30.5 19.7 33.5 19.7 34.7 21.8L47 43.5" stroke="#0A84FF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<path d="M25.5 34.5H38.5" stroke="#58B7FF" stroke-width="4" stroke-linecap="round"/>' +
+      "</svg>"
+    );
   }
 
   var root = document.createElement("commercechat-root");
@@ -109,25 +124,27 @@
       ".cc-root{font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.4;}" +
       ".cc-bubble{position:fixed;z-index:2147483000;width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;" +
       "box-shadow:0 4px 20px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;pointer-events:auto;}" +
+      ".cc-bubble svg{width:32px;height:32px;display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.12));}" +
       ".cc-bubble-br{bottom:20px;right:20px}.cc-bubble-bl{bottom:20px;left:20px}" +
       ".cc-panel{position:fixed;z-index:2147483001;width:380px;max-width:calc(100vw - 24px);height:520px;max-height:calc(100vh - 100px);" +
       "background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden;pointer-events:auto;}" +
       ".cc-panel-br{bottom:88px;right:20px}.cc-panel-bl{bottom:88px;left:20px}" +
-      ".cc-header{padding:14px 16px;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center;}" +
+      ".cc-header{padding:14px 16px;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center;flex:0 0 auto;}" +
+      ".cc-brand{display:flex;align-items:center;gap:8px;min-width:0}.cc-brand-logo{display:flex;width:28px;height:28px;border-radius:8px;overflow:hidden;flex:0 0 auto}.cc-brand-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       ".cc-close{background:transparent;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;opacity:.9}" +
-      ".cc-messages{flex:1;overflow-y:auto;padding:12px;background:#f8fafc;}" +
+      ".cc-messages{flex:1;min-height:0;overflow-y:auto;padding:12px;background:#f8fafc;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}" +
       ".cc-msg{margin-bottom:10px;max-width:88%;padding:10px 12px;border-radius:12px;word-wrap:break-word;}" +
       ".cc-msg-user{margin-left:auto;background:var(--cc-primary,#4F46E5);color:#fff;border-bottom-right-radius:4px;}" +
       ".cc-msg-bot{background:#fff;border:1px solid #e2e8f0;border-bottom-left-radius:4px;line-height:1.55;}" +
       ".cc-msg-bot strong{font-weight:600;color:#0f172a;}" +
       ".cc-msg-bot a{color:var(--cc-primary,#4F46E5);}" +
-      ".cc-suggestions{padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid #e2e8f0;background:#fff;}" +
+      ".cc-suggestions{padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid #e2e8f0;background:#fff;flex:0 0 auto;}" +
       ".cc-chip{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid #e2e8f0;background:#fff;cursor:pointer;}" +
       ".cc-chip:hover{border-color:var(--cc-primary,#4F46E5);color:var(--cc-primary,#4F46E5);}" +
-      ".cc-input-row{display:flex;gap:8px;padding:12px;border-top:1px solid #e2e8f0;background:#fff;}" +
-      ".cc-input{flex:1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:14px;outline:none;}" +
+      ".cc-input-row{display:flex;gap:8px;padding:12px max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));border-top:1px solid #e2e8f0;background:#fff;flex:0 0 auto;}" +
+      ".cc-input{flex:1;min-width:0;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;font-size:16px;line-height:20px;outline:none;-webkit-appearance:none;appearance:none;}" +
       ".cc-input:focus{border-color:var(--cc-primary,#4F46E5);}" +
-      ".cc-send{border:none;border-radius:10px;padding:10px 14px;color:#fff;cursor:pointer;font-weight:600;}" +
+      ".cc-send{border:none;border-radius:10px;padding:10px 14px;color:#fff;cursor:pointer;font-weight:600;min-height:42px;}" +
       ".cc-send:disabled{opacity:.5;cursor:not-allowed}" +
       ".cc-typing{font-size:12px;color:#64748b;padding:4px 12px;}" +
       ".cc-msg-actions{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px 0;max-width:88%;}" +
@@ -145,13 +162,42 @@
       ".cc-product-name{font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       ".cc-product-meta{display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;}" +
       ".cc-product-price{font-weight:700;color:#0f172a;}" +
-      ".cc-product-desc{font-size:12px;color:#64748b;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}" +
+      ".cc-product-desc{font-size:12px;color:#64748b;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35;}" +
       ".cc-product-buttons{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px;}" +
       ".cc-product-btn{font-size:12px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;padding:6px 8px;cursor:pointer;text-decoration:none;color:#0f172a;}" +
       ".cc-product-btn-primary{border-color:var(--cc-primary,#4F46E5);background:var(--cc-primary,#4F46E5);color:#fff;}" +
       ".cc-product-btn:disabled{opacity:.5;cursor:not-allowed;}" +
-      "@media (max-width:480px){.cc-panel{inset:0;width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0}.cc-panel-br,.cc-panel-bl{bottom:auto;right:auto;left:auto}.cc-product-list{max-width:100%;}}"
+      "@media (max-width:480px){.cc-bubble-br{bottom:max(16px,env(safe-area-inset-bottom));right:16px}.cc-bubble-bl{bottom:max(16px,env(safe-area-inset-bottom));left:16px}.cc-panel{top:var(--cc-vv-top,0px);left:0;right:0;bottom:auto;width:100vw;max-width:100vw;height:var(--cc-vv-height,100dvh);max-height:var(--cc-vv-height,100dvh);border-radius:0;box-shadow:none}.cc-panel-br,.cc-panel-bl{bottom:auto;right:0;left:0}.cc-header{padding-top:max(12px,env(safe-area-inset-top));}.cc-messages{padding:10px 10px 12px}.cc-msg{max-width:92%;padding:9px 11px}.cc-suggestions{flex-wrap:nowrap;overflow-x:auto;padding:8px 10px;-webkit-overflow-scrolling:touch}.cc-chip{white-space:nowrap;flex:0 0 auto}.cc-input-row{position:sticky;bottom:0;gap:6px}.cc-send{padding:10px 12px}.cc-product-list{max-width:100%;gap:8px}.cc-product-card{flex-basis:min(78vw,220px)}.cc-product-img,.cc-product-img-fallback{height:118px}.cc-product-desc{-webkit-line-clamp:1;}}" +
+      "@supports (height:100dvh){@media (max-width:480px){.cc-panel{height:var(--cc-vv-height,100dvh);max-height:var(--cc-vv-height,100dvh);}}}"
     );
+  }
+
+  function updateViewportVars() {
+    var vv = window.visualViewport;
+    var height = vv ? vv.height : window.innerHeight;
+    var top = vv ? vv.offsetTop || 0 : 0;
+    state.viewportHeight = Math.max(320, Math.floor(height || window.innerHeight || 600));
+    state.viewportTop = Math.max(0, Math.floor(top || 0));
+    container.style.setProperty("--cc-vv-height", state.viewportHeight + "px");
+    container.style.setProperty("--cc-vv-top", state.viewportTop + "px");
+  }
+
+  function bindViewportListeners() {
+    if (bindViewportListeners.bound) return;
+    bindViewportListeners.bound = true;
+    updateViewportVars();
+    var vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", updateViewportVars);
+      vv.addEventListener("scroll", updateViewportVars);
+    }
+    window.addEventListener("resize", updateViewportVars);
+    window.addEventListener("orientationchange", function () {
+      setTimeout(function () {
+        updateViewportVars();
+        render();
+      }, 250);
+    });
   }
 
   function posClass(prefix) {
@@ -160,6 +206,8 @@
 
   function render() {
     if (!mountRoot()) return;
+    bindViewportListeners();
+    updateViewportVars();
     container.innerHTML = "";
     container.style.setProperty("--cc-primary", state.primaryColor);
 
@@ -168,7 +216,7 @@
       bubble.className = "cc-bubble " + posClass("cc-bubble");
       bubble.style.background = state.primaryColor;
       bubble.setAttribute("aria-label", "Open chat");
-      bubble.textContent = "💬";
+      bubble.innerHTML = logoSvg(32);
       bubble.onclick = function () {
         state.open = true;
         render();
@@ -187,9 +235,11 @@
     header.className = "cc-header";
     header.style.background = state.primaryColor;
     header.innerHTML =
-      '<span>' +
+      '<span class="cc-brand"><span class="cc-brand-logo">' +
+      logoSvg(28) +
+      '</span><span class="cc-brand-name">' +
       escapeHtml((state.config && state.config.storeName) || "Chat") +
-      '</span><button class="cc-close" aria-label="Close">×</button>';
+      '</span></span><button class="cc-close" aria-label="Close">×</button>';
     header.querySelector(".cc-close").onclick = function () {
       state.open = false;
       render();
@@ -256,7 +306,10 @@
     var input = document.createElement("input");
     input.className = "cc-input";
     input.placeholder = "Ask a question…";
-    input.disabled = state.loading;
+    input.value = state.inputDraft || "";
+    input.autocomplete = "off";
+    input.setAttribute("enterkeyhint", "send");
+    input.setAttribute("aria-label", "Chat message");
     var sendBtn = document.createElement("button");
     sendBtn.className = "cc-send";
     sendBtn.style.background = state.primaryColor;
@@ -267,12 +320,28 @@
       var text = input.value.trim();
       if (!text || state.loading) return;
       input.value = "";
+      state.inputDraft = "";
+      state.inputFocused = true;
       sendMessage(text);
     }
 
     sendBtn.onclick = submit;
     input.onkeydown = function (e) {
       if (e.key === "Enter") submit();
+    };
+    input.oninput = function () {
+      state.inputDraft = input.value;
+    };
+    input.onfocus = function () {
+      state.inputFocused = true;
+      setTimeout(function () {
+        updateViewportVars();
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        input.scrollIntoView({ block: "nearest" });
+      }, 80);
+    };
+    input.onblur = function () {
+      state.inputFocused = false;
     };
 
     inputRow.appendChild(input);
@@ -283,6 +352,13 @@
 
     requestAnimationFrame(function () {
       messagesEl.scrollTop = messagesEl.scrollHeight;
+      if (state.open && state.inputFocused) {
+        try {
+          input.focus({ preventScroll: true });
+        } catch (e) {
+          input.focus();
+        }
+      }
     });
   }
 
@@ -618,16 +694,22 @@
         if (!evt) return;
         if (evt.event === "token") {
           var current = state.messages[botIndex] && state.messages[botIndex].text ? state.messages[botIndex].text : "";
+          if (current === "…" || current === "..." || current === "… ") current = "";
           updateBotMessage(botIndex, { text: current + (evt.data.text || "") });
         } else if (evt.event === "typing") {
-          updateBotMessage(botIndex, { text: "…" });
+          if (!state.messages[botIndex] || !state.messages[botIndex].text) {
+            updateBotMessage(botIndex, { text: "…" });
+          }
         } else if (evt.event === "product_card") {
           cards.push(evt.data);
           updateBotMessage(botIndex, { cards: cards.slice() });
         } else if (evt.event === "done") {
           applyChatContext(evt.data);
           var doneCards = evt.data.productCards && evt.data.productCards.length ? evt.data.productCards : cards;
+          var doneReply = evt.data.reply && evt.data.reply.content;
+          var existingText = state.messages[botIndex] && state.messages[botIndex].text;
           updateBotMessage(botIndex, {
+            text: doneReply || (existingText === "…" ? "" : existingText),
             actions: evt.data.suggestedActions || null,
             cards: doneCards && doneCards.length ? doneCards : null,
           });
