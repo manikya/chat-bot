@@ -22,6 +22,7 @@ export const Keys = {
   conversation: (channel: string, externalUserId: string) => `CONV#${channel}#${externalUserId}`,
   message: (conversationId: string, timestamp: string) => `MSG#${conversationId}#${timestamp}`,
   cart: (conversationId: string) => `CART#${conversationId}`,
+  wishlistReminder: (conversationId: string, sku: string) => `WISHLIST#${conversationId}#${sku}`,
   usage: (period: string) => `USAGE#${period}`,
   channel: (channel: string) => `CHANNEL#${channel}`,
   phoneRoutingPk: (phoneNumberId: string) => `PHONE#${phoneNumberId}`,

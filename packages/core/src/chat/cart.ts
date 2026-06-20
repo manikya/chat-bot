@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { generateId } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
@@ -107,4 +107,48 @@ export async function addToCart(
   cart.updatedAt = new Date().toISOString();
   await saveCart(cart, config);
   return { success: true as const, cart, sku };
+}
+
+export async function clearCart(
+  tenantId: string,
+  conversationId: string,
+  config: CoreConfig
+): Promise<CartState | null> {
+  const cart = await loadCart(tenantId, conversationId, config);
+  if (!cart) return null;
+  cart.items = [];
+  cart.subtotal = 0;
+  cart.updatedAt = new Date().toISOString();
+  await saveCart(cart, config);
+  return cart;
+}
+
+export async function removeCartItems(
+  tenantId: string,
+  conversationId: string,
+  skus: string[],
+  config: CoreConfig
+): Promise<CartState | null> {
+  const cart = await loadCart(tenantId, conversationId, config);
+  if (!cart) return null;
+  const remove = new Set(skus.map((sku) => sku.toUpperCase()));
+  cart.items = cart.items.filter((item) => !remove.has(item.sku.toUpperCase()));
+  cart.subtotal = recalcSubtotal(cart.items);
+  cart.updatedAt = new Date().toISOString();
+  await saveCart(cart, config);
+  return cart;
+}
+
+export async function deleteCart(
+  tenantId: string,
+  conversationId: string,
+  config: CoreConfig
+) {
+  const db = getDocClient(config);
+  await db.send(
+    new DeleteCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.cart(conversationId) },
+    })
+  );
 }

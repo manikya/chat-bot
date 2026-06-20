@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { ArrowLeft, Bot, Send, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
-import { conversationIdFromPath } from "@/lib/conversation-id";
+import { conversationIdFromPath, conversationIdFromSearchParams } from "@/lib/conversation-id";
 import type { ConversationDetail, Message } from "@commercechat/mock-api";
 import { useAuth } from "@/lib/auth/context";
 import { Badge } from "@/components/ui/badge";
@@ -21,8 +21,9 @@ const META_CHANNELS = new Set(["whatsapp", "messenger", "instagram"]);
 export default function ConversationThreadPage() {
   const params = useParams<{ id: string }>();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const paramId = params.id && params.id !== "_" ? params.id : null;
-  const pathId = conversationIdFromPath(pathname);
+  const pathId = conversationIdFromPath(pathname) ?? conversationIdFromSearchParams(searchParams);
   const id = paramId ?? pathId;
   const { user } = useAuth();
   const [detail, setDetail] = useState<ConversationDetail | null>(null);

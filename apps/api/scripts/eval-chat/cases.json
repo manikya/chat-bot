@@ -5,7 +5,9 @@
     "expect": {
       "nonEmptyReply": true,
       "intent": "greeting",
-      "maxProductCards": 0
+      "maxProductCards": 0,
+      "maxReplyWords": 35,
+      "maxQuestions": 1
     }
   },
   {
@@ -14,7 +16,9 @@
     "expect": {
       "nonEmptyReply": true,
       "intent": "product",
-      "funnelStage": ["compare", "discover"]
+      "funnelStage": ["compare", "discover"],
+      "maxReplyWords": 45,
+      "maxQuestions": 1
     }
   },
   {
@@ -22,7 +26,9 @@
     "message": "What is your return policy?",
     "expect": {
       "nonEmptyReply": true,
-      "intent": "faq"
+      "intent": "faq",
+      "maxReplyWords": 50,
+      "maxQuestions": 1
     }
   },
   {
@@ -57,7 +63,9 @@
       "intent": "product",
       "funnelStage": "discover",
       "maxProductCards": 0,
-      "minSuggestedActions": 1
+      "minSuggestedActions": 1,
+      "maxReplyWords": 35,
+      "maxQuestions": 1
     }
   },
   {
@@ -68,7 +76,9 @@
       "intent": "product",
       "toolsIncludes": ["search_products"],
       "maxProductPrice": 3000,
-      "noOutOfStockProducts": true
+      "noOutOfStockProducts": true,
+      "maxReplyWords": 45,
+      "maxQuestions": 1
     }
   },
   {
@@ -82,7 +92,9 @@
       "intent": "product",
       "toolsIncludes": ["search_products"],
       "maxProductPrice": 5000,
-      "noOutOfStockProducts": true
+      "noOutOfStockProducts": true,
+      "maxReplyWords": 45,
+      "maxQuestions": 1
     }
   },
   {
@@ -93,7 +105,9 @@
       "intent": "product",
       "toolsIncludes": ["search_products"],
       "maxProductPrice": 5000,
-      "noOutOfStockProducts": true
+      "noOutOfStockProducts": true,
+      "maxReplyWords": 45,
+      "maxQuestions": 1
     }
   },
   {

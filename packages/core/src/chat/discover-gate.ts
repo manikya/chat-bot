@@ -60,7 +60,7 @@ export function discoverQualifyPrompt(
   const budgetExample = market === "lk" ? "under LKR 3,000 or higher" : "under $50 or higher";
 
   if (mentionsGift) {
-    return `Yes, we can help with that. Who is the gift for, and what budget do you have in mind (${budgetExample})? I'll show the best in-stock options.`;
+    return `Sure. Who is it for, and what budget do you have in mind (${budgetExample})?`;
   }
-  return `Yes, we may have something like that. Is this for a gift or personal use, and what's your budget (${budgetExample})? I'll pull the best in-stock matches.`;
+  return `Sure. Is it for a gift or personal use, and what's your budget (${budgetExample})?`;
 }

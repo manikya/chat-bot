@@ -3,6 +3,7 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import type { CatalogProduct } from "../ingest/parsers/catalog-csv";
+import { notifyWishlistRemindersForProducts } from "../chat/wishlist";
 import {
   categoryFilterMatches,
   productCategoryList,
@@ -72,6 +73,17 @@ export async function upsertProductCache(
           updatedAt: now,
         },
       })
+    );
+  }
+  try {
+    const result = await notifyWishlistRemindersForProducts(tenantId, products, config);
+    if (result.notified || result.waiting) {
+      console.log("[wishlist] stock reminders processed", result);
+    }
+  } catch (err) {
+    console.warn(
+      "[wishlist] failed to process stock reminders",
+      err instanceof Error ? err.message : err
     );
   }
 }

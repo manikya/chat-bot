@@ -24,6 +24,7 @@ import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
 import {
   buildNoProductResultsReply,
+  compactReplyText,
   enrichReplyWithProductSearch,
   formatProductListForReply,
   productSearchWasEmpty,
@@ -32,6 +33,12 @@ import {
 import { appendCtaPromptLine, buildSuggestedCtas } from "./cta";
 import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
 import { buildProductSearchQuery } from "./product-query";
+import {
+  handleStaleCartMessage,
+  isCartAbandonmentReply,
+  isCartContinuationReply,
+  shouldPauseForStaleCart,
+} from "./stale-cart";
 import { executeTool, toolsForIntent } from "./tools";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 import { assertTenantOperational } from "../tenant/status";
@@ -215,7 +222,7 @@ export async function runChatOrchestrator(
   const history = await loadMessageHistory(auth.tenantId, conversation.conversationId, config);
   const isFirstMessage = history.length === 0;
   const intent = detectIntent(text, isFirstMessage);
-  const cart = await loadCart(auth.tenantId, conversation.conversationId, config);
+  let cart = await loadCart(auth.tenantId, conversation.conversationId, config);
   const funnel = resolveFunnelContext(conversation, {
     message: text,
     intent,
@@ -262,6 +269,58 @@ export async function runChatOrchestrator(
     subIntent,
     funnelStage: funnel.stage,
   });
+
+  if (cart?.items.length && (shouldPauseForStaleCart(text, conversation, cart) || isCartAbandonmentReply(text))) {
+    const staleOutcome = await handleStaleCartMessage({
+      auth,
+      conversation,
+      cart,
+      message: text,
+      config,
+    });
+    if (staleOutcome.handled && staleOutcome.reply) {
+      cart = staleOutcome.cart ?? cart;
+      const replyContent = compactReplyText(staleOutcome.reply, { channel: input.channel, maxWords: 35 });
+      const suggestedActions =
+        cart?.items.length && isCartContinuationReply(text)
+          ? [
+              {
+                type: "checkout" as const,
+                label: "Checkout now",
+                action: "checkout" as const,
+                message: "I'm ready to checkout",
+              },
+              { type: "message" as const, label: "More options", message: "Show me similar options" },
+            ]
+          : cart?.items.length && !isCartAbandonmentReply(text)
+          ? [
+              { type: "message" as const, label: "Still interested", message: "Yes, I'm still interested" },
+              { type: "message" as const, label: "Clear cart", message: "No, clear my cart" },
+            ]
+          : [
+              { type: "message" as const, label: "Show options", message: "Show me options" },
+            ];
+      await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
+        intent,
+        subIntent,
+        funnelStage: cart?.items.length ? "cart" : "discover",
+        staleCartCheck: true,
+      });
+      await incrementUsage(auth.tenantId, config, { inputTokens: 0, outputTokens: 0 });
+      return {
+        conversationId: conversation.conversationId,
+        reply: { type: "text", content: replyContent },
+        toolResults: [],
+        intent,
+        subIntent,
+        funnelStage: cart?.items.length ? "cart" : "discover",
+        usage: { inputTokens: 0, outputTokens: 0 },
+        handledBy: "bot",
+        handlingMode: "bot",
+        suggestedActions,
+      };
+    }
+  }
 
   const productAwareQuery = buildProductSearchQuery({
     message: text,
@@ -435,7 +494,10 @@ export async function runChatOrchestrator(
     });
   }
 
-  replyContent = sanitizeReplyText(replyContent, input.channel);
+  replyContent = compactReplyText(sanitizeReplyText(replyContent, input.channel), {
+    channel: input.channel,
+    maxWords: gateProductSearch ? 35 : undefined,
+  });
   const surfaceProducts = intent !== "greeting" && !isGreetingOnlyMessage(text);
   const finalToolResults = surfaceProducts ? toolResults : stripProductToolResults(toolResults);
   replyContent = enrichReplyWithProductSearch(replyContent, finalToolResults, currency, {
@@ -481,6 +543,7 @@ export async function runChatOrchestrator(
     market,
   });
   replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
+  replyContent = compactReplyText(replyContent, { channel: input.channel });
 
   await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
     intent,

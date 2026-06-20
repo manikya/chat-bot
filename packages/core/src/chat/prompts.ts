@@ -16,7 +16,7 @@ function intentHints(intent?: ChatIntent): string {
     case "faq":
       return "\n- Answer policy and shipping questions from FAQ/website context first";
     case "product":
-      return "\n- Use search_products with the customer's words as query; pass category when known from shopper preferences\n- After discovery is complete, recommend max 3 in-stock items (name, price, stock); match category, name, and description";
+      return "\n- Use search_products with the customer's words as query; pass category when known from shopper preferences\n- After discovery is complete, use one short sentence plus product cards; recommend max 3 in-stock items";
     case "checkout":
       return "\n- Help complete the purchase; confirm cart before sharing checkout links";
     case "greeting":
@@ -36,9 +36,9 @@ function formatCartSummary(cart: CartState | null, currency: string): string {
 function funnelHints(stage?: FunnelStage): string {
   switch (stage) {
     case "discover":
-      return "\n- Shopper is browsing: if budget or use-case is unknown, ask ONE short question — do NOT call search_products yet\n- Keep replies under 80 words; no markdown images (cards show photos)";
+      return "\n- Shopper is browsing: ask ONE useful question to understand intent (recipient, use-case, or budget) — do NOT call search_products yet\n- Keep replies under 35 words; no markdown images";
     case "compare":
-      return "\n- Shopper is comparing options: highlight differences; suggest 2–3 clear picks with prices";
+      return "\n- Shopper is comparing options: give the key difference in one sentence; suggest 2–3 picks with prices";
     case "objection":
       return "\n- Address the concern using FAQ/policy context; acknowledge before recommending";
     case "cart":
@@ -80,7 +80,7 @@ function qualificationHints(
     hint += `\n- When searching products, respect budget max ${qualification.budget.max}`;
   }
   if (missing) {
-    hint += `\n- If helpful, ask about their ${missing} (one question only)`;
+    hint += `\n- Ask about their ${missing} in one short question if it helps the next recommendation`;
   }
   return hint;
 }
@@ -111,7 +111,8 @@ Rules:
 - If the answer is not in context or tools, say you are not sure and ask a clarifying question
 - For shipping, returns, and policies: prefer website and FAQ sources
 - When conversation examples (Customer/Owner pairs) appear in context, match the owner's tone and phrasing
-- Be friendly and concise (max ~80 words on web, ~60 on mobile chat)
+- Be friendly, proactive, and concise (max ~45 words on web, ~35 on mobile chat)
+- Ask at most ONE question; make it the next best sales question
 - When recommending products, use search_products — do not guess catalog items
 - Prefer in-stock items; mention out-of-stock once without add-to-cart
 - Do not use markdown images or long spec lists in replies — product cards handle visuals

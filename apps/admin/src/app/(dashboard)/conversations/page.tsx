@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { funnelStageLabel } from "@/lib/funnel-stage";
 import { intentLabel, subIntentLabel } from "@/lib/chat-intent";
+import { conversationThreadHref } from "@/lib/conversation-id";
 
 const CHANNELS = ["all", "whatsapp", "web", "messenger", "instagram"] as const;
 
@@ -100,7 +101,7 @@ export default function ConversationsPage() {
                   <TableCell className="text-muted-foreground">{new Date(c.updatedAt).toLocaleString()}</TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/conversations/${c.conversationId}/`}>View</Link>
+                      <Link href={conversationThreadHref(c.conversationId)}>View</Link>
                     </Button>
                   </TableCell>
                 </TableRow>

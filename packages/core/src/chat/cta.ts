@@ -156,10 +156,10 @@ export function appendCtaPromptLine(
   const primary = ctas[0]!;
   if (primary.action === "add_to_cart" && primary.sku) {
     const name = primary.label.split(" — ")[0] ?? "this item";
-    return `${trimmed}\n\nWant me to add ${name} to your cart?`;
+    return `${trimmed}\n\nAdd ${name} to cart?`;
   }
   if (primary.action === "checkout") {
-    return `${trimmed}\n\nReady to checkout when you are — tap Checkout below.`;
+    return `${trimmed}\n\nReady to checkout?`;
   }
   if (primary.type === "message" && primary.message) {
     return trimmed;

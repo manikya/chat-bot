@@ -72,6 +72,44 @@ export function sanitizeReplyText(reply: string, channel?: string): string {
   return text;
 }
 
+function wordLimitForChannel(channel?: string) {
+  if (channel === "whatsapp" || channel === "messenger" || channel === "instagram") return 35;
+  return 45;
+}
+
+function trimWords(text: string, maxWords: number): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text;
+  return `${words.slice(0, maxWords).join(" ").replace(/[,.!?;:]+$/, "")}.`;
+}
+
+export function compactReplyText(
+  reply: string,
+  options?: { channel?: string; maxWords?: number; maxQuestions?: number }
+): string {
+  const maxWords = options?.maxWords ?? wordLimitForChannel(options?.channel);
+  const maxQuestions = options?.maxQuestions ?? 1;
+  let text = sanitizeReplyText(reply, options?.channel)
+    .replace(/\n{2,}/g, "\n")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return text;
+
+  const sentences = text.match(/[^.!?]+[.!?]?/g)?.map((s) => s.trim()).filter(Boolean) ?? [text];
+  const kept: string[] = [];
+  let questionCount = 0;
+  for (const sentence of sentences) {
+    const isQuestion = sentence.endsWith("?");
+    if (isQuestion && questionCount >= maxQuestions) continue;
+    if (isQuestion) questionCount++;
+    kept.push(sentence);
+    if (kept.join(" ").split(/\s+/).length >= maxWords) break;
+    if (kept.length >= 2 && questionCount > 0) break;
+  }
+
+  return trimWords(kept.join(" "), maxWords);
+}
+
 export function enrichReplyWithProductSearch(
   reply: string,
   toolResults: Array<{ tool: string; success: boolean; result: unknown }>,

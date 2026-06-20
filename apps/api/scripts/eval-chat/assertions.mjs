@@ -36,6 +36,20 @@ export function assertCase(out, expect) {
     failures.push(`reply shorter than ${expect.replyMinLength}`);
   }
 
+  if (expect.maxReplyWords != null) {
+    const words = String(out.reply || "").trim().split(/\s+/).filter(Boolean);
+    if (words.length > expect.maxReplyWords) {
+      failures.push(`reply expected <= ${expect.maxReplyWords} words, got ${words.length}`);
+    }
+  }
+
+  if (expect.maxQuestions != null) {
+    const questions = (String(out.reply || "").match(/\?/g) ?? []).length;
+    if (questions > expect.maxQuestions) {
+      failures.push(`reply expected <= ${expect.maxQuestions} questions, got ${questions}`);
+    }
+  }
+
   if (expect.replyIncludes) {
     const reply = String(out.reply || "").toLowerCase();
     for (const text of expect.replyIncludes) {
