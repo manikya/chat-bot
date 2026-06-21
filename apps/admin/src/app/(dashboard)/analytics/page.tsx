@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { BarChart3, Link2, MessageSquare, Radio, ShoppingCart } from "lucide-react";
 import { api } from "@/lib/api";
 import type { ConversationAnalytics } from "@commercechat/mock-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,12 +20,12 @@ function defaultRange() {
 function BarRow({ label, count, max }: { label: string; count: number; max: number }) {
   const pct = max > 0 ? Math.round((count / max) * 100) : 0;
   return (
-    <div className="space-y-1">
+    <div className="rounded-lg border border-border bg-muted px-3 py-2.5">
       <div className="flex justify-between text-sm">
-        <span className="truncate pr-2">{label}</span>
-        <span className="text-muted-foreground tabular-nums">{count}</span>
+        <span className="truncate pr-2 font-medium capitalize">{label}</span>
+        <span className="font-mono text-muted-foreground tabular-nums">{count}</span>
       </div>
-      <div className="h-2 rounded-full bg-muted">
+      <div className="mt-2 h-2 rounded-full bg-secondary">
         <div className="h-2 rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -34,18 +35,18 @@ function BarRow({ label, count, max }: { label: string; count: number; max: numb
 function MessagesChart({ data }: { data: ConversationAnalytics["messagesByDay"] }) {
   const max = Math.max(...data.map((d) => d.messages), 1);
   return (
-    <div className="flex h-48 items-end gap-1">
+    <div className="flex h-[260px] items-end gap-2 rounded-lg border border-border bg-gradient-to-b from-muted to-card px-4 pb-7 pt-5">
       {data.map((d) => {
         const height = Math.max(4, Math.round((d.messages / max) * 100));
         return (
-          <div key={d.date} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-            <span className="text-[10px] text-muted-foreground tabular-nums">{d.messages || ""}</span>
+          <div key={d.date} className="relative flex min-w-0 flex-1 flex-col items-center gap-1">
+            <span className="font-mono text-[10px] text-muted-foreground tabular-nums">{d.messages || ""}</span>
             <div
-              className="w-full rounded-t bg-primary/90"
+              className="w-full rounded-t-lg bg-gradient-to-b from-teal-300 to-primary shadow-sm transition-all"
               style={{ height: `${d.messages ? height : 0}%`, minHeight: d.messages ? 4 : 0 }}
               title={`${d.date}: ${d.messages} messages`}
             />
-            <span className="text-[9px] text-muted-foreground">{d.date.slice(5)}</span>
+            <span className="absolute -bottom-5 text-[9px] text-muted-foreground">{d.date.slice(5)}</span>
           </div>
         );
       })}
@@ -84,55 +85,73 @@ export default function AnalyticsPage() {
   }
 
   const summaryCards = [
-    { label: "Messages", value: data.summary.messagesTotal },
-    { label: "Conversations", value: data.summary.conversationsTotal },
-    { label: "Active now", value: data.summary.conversationsActive },
-    { label: "Carts started", value: data.summary.cartsStarted },
-    { label: "Checkout links", value: data.summary.checkoutLinks },
+    { label: "Messages", value: data.summary.messagesTotal, icon: MessageSquare, delta: "30 day window" },
+    { label: "Conversations", value: data.summary.conversationsTotal, icon: Radio, delta: "total threads" },
+    { label: "Active now", value: data.summary.conversationsActive, icon: BarChart3, delta: "open sessions" },
+    { label: "Carts started", value: data.summary.cartsStarted, icon: ShoppingCart, delta: "commerce intent" },
+    { label: "Checkout links", value: data.summary.checkoutLinks, icon: Link2, delta: "purchase ready" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-muted-foreground">Conversation volume, channels, intents, and commerce funnel</p>
+          <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.075em] text-primary">
+            Conversation intelligence
+          </p>
+          <h1 className="max-w-[760px] font-bold">Connect channels, intents, products, and checkout behavior.</h1>
+          <p className="mt-2 max-w-[70ch] text-sm leading-relaxed text-muted-foreground">
+            Conversation volume, channel mix, intent mix, product searches, and commerce funnel performance.
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <label className="text-muted-foreground">From</label>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="font-medium text-muted-foreground">From</label>
           <input
             type="date"
             value={range.from}
             onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
-            className="rounded-md border bg-background px-2 py-1"
+            className="h-9 rounded-lg border border-input bg-white px-3 py-1 font-mono text-xs"
           />
-          <label className="text-muted-foreground">To</label>
+          <label className="font-medium text-muted-foreground">To</label>
           <input
             type="date"
             value={range.to}
             onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
-            className="rounded-md border bg-background px-2 py-1"
+            className="h-9 rounded-lg border border-input bg-white px-3 py-1 font-mono text-xs"
           />
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {summaryCards.map((c) => (
-          <Card key={c.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {summaryCards.map((c) => {
+          const Icon = c.icon;
+          return (
+          <Card key={c.label} className="min-h-[118px]">
+            <CardHeader className="flex flex-row items-center gap-3 pb-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-teal-200 bg-teal-100 text-primary">
+                <Icon className="h-4 w-4" />
+              </span>
+              <CardTitle className="font-medium text-muted-foreground">{c.label}</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold tabular-nums">{c.value}</div>
+            <CardContent className="space-y-1">
+              <div className="font-mono text-3xl font-semibold tracking-[-0.03em] tabular-nums">{c.value}</div>
+              <p className="text-xs font-semibold text-primary">{c.delta}</p>
             </CardContent>
           </Card>
-        ))}
+        );
+        })}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Messages per day</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-muted text-muted-foreground">
+                <BarChart3 className="h-4 w-4" />
+              </span>
+              Message volume
+            </CardTitle>
+            <Badge variant="success">Healthy</Badge>
           </CardHeader>
           <CardContent>
             <MessagesChart data={data.messagesByDay} />
@@ -141,16 +160,21 @@ export default function AnalyticsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Commerce funnel</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-muted text-muted-foreground">
+                <ShoppingCart className="h-4 w-4" />
+              </span>
+              Commerce funnel
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-2.5">
             {[
               { label: "Conversations", value: data.funnel.conversations },
               { label: "With cart", value: data.funnel.withCart },
               { label: "Checkout links sent", value: data.funnel.checkoutLinks },
             ].map((step) => (
-              <div key={step.label} className="flex items-center justify-between text-sm">
-                <span>{step.label}</span>
+              <div key={step.label} className="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2.5 text-sm">
+                <span className="font-medium">{step.label}</span>
                 <Badge variant="secondary">{step.value}</Badge>
               </div>
             ))}
@@ -161,7 +185,7 @@ export default function AnalyticsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">By channel</CardTitle>
+            <CardTitle>By channel</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {data.channelBreakdown.length === 0 ? (
@@ -176,7 +200,7 @@ export default function AnalyticsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">By intent</CardTitle>
+            <CardTitle>By intent</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {data.intentBreakdown.length === 0 ? (
