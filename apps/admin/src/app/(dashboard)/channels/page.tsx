@@ -11,6 +11,7 @@ import { MetaInstagramConnectButton } from "@/components/channels/meta-instagram
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
 import { cn } from "@/lib/utils";
 
 type SupportedChannel = "whatsapp" | "messenger" | "instagram" | "web";
@@ -147,14 +148,19 @@ function ChannelIcon({ channel }: { channel: string }) {
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [health, setHealth] = useState<Record<string, { status: string; detail?: string }>>({});
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const [listRes, healthRes] = await Promise.all([
-      api.channels.list(),
-      api.channels.health().catch(() => null),
-    ]);
-    setChannels(listRes.data.channels);
-    if (healthRes?.data) setHealth(healthRes.data as Record<string, { status: string; detail?: string }>);
+    try {
+      const [listRes, healthRes] = await Promise.all([
+        api.channels.list(),
+        api.channels.health().catch(() => null),
+      ]);
+      setChannels(listRes.data.channels);
+      if (healthRes?.data) setHealth(healthRes.data as Record<string, { status: string; detail?: string }>);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -172,6 +178,8 @@ export default function ChannelsPage() {
   const channelCards = channels.filter((ch) =>
     ["whatsapp", "messenger", "instagram", "web"].includes(ch.channel)
   );
+
+  if (loading) return <AdminPageSkeleton cards={4} />;
 
   return (
     <div className="space-y-6">

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import ConversationThreadPage from "./conversation-thread";
+import { SplitPageSkeleton } from "@/components/layout/page-skeleton";
 
 /** Placeholder path for static export; CloudFront rewrites /conversations/* here. */
 export function generateStaticParams() {
@@ -8,7 +9,7 @@ export function generateStaticParams() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="text-muted-foreground">Loading...</div>}>
+    <Suspense fallback={<SplitPageSkeleton />}>
       <ConversationThreadPage />
     </Suspense>
   );

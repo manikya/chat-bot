@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { ConversationAnalytics } from "@commercechat/mock-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
 
 function defaultRange() {
   const to = new Date();
@@ -77,7 +78,7 @@ export default function AnalyticsPage() {
   );
 
   if (loading && !data) {
-    return <div className="text-muted-foreground">Loading analytics...</div>;
+    return <AdminPageSkeleton cards={5} />;
   }
 
   if (!data) {

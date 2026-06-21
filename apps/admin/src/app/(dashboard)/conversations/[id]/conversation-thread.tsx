@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { funnelStageLabel } from "@/lib/funnel-stage";
 import { intentLabel, subIntentLabel } from "@/lib/chat-intent";
 import { formatQualificationSummary } from "@/lib/qualification-summary";
+import { SplitPageSkeleton } from "@/components/layout/page-skeleton";
 
 const META_CHANNELS = new Set(["whatsapp", "messenger", "instagram"]);
 
@@ -91,7 +92,7 @@ export default function ConversationThreadPage() {
   }
 
   if (loading) {
-    return <div className="text-muted-foreground">Loading...</div>;
+    return <SplitPageSkeleton />;
   }
 
   if (error || !detail) {

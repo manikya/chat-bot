@@ -8,6 +8,7 @@ import type { BillingOverview } from "@commercechat/mock-api";
 import { UsageMeters } from "@/components/billing/usage-meters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
 
 export default function UsagePage() {
   const [overview, setOverview] = useState<BillingOverview | null>(null);
@@ -16,7 +17,7 @@ export default function UsagePage() {
     api.billing.getOverview().then((r) => setOverview(r.data ?? null));
   }, []);
 
-  if (!overview) return <div className="text-muted-foreground">Loading usage...</div>;
+  if (!overview) return <AdminPageSkeleton cards={3} />;
 
   return (
     <div className="space-y-6">

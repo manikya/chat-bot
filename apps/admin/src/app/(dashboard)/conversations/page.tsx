@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
 import { funnelStageLabel } from "@/lib/funnel-stage";
 import { intentLabel, subIntentLabel } from "@/lib/chat-intent";
 import { conversationThreadHref } from "@/lib/conversation-id";
@@ -18,15 +19,20 @@ export default function ConversationsPage() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [handlingFilter, setHandlingFilter] = useState<"all" | "human">("all");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     api.conversations
       .list({
         channel: filter === "all" ? undefined : filter,
         handlingMode: handlingFilter === "human" ? "human" : undefined,
       })
-      .then((r) => setItems(r.data.items));
+      .then((r) => setItems(r.data.items))
+      .finally(() => setLoading(false));
   }, [filter, handlingFilter]);
+
+  if (loading) return <AdminPageSkeleton cards={4} />;
 
   return (
     <div className="space-y-6">

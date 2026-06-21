@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -17,7 +18,7 @@ export default function DashboardPage() {
     api.dashboard.getStats().then((r) => setStats(r.data));
   }, []);
 
-  if (!stats) return <div className="text-muted-foreground">Loading dashboard...</div>;
+  if (!stats) return <AdminPageSkeleton cards={4} />;
 
   const cards = [
     { label: "Messages today", value: stats.messagesToday, icon: MessageSquare, href: "/conversations" },

@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
 
 function formatProductPrice(price: number, currency = "USD") {
   const locale = currency === "LKR" ? "en-LK" : "en";
@@ -143,17 +144,25 @@ export default function KnowledgePage() {
   const [pageVoiceSyncing, setPageVoiceSyncing] = useState(false);
   const [pageVoiceUploading, setPageVoiceUploading] = useState(false);
   const [expandedConnector, setExpandedConnector] = useState<"woocommerce" | "shopify" | null>(null);
+  const [loading, setLoading] = useState(true);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  const load = () => {
-    api.knowledge.listSources().then((r) => setSources(r.data.items));
-    api.knowledge.listJobs().then((r) => setJobs(r.data.items));
-    api.knowledge.getPageVoice().then((r) => setPageVoice(r.data)).catch(() => setPageVoice(null));
+  const load = async () => {
+    const [sourcesRes, jobsRes, pageVoiceRes, productsRes] = await Promise.allSettled([
+      api.knowledge.listSources(),
+      api.knowledge.listJobs(),
+      api.knowledge.getPageVoice(),
+      api.commerce.listProducts({ limit: 20 }),
+    ]);
+
+    if (sourcesRes.status === "fulfilled") setSources(sourcesRes.value.data.items);
+    if (jobsRes.status === "fulfilled") setJobs(jobsRes.value.data.items);
+    setPageVoice(pageVoiceRes.status === "fulfilled" ? pageVoiceRes.value.data : null);
+    if (productsRes.status === "fulfilled") setProducts(productsRes.value.data.items);
   };
 
   useEffect(() => {
-    load();
-    api.commerce.listProducts({ limit: 20 }).then((r) => setProducts(r.data.items)).catch(() => {});
+    load().finally(() => setLoading(false));
   }, []);
 
   const refreshProducts = () => {
@@ -200,6 +209,8 @@ export default function KnowledgePage() {
       : pageVoice?.learningPaused
         ? "paused"
         : "learning";
+
+  if (loading) return <AdminPageSkeleton cards={4} />;
 
   return (
     <div className="space-y-6">

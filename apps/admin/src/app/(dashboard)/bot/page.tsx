@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SplitPageSkeleton } from "@/components/layout/page-skeleton";
 
 export default function BotConfigPage() {
   const [config, setConfig] = useState<TenantConfig | null>(null);
@@ -19,7 +20,7 @@ export default function BotConfigPage() {
     api.tenant.getConfig().then((r) => setConfig(r.data ?? null));
   }, []);
 
-  if (!config) return <div>Loading...</div>;
+  if (!config) return <SplitPageSkeleton />;
 
   const save = async () => {
     setSaving(true);

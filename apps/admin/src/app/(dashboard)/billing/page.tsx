@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
 
 const PLAN_ORDER: TenantPlan[] = ["starter", "pro", "business", "enterprise"];
 
@@ -166,7 +167,7 @@ export default function BillingPage() {
   }
 
   if (loading && !overview) {
-    return <div className="text-muted-foreground">Loading billing...</div>;
+    return <AdminPageSkeleton cards={3} />;
   }
 
   const paidPlans = plans.filter((p) => PLAN_ORDER.includes(p.id));
