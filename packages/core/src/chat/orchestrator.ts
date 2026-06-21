@@ -1,4 +1,4 @@
-import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type ChatSubIntent, type TenantConfig } from "@commercechat/shared";
+import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type ChatSubIntent, type TenantConfig, type WidgetAction } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { listCatalogSearchHints } from "../catalog/products";
 import { getDocClient } from "../db/client";
@@ -169,6 +169,30 @@ function shouldRunProductSearch(
   return intent === "product" || intent === "checkout" || messageMentionsProducts(message);
 }
 
+function isCatalogOverviewQuestion(message: string): boolean {
+  const normalized = message.toLowerCase().replace(/\btyoe\b/g, "type");
+  return /\b(what\s+(type|types|kind|kinds)\s+of\s+(products|items)|what\s+(products|items)\s+do\s+you\s+have|what\s+do\s+you\s+(sell|have)|categories|product\s+categories)\b/i.test(
+    normalized
+  );
+}
+
+function buildCatalogOverview(input: {
+  categories?: string[];
+}): { reply: string; actions: WidgetAction[] } {
+  const categories = (input.categories ?? [])
+    .filter((category) => !/uncategorized|general/i.test(category))
+    .slice(0, 6);
+  const sample = categories.length ? categories.join(", ") : "gifts, home decor, and special occasion items";
+  return {
+    reply: `We have ${sample}. Who are you shopping for, and what budget should I stay within?`,
+    actions: categories.slice(0, 3).map((category) => ({
+      type: "message" as const,
+      label: category,
+      message: `Show me ${category}`,
+    })),
+  };
+}
+
 const PRODUCT_SURFACE_TOOLS = new Set(["search_products", "compare_products", "get_related_products"]);
 
 function stripProductToolResults(
@@ -321,6 +345,44 @@ export async function runChatOrchestrator(
         suggestedActions,
       };
     }
+  }
+
+  if (isCatalogOverviewQuestion(text)) {
+    const overview = buildCatalogOverview({
+      categories: catalogHints?.categories,
+    });
+    const replyContent = compactReplyText(overview.reply, { channel: input.channel, maxWords: 35 });
+    if (conversation.funnelStage !== "discover") {
+      await updateConversationFunnel(
+        auth.tenantId,
+        conversation,
+        "discover",
+        config,
+        qualification,
+        intent,
+        subIntent
+      );
+      conversation.funnelStage = "discover";
+    }
+    await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
+      intent,
+      subIntent,
+      funnelStage: "discover",
+      catalogOverview: true,
+    });
+    await incrementUsage(auth.tenantId, config, { inputTokens: 0, outputTokens: 0 });
+    return {
+      conversationId: conversation.conversationId,
+      reply: { type: "text", content: replyContent },
+      toolResults: [],
+      intent,
+      subIntent,
+      funnelStage: "discover",
+      usage: { inputTokens: 0, outputTokens: 0 },
+      handledBy: "bot",
+      handlingMode: "bot",
+      suggestedActions: overview.actions,
+    };
   }
 
   const productAwareQuery = buildProductSearchQuery({
@@ -501,6 +563,11 @@ export async function runChatOrchestrator(
   });
   const surfaceProducts = intent !== "greeting" && !isGreetingOnlyMessage(text);
   const finalToolResults = surfaceProducts ? toolResults : stripProductToolResults(toolResults);
+  const finalProducts = extractProductHitsFromTools(finalToolResults);
+  if (input.channel === "web" && finalProducts.length) {
+    const scope = qualification.category ? `${qualification.category} ` : "";
+    replyContent = `I found a few ${scope}options that match.`;
+  }
   replyContent = enrichReplyWithProductSearch(replyContent, finalToolResults, currency, {
     channel: input.channel,
     skipListAppend: gateProductSearch || !surfaceProducts,
@@ -548,7 +615,7 @@ export async function runChatOrchestrator(
     subIntent,
     funnelStage: finalFunnel.stage,
     qualification,
-    hasProductResults: extractProductHitsFromTools(finalToolResults).length > 0,
+    hasProductResults: finalProducts.length > 0,
   });
   replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
   replyContent = compactReplyText(replyContent, { channel: input.channel });

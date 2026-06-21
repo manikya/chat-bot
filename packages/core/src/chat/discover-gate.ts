@@ -32,6 +32,15 @@ export function hasBudgetOrExplicitShopRequest(
   return false;
 }
 
+function isUnderspecifiedGiftBrowse(message: string, qualification?: QualificationState): boolean {
+  const lower = message.toLowerCase();
+  if (qualification?.budget?.max != null || qualification?.budget?.min != null) return false;
+  if (/\b(show me|show us|recommend|best sellers|cheapest|most expensive|premium)\b/i.test(lower)) {
+    return false;
+  }
+  return /\b(gift|gifts|looking for|need something|want something|ideas?)\b/i.test(lower);
+}
+
 /** Block catalog search/tools until shopper gives budget or a concrete request. */
 export function shouldGateProductSearch(input: {
   funnelStage?: FunnelStage;
@@ -41,6 +50,7 @@ export function shouldGateProductSearch(input: {
   market?: ChatMarket;
 }): boolean {
   const { funnelStage, subIntent, qualification, message, market = "default" } = input;
+  if (subIntent === "product_browse" && isUnderspecifiedGiftBrowse(message, qualification)) return true;
   if (funnelStage !== "discover") return false;
   if (subIntent === "product_detail" || subIntent === "product_compare") return false;
   if (hasBudgetOrExplicitShopRequest(message, qualification, market)) return false;

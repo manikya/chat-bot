@@ -86,7 +86,13 @@ function formatPrice(price: number, currency?: string) {
 type ToolRow = { tool: string; success: boolean; products?: Array<Record<string, unknown>> };
 
 function shortProductDescription(description?: string): string | undefined {
-  const clean = description?.replace(/\s+/g, " ").trim();
+  const clean = description
+    ?.replace(/<[^>]*>/g, " ")
+    .split(/\s+\|\s+/)
+    .filter((part) => !/^(type|categories|category|sku|price|stock|url|image|images):/i.test(part.trim()))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!clean) return undefined;
   if (clean.length <= 90) return clean;
   return `${clean.slice(0, 87).replace(/[,.!?;:\s]+$/, "")}...`;

@@ -6,7 +6,6 @@ import { Keys } from "../db/keys";
 import type { CatalogProduct } from "../ingest/parsers/catalog-csv";
 import { sendInstagramReply } from "../meta/instagram-outbound";
 import { sendMessengerReply } from "../meta/messenger-outbound";
-import { sendWhatsAppReply } from "../meta/whatsapp-outbound";
 
 export interface WishlistReminder {
   reminderId: string;
@@ -103,7 +102,12 @@ async function markReminderNotified(reminder: WishlistReminder, config: CoreConf
 async function sendReminder(reminder: WishlistReminder, product: CatalogProduct, config: CoreConfig) {
   const text = `Good news — ${product.name} is back in stock. Want me to help you checkout?`;
   if (reminder.channel === "whatsapp") {
-    await sendWhatsAppReply(reminder.tenantId, reminder.externalUserId, text, config);
+    console.warn("[wishlist] skipping WhatsApp reminder without phone number ID", {
+      tenantId: reminder.tenantId,
+      conversationId: reminder.conversationId,
+      sku: reminder.sku,
+    });
+    return false;
   } else if (reminder.channel === "messenger") {
     await sendMessengerReply(reminder.tenantId, reminder.externalUserId, text, config);
   } else if (reminder.channel === "instagram") {

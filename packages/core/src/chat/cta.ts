@@ -85,6 +85,10 @@ export function buildSuggestedCtas(input: {
     return actions.slice(0, 3);
   }
 
+  if (channel === "web" && hasCards) {
+    return [];
+  }
+
   if (subIntent === "faq_objection" || funnelStage === "objection") {
     return [
       {
@@ -112,9 +116,6 @@ export function buildSuggestedCtas(input: {
   }
 
   if (funnelStage === "discover" || subIntent === "product_browse") {
-    if (hasCards && channel === "web") {
-      return productActions(inStockProducts, 2);
-    }
     if (inStockProducts.length) return productActions(inStockProducts, 2);
     if (products.length) {
       return [
