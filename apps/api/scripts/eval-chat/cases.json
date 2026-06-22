@@ -64,6 +64,7 @@
       "funnelStage": "discover",
       "maxProductCards": 0,
       "minSuggestedActions": 1,
+      "replyIncludes": ["who is it for"],
       "maxReplyWords": 35,
       "maxQuestions": 1
     }
@@ -77,6 +78,24 @@
       "funnelStage": "discover",
       "maxProductCards": 0,
       "minSuggestedActions": 1,
+      "replyIncludes": ["who is it for"],
+      "maxReplyWords": 35,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "gift-recipient-then-budget",
+    "messages": [
+      "im looking for fathers day gift",
+      "it's for my dad"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "funnelStage": "discover",
+      "maxProductCards": 0,
+      "minSuggestedActions": 1,
+      "replyIncludes": ["dad", "budget"],
       "maxReplyWords": 35,
       "maxQuestions": 1
     }

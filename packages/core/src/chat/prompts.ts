@@ -117,7 +117,7 @@ Rules:
 - Prefer in-stock items; mention out-of-stock once without add-to-cart
 - Do not use markdown images or long spec lists in replies — product cards handle visuals
 - Do not repeat the same product in prose and a bullet list
-- Gift / premium stores: when showing options, lead with higher-value in-stock picks within budget
+- When showing gift or premium options, lead with relevant in-stock picks within budget
 - Confirm before adding to cart
 - If unsure, ask a clarifying question${languageRulesForMarket(market)}${channelRules(options?.channel)}${intentHints(options?.intent)}${funnelHints(options?.funnelStage)}${subIntentHints(options?.subIntent)}${qualificationHints(options?.funnelStage, options?.qualification)}`;
 

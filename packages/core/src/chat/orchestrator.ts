@@ -32,6 +32,7 @@ import {
   sanitizeReplyText,
 } from "./product-reply";
 import { appendCtaPromptLine, appendEngagementQuestion, buildSuggestedCtas } from "./cta";
+import { buildProductResultsIntro, planConversationMove } from "./conversation-policy";
 import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
 import { buildProductSearchQuery } from "./product-query";
 import {
@@ -403,6 +404,15 @@ export async function runChatOrchestrator(
     message: text,
     market,
   });
+  const conversationPolicy = planConversationMove({
+    message: text,
+    intent,
+    subIntent,
+    funnelStage: funnel.stage,
+    qualification,
+    gateProductSearch,
+    market,
+  });
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,
     timezone,
@@ -437,7 +447,7 @@ export async function runChatOrchestrator(
   let totalOutputTokens = 0;
   let replyContent = "";
 
-  if (llm) {
+  if (llm && !(gateProductSearch && conversationPolicy.reply)) {
     const model =
       tenantConfig.llmConfig.models[intent === "faq" ? "faq" : intent === "checkout" ? "checkout" : "product"] ??
       config.llmModel;
@@ -495,7 +505,9 @@ export async function runChatOrchestrator(
   }
 
   if (!replyContent) {
-    if (gateProductSearch) {
+    if (conversationPolicy.reply) {
+      replyContent = conversationPolicy.reply;
+    } else if (gateProductSearch) {
       replyContent = discoverQualifyPrompt(text, market);
     } else if (shouldRunProductSearch(intent, text, gateProductSearch)) {
       const { result, success } = await executeTool(
@@ -565,8 +577,11 @@ export async function runChatOrchestrator(
   const finalToolResults = surfaceProducts ? toolResults : stripProductToolResults(toolResults);
   const finalProducts = extractProductHitsFromTools(finalToolResults);
   if (input.channel === "web" && finalProducts.length) {
-    const scope = qualification.category ? `${qualification.category} ` : "";
-    replyContent = `I found a few ${scope}options that match.`;
+    replyContent = buildProductResultsIntro({
+      qualification,
+      productCount: finalProducts.length,
+      market,
+    });
   }
   replyContent = enrichReplyWithProductSearch(replyContent, finalToolResults, currency, {
     channel: input.channel,
@@ -601,15 +616,18 @@ export async function runChatOrchestrator(
     conversation.lastSubIntent = subIntent;
   }
 
-  const suggestedActions = buildSuggestedCtas({
-    funnelStage: finalFunnel.stage,
-    subIntent,
-    toolResults: finalToolResults,
-    cart: refreshedCart,
-    channel: input.channel,
-    gateProductSearch,
-    market,
-  });
+  const suggestedActions =
+    gateProductSearch && conversationPolicy.suggestedActions?.length
+      ? conversationPolicy.suggestedActions
+      : buildSuggestedCtas({
+          funnelStage: finalFunnel.stage,
+          subIntent,
+          toolResults: finalToolResults,
+          cart: refreshedCart,
+          channel: input.channel,
+          gateProductSearch,
+          market,
+        });
   replyContent = appendEngagementQuestion(replyContent, {
     intent,
     subIntent,
