@@ -65,6 +65,20 @@ export interface WordPressOrder {
   shipping: { phone: string };
 }
 
+export interface WordPressCheckoutLineItem {
+  sku: string;
+  quantity: number;
+}
+
+export interface WordPressCheckoutResult {
+  order_id: number;
+  order_number: string;
+  checkout_url: string;
+  status: string;
+  total: string;
+  currency: string;
+}
+
 export interface WordPressStatus {
   ok: boolean;
   plugin_version: string;

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CommerceChat Connector
  * Description: Connect your WooCommerce store to CommerceChat for product sync and order lookups (WhatsApp-friendly phone matching).
- * Version: 0.2.2
+ * Version: 0.2.3
  * Author: CommerceChat
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('COMMERCECHAT_CONNECTOR_VERSION', '0.2.2');
+define('COMMERCECHAT_CONNECTOR_VERSION', '0.2.3');
 define('COMMERCECHAT_CONNECTOR_PATH', plugin_dir_path(__FILE__));
 
 require_once COMMERCECHAT_CONNECTOR_PATH . 'includes/class-phone.php';

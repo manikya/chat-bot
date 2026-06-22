@@ -2,6 +2,8 @@ import { ApiError, ErrorCodes } from "@commercechat/shared";
 import type { CoreConfig } from "../../config";
 import { buildWordPressWidgetScriptBase } from "./widget-script";
 import type {
+  WordPressCheckoutLineItem,
+  WordPressCheckoutResult,
   WordPressCredentials,
   WordPressOrder,
   WordPressProductsPage,
@@ -163,6 +165,27 @@ export async function fetchWordPressOrdersByPhone(
     { phone, limit }
   );
   return res;
+}
+
+export async function createWordPressCheckout(
+  creds: WordPressCredentials,
+  config: CoreConfig,
+  body: {
+    cartId: string;
+    conversationId: string;
+    customerPhone?: string;
+    lineItems: WordPressCheckoutLineItem[];
+  }
+): Promise<WordPressCheckoutResult> {
+  return wpRequest<WordPressCheckoutResult>(creds, "/checkout", config, {
+    method: "POST",
+    body: {
+      cart_id: body.cartId,
+      conversation_id: body.conversationId,
+      customer_phone: body.customerPhone,
+      line_items: body.lineItems,
+    },
+  });
 }
 
 export function validateConnectBody(siteUrl: string, apiKey: string): WordPressCredentials {

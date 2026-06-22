@@ -45,6 +45,12 @@ class CommerceChat_Connector_REST_API
             'permission_callback' => [self::class, 'authorize'],
         ]);
 
+        register_rest_route(self::NAMESPACE, '/checkout', [
+            'methods' => 'POST',
+            'callback' => [self::class, 'create_checkout'],
+            'permission_callback' => [self::class, 'authorize'],
+        ]);
+
         register_rest_route(self::NAMESPACE, '/register-cloud', [
             'methods' => 'POST',
             'callback' => [self::class, 'register_cloud'],
@@ -119,6 +125,28 @@ class CommerceChat_Connector_REST_API
         }
         $limit = (int) $request->get_param('limit') ?: 5;
         return new WP_REST_Response(CommerceChat_Connector_Orders::get_by_phone($phone, $limit), 200);
+    }
+
+    public static function create_checkout(WP_REST_Request $request): WP_REST_Response
+    {
+        $body = $request->get_json_params();
+        $line_items = isset($body['line_items']) && is_array($body['line_items']) ? $body['line_items'] : [];
+        if (empty($line_items)) {
+            return new WP_REST_Response(['error' => 'line_items are required'], 400);
+        }
+
+        $result = CommerceChat_Connector_Orders::create_checkout([
+            'cart_id' => isset($body['cart_id']) ? (string) $body['cart_id'] : '',
+            'conversation_id' => isset($body['conversation_id']) ? (string) $body['conversation_id'] : '',
+            'customer_phone' => isset($body['customer_phone']) ? (string) $body['customer_phone'] : '',
+            'line_items' => $line_items,
+        ]);
+
+        if (isset($result['error'])) {
+            return new WP_REST_Response($result, isset($result['status']) ? (int) $result['status'] : 400);
+        }
+
+        return new WP_REST_Response($result, 201);
     }
 
     /** CommerceChat calls this on connect — stores API URL so the widget can load without theme edits. */

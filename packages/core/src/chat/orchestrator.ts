@@ -561,7 +561,7 @@ export async function runChatOrchestrator(
     channel: input.channel,
     maxWords: gateProductSearch ? 35 : undefined,
   });
-  const surfaceProducts = intent !== "greeting" && !isGreetingOnlyMessage(text);
+  const surfaceProducts = !gateProductSearch && intent !== "greeting" && !isGreetingOnlyMessage(text);
   const finalToolResults = surfaceProducts ? toolResults : stripProductToolResults(toolResults);
   const finalProducts = extractProductHitsFromTools(finalToolResults);
   if (input.channel === "web" && finalProducts.length) {

@@ -50,7 +50,7 @@ export function buildSuggestedCtas(input: {
     const highMsg = market === "lk" ? "Budget is above LKR 5,000" : "Budget is above $100";
     return [
       { type: "message", label: low, message: lowMsg },
-      { type: "message", label: "Gift ideas", message: "It's for a gift — show me options" },
+      { type: "message", label: "It's a gift", message: "It's for a gift" },
       { type: "message", label: high, message: highMsg },
     ];
   }

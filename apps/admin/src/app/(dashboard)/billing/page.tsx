@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check, Clock, CreditCard, Loader2 } from "lucide-react";
+import { Check, Clock, CreditCard, Loader2, MessageSquare, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
 import type { BillingOverview, BillingPlan, TenantPlan } from "@commercechat/mock-api";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AdminPageSkeleton } from "@/components/layout/page-skeleton";
+import { IconFrame, MetricTile, PageIntro, SectionHeader } from "@/components/layout/admin-page";
 
 const PLAN_ORDER: TenantPlan[] = ["starter", "pro", "business", "enterprise"];
 
@@ -175,12 +176,11 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Billing & plans</h1>
-        <p className="text-muted-foreground">
-          Manage your subscription and monitor usage. Payments use your Sri Lankan gateway — not Stripe.
-        </p>
-      </div>
+      <PageIntro
+        eyebrow="Commercial controls"
+        title="Manage subscription health, plan limits, and upgrade paths."
+        description="Current plan status, usage pressure, cancellation state, and available plans. Payments use your Sri Lankan gateway, not Stripe."
+      />
 
       {notice && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -200,17 +200,30 @@ export default function BillingPage() {
       )}
 
       {overview && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricTile label="Plan" value={overview.planDetails?.name ?? overview.subscription.plan} detail={statusLabel(overview.subscription.status)} icon={<CreditCard className="h-4 w-4" />} />
+          <MetricTile label="Messages" value={overview.usage.messages.toLocaleString()} detail={`${overview.utilization.messagesPct}% used`} icon={<MessageSquare className="h-4 w-4" />} />
+          <MetricTile label="Team" value={overview.resources.teamMembers.toLocaleString()} detail={`${overview.limits.maxTeamMembers} seats`} icon={<Users className="h-4 w-4" />} />
+          <MetricTile label="Vectors" value={overview.resources.vectors.toLocaleString()} detail={`${overview.utilization.vectorsPct}% used`} icon={<Sparkles className="h-4 w-4" />} />
+        </div>
+      )}
+
+      {overview && (
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <CreditCard className="h-5 w-5" />
+            <div className="flex items-start gap-3">
+              <IconFrame>
+                <CreditCard className="h-4 w-4" />
+              </IconFrame>
+              <div>
+              <CardTitle className="text-lg">
                 Current plan
               </CardTitle>
               <CardDescription className="mt-1 capitalize">
                 {overview.planDetails?.name ?? overview.subscription.plan} ·{" "}
                 {statusLabel(overview.subscription.status)}
               </CardDescription>
+              </div>
             </div>
             <Badge variant={statusBadgeVariant(overview.subscription.status)}>
               {statusLabel(overview.subscription.status)}
@@ -293,7 +306,12 @@ export default function BillingPage() {
       {isTrial && trialPlan && (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardHeader>
-            <CardTitle className="text-base">Trial limits</CardTitle>
+            <CardTitle className="flex items-center gap-3">
+              <IconFrame className="border-amber-200 bg-amber-100 text-amber-700">
+                <Clock className="h-4 w-4" />
+              </IconFrame>
+              Trial limits
+            </CardTitle>
             <CardDescription>
               Full channel access during your {trialPlan.trialDays ?? 14}-day trial. Upgrade before it ends to
               keep messaging live.
@@ -312,8 +330,12 @@ export default function BillingPage() {
         </Card>
       )}
 
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Available plans</h2>
+      <div className="space-y-4">
+        <SectionHeader
+          eyebrow="Plan catalog"
+          title="Available plans"
+          description="Choose the lowest tier that matches your channel, source, team, and message volume needs."
+        />
         <div className="grid gap-4 lg:grid-cols-3">
           {paidPlans.map((plan) => {
             const isCurrent = plan.id === currentPlan;
@@ -336,7 +358,12 @@ export default function BillingPage() {
                   </Badge>
                 )}
                 <CardHeader>
-                  <CardTitle>{plan.name}</CardTitle>
+                  <CardTitle className="flex items-center gap-3">
+                    <IconFrame className={isCurrent ? undefined : "border-slate-200 bg-slate-100 text-slate-700"}>
+                      <ShieldCheck className="h-4 w-4" />
+                    </IconFrame>
+                    {plan.name}
+                  </CardTitle>
                   <CardDescription>{plan.description}</CardDescription>
                   <div className="pt-2">
                     {isEnterprise ? (

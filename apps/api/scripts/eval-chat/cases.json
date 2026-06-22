@@ -69,6 +69,19 @@
     }
   },
   {
+    "id": "fathers-day-gift-gates",
+    "message": "im looking for fathers day gift",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "funnelStage": "discover",
+      "maxProductCards": 0,
+      "minSuggestedActions": 1,
+      "maxReplyWords": 35,
+      "maxQuestions": 1
+    }
+  },
+  {
     "id": "explicit-budget-product-search",
     "message": "Show me gifts under LKR 3000",
     "expect": {

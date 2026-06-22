@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
-import { ArrowLeft, Bot, Send, UserRound } from "lucide-react";
+import { ArrowLeft, Bot, MessageSquare, Send, ShoppingCart, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
 import { conversationIdFromPath, conversationIdFromSearchParams } from "@/lib/conversation-id";
 import type { ConversationDetail, Message } from "@commercechat/mock-api";
@@ -16,8 +16,20 @@ import { funnelStageLabel } from "@/lib/funnel-stage";
 import { intentLabel, subIntentLabel } from "@/lib/chat-intent";
 import { formatQualificationSummary } from "@/lib/qualification-summary";
 import { SplitPageSkeleton } from "@/components/layout/page-skeleton";
+import { IconFrame, MetricTile, PageIntro } from "@/components/layout/admin-page";
 
 const META_CHANNELS = new Set(["whatsapp", "messenger", "instagram"]);
+
+function formatMoney(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(currency === "LKR" ? "en-LK" : "en", {
+      style: "currency",
+      currency,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
 
 export default function ConversationThreadPage() {
   const params = useParams<{ id: string }>();
@@ -111,31 +123,35 @@ export default function ConversationThreadPage() {
     );
   }
 
+  const qualificationSummary = formatQualificationSummary(detail.qualification);
+  const inboundCount = messages.filter((message) => message.direction === "inbound").length;
+  const outboundCount = messages.length - inboundCount;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/conversations">
+      <div className="flex flex-wrap items-start gap-4">
+        <Button variant="outline" size="icon" asChild>
+          <Link href="/conversations" aria-label="Back to conversations">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold truncate">{detail.customerName ?? "Customer"}</h1>
-          <div className="flex flex-wrap gap-2 mt-1">
+        <div className="min-w-0 flex-1">
+          <PageIntro
+            eyebrow="Conversation detail"
+            title={detail.customerName ?? "Customer conversation"}
+            description={`${detail.channel} thread with ${detail.messageCount} messages, ${intentLabel(detail.lastIntent)} intent, and ${funnelStageLabel(detail.funnelStage)} funnel state.`}
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
             <Badge>{detail.channel}</Badge>
-            <Badge variant={isHuman ? "default" : "secondary"}>
-              {isHuman ? "Human" : "Bot"}
-            </Badge>
+            <Badge variant={isHuman ? "default" : "secondary"}>{isHuman ? "Human" : "Bot"}</Badge>
             <Badge variant="outline">{detail.status}</Badge>
             <Badge variant="outline">{funnelStageLabel(detail.funnelStage)}</Badge>
             <Badge variant="outline">{intentLabel(detail.lastIntent)}</Badge>
-            {detail.lastSubIntent && (
-              <Badge variant="secondary">{subIntentLabel(detail.lastSubIntent)}</Badge>
-            )}
+            {detail.lastSubIntent && <Badge variant="secondary">{subIntentLabel(detail.lastSubIntent)}</Badge>}
           </div>
         </div>
         {canReply && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             {!isHuman ? (
               <>
                 <Button
@@ -172,10 +188,32 @@ export default function ConversationThreadPage() {
         </div>
       )}
 
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricTile label="Inbound" value={inboundCount} detail="customer messages" icon={<UserRound className="h-4 w-4" />} />
+        <MetricTile label="Outbound" value={outboundCount} detail={isHuman ? "manual mode" : "bot replies"} icon={<Bot className="h-4 w-4" />} />
+        <MetricTile label="Intent" value={intentLabel(detail.lastIntent)} detail={detail.lastSubIntent ? subIntentLabel(detail.lastSubIntent) : "latest detected"} icon={<MessageSquare className="h-4 w-4" />} />
+        <MetricTile
+          label="Cart"
+          value={detail.cart?.items.length ?? 0}
+          detail={
+            detail.cart
+              ? `${formatMoney(detail.cart.subtotal, detail.cart.currency)}${detail.cart.abandoned ? " · abandoned" : ""}`
+              : "no active cart"
+          }
+          icon={<ShoppingCart className="h-4 w-4" />}
+        />
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2 flex flex-col">
-          <CardHeader>
-            <CardTitle className="text-base">Messages</CardTitle>
+        <Card className="flex flex-col lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-3">
+              <IconFrame>
+                <MessageSquare className="h-4 w-4" />
+              </IconFrame>
+              Message timeline
+            </CardTitle>
+            <Badge variant={isHuman ? "warning" : "success"}>{isHuman ? "human takeover" : "bot active"}</Badge>
           </CardHeader>
           <CardContent className="flex-1 space-y-4">
             {messages.map((m) => {
@@ -188,12 +226,12 @@ export default function ConversationThreadPage() {
                 >
                   <div
                     className={cn(
-                      "max-w-[80%] rounded-xl px-4 py-2 text-sm",
+                      "max-w-[82%] rounded-2xl border px-4 py-2.5 text-sm shadow-sm",
                       m.direction === "inbound"
-                        ? "bg-muted"
+                        ? "border-border bg-muted"
                         : isManual
-                          ? "bg-amber-600 text-white"
-                          : "bg-primary text-primary-foreground"
+                          ? "border-amber-600 bg-amber-600 text-white"
+                          : "border-primary bg-primary text-primary-foreground"
                     )}
                   >
                     <p>{m.content}</p>
@@ -225,7 +263,7 @@ export default function ConversationThreadPage() {
             })}
 
             {canReply && isHuman && (
-              <div className="border-t pt-4 space-y-2">
+              <div className="space-y-2 border-t pt-4">
                 {!manualSupported ? (
                   <p className="text-sm text-muted-foreground">
                     Manual replies are not supported for the {detail.channel} channel yet.
@@ -237,7 +275,7 @@ export default function ConversationThreadPage() {
                       onChange={(e) => setReplyText(e.target.value)}
                       placeholder="Type your reply to the customer..."
                       rows={3}
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       disabled={busy}
                     />
                     <Button size="sm" disabled={busy || !replyText.trim()} onClick={sendReply}>
@@ -250,7 +288,7 @@ export default function ConversationThreadPage() {
             )}
 
             {canReply && !isHuman && (
-              <p className="text-sm text-muted-foreground border-t pt-4">
+              <p className="border-t pt-4 text-sm text-muted-foreground">
                 Take over this conversation to reply manually. The bot will stop auto-replying until
                 you return control.
               </p>
@@ -258,13 +296,19 @@ export default function ConversationThreadPage() {
           </CardContent>
         </Card>
 
-        {formatQualificationSummary(detail.qualification) && (
+        <div className="space-y-4">
+        {qualificationSummary && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Shopper context</CardTitle>
+              <CardTitle className="flex items-center gap-3">
+                <IconFrame className="border-slate-200 bg-slate-100 text-slate-700">
+                  <UserRound className="h-4 w-4" />
+                </IconFrame>
+                Shopper context
+              </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              {formatQualificationSummary(detail.qualification)}
+              {qualificationSummary}
             </CardContent>
           </Card>
         )}
@@ -272,7 +316,15 @@ export default function ConversationThreadPage() {
         {detail.cart && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Cart</CardTitle>
+              <CardTitle className="flex items-center gap-3">
+                <IconFrame className="border-emerald-200 bg-emerald-100 text-emerald-700">
+                  <ShoppingCart className="h-4 w-4" />
+                </IconFrame>
+                Cart
+              </CardTitle>
+              <Badge variant={detail.cart.abandoned ? "warning" : "success"}>
+                {detail.cart.abandoned ? "Abandoned" : "Active"}
+              </Badge>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {detail.cart.items.map((item) => (
@@ -280,16 +332,41 @@ export default function ConversationThreadPage() {
                   <span>
                     {item.name} ×{item.quantity}
                   </span>
-                  <span>${item.unitPrice.toFixed(2)}</span>
+                  <span>{formatMoney(item.unitPrice, detail.cart!.currency)}</span>
                 </div>
               ))}
-              <div className="border-t pt-2 font-medium flex justify-between">
+              <div className="flex justify-between border-t pt-2 font-medium">
                 <span>Subtotal</span>
-                <span>${detail.cart.subtotal.toFixed(2)}</span>
+                <span>{formatMoney(detail.cart.subtotal, detail.cart.currency)}</span>
               </div>
+              {detail.cart.checkoutUrl && (
+                <div className="rounded-lg border bg-muted p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                    Checkout link
+                  </p>
+                  <a
+                    href={detail.cart.checkoutUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block break-all text-sm font-medium text-primary"
+                  >
+                    {detail.cart.checkoutUrl}
+                  </a>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {detail.cart.checkoutProvider ?? "checkout"}{" "}
+                    {detail.cart.checkoutExternalId ? `#${detail.cart.checkoutExternalId}` : ""}
+                  </p>
+                </div>
+              )}
+              {detail.cart.updatedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Last cart update: {new Date(detail.cart.updatedAt).toLocaleString()}
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
+        </div>
       </div>
     </div>
   );

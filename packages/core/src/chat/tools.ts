@@ -9,12 +9,13 @@ import {
   type ProductRecord,
 } from "../catalog/products";
 import { rankProductsByRelevance } from "../catalog/product-search";
+import { createCommerceCheckout } from "../commerce/checkout";
 import { lookupWordPressOrder } from "../commerce/wordpress/service";
 import { getTenantConfig } from "../tenant/service";
 import { retrieveKnowledge } from "../ingest/retrieve";
 import type { ScoredChunk } from "../ingest/types";
 import type { ToolDefinition } from "../llm/types";
-import { addToCart, getOrCreateCart, loadCart } from "./cart";
+import { addToCart, getOrCreateCart, loadCart, recordCartCheckout } from "./cart";
 import { messageMentionsProducts } from "./intent";
 import { buildProductSearchQuery } from "./product-query";
 
@@ -392,9 +393,46 @@ export async function executeTool(
       if (!cart?.items.length) {
         return { result: { error: "Cart is empty" }, success: false };
       }
+      const realCheckout = await createCommerceCheckout(ctx.auth, ctx.config, cart, {
+        channel: ctx.channel,
+        externalUserId: ctx.externalUserId,
+      });
+      if (realCheckout) {
+        const updatedCart =
+          (await recordCartCheckout(
+            ctx.auth.tenantId,
+            ctx.conversationId,
+            {
+              checkoutUrl: realCheckout.checkoutUrl,
+              checkoutProvider: realCheckout.provider,
+              checkoutExternalId: realCheckout.externalCheckoutId,
+            },
+            ctx.config
+          )) ?? cart;
+        return {
+          success: true,
+          result: {
+            checkoutUrl: realCheckout.checkoutUrl,
+            provider: realCheckout.provider,
+            externalCheckoutId: realCheckout.externalCheckoutId,
+            cart: updatedCart,
+          },
+        };
+      }
       const base = ctx.checkoutBaseUrl || "https://checkout.commercechat.com";
       const url = `${base}/${ctx.auth.tenantId}/${cart.cartId}`;
-      return { success: true, result: { checkoutUrl: url, cart } };
+      const updatedCart =
+        (await recordCartCheckout(
+          ctx.auth.tenantId,
+          ctx.conversationId,
+          {
+            checkoutUrl: url,
+            checkoutProvider: "fallback",
+            checkoutExternalId: cart.cartId,
+          },
+          ctx.config
+        )) ?? cart;
+      return { success: true, result: { checkoutUrl: url, provider: "fallback", cart: updatedCart } };
     }
     case "get_order_status": {
       const tenantConfig = await getTenantConfig(ctx.auth, ctx.config);

@@ -44,3 +44,10 @@ export interface ShopifyProduct {
 export interface ShopifyProductsPage {
   products: ShopifyProduct[];
 }
+
+export interface ShopifyDraftOrderResult {
+  id: number;
+  name: string;
+  invoice_url: string;
+  status: string;
+}

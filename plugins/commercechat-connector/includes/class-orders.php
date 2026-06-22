@@ -49,6 +49,68 @@ class CommerceChat_Connector_Orders
         ];
     }
 
+    public static function create_checkout(array $input): array
+    {
+        if (!function_exists('wc_create_order')) {
+            return ['error' => 'WooCommerce is not available', 'status' => 503];
+        }
+
+        $line_items = isset($input['line_items']) && is_array($input['line_items']) ? $input['line_items'] : [];
+        if (empty($line_items)) {
+            return ['error' => 'line_items are required', 'status' => 400];
+        }
+
+        $order = wc_create_order([
+            'status' => 'pending',
+            'created_via' => 'commercechat',
+        ]);
+        if (is_wp_error($order)) {
+            return ['error' => $order->get_error_message(), 'status' => 500];
+        }
+
+        foreach ($line_items as $line_item) {
+            $sku = isset($line_item['sku']) ? sanitize_text_field((string) $line_item['sku']) : '';
+            $quantity = isset($line_item['quantity']) ? max(1, (int) $line_item['quantity']) : 1;
+            if ($sku === '') {
+                $order->delete(true);
+                return ['error' => 'Each line item requires sku', 'status' => 400];
+            }
+
+            $product_id = wc_get_product_id_by_sku($sku);
+            if (!$product_id && preg_match('/^wc-(\d+)$/', $sku, $matches)) {
+                $product_id = (int) $matches[1];
+            }
+            $product = $product_id ? wc_get_product($product_id) : null;
+            if (!$product) {
+                $order->delete(true);
+                return ['error' => 'Product not found for SKU ' . $sku, 'status' => 404];
+            }
+            if (!$product->is_in_stock()) {
+                $order->delete(true);
+                return ['error' => $product->get_name() . ' is out of stock', 'status' => 409];
+            }
+
+            $order->add_product($product, $quantity);
+        }
+
+        if (!empty($input['customer_phone'])) {
+            $order->set_billing_phone(sanitize_text_field((string) $input['customer_phone']));
+        }
+        $order->update_meta_data('_commercechat_cart_id', sanitize_text_field((string) ($input['cart_id'] ?? '')));
+        $order->update_meta_data('_commercechat_conversation_id', sanitize_text_field((string) ($input['conversation_id'] ?? '')));
+        $order->calculate_totals();
+        $order->save();
+
+        return [
+            'order_id' => $order->get_id(),
+            'order_number' => $order->get_order_number(),
+            'checkout_url' => $order->get_checkout_payment_url(),
+            'status' => $order->get_status(),
+            'total' => $order->get_total(),
+            'currency' => $order->get_currency(),
+        ];
+    }
+
     private static function format_order(WC_Order $order): array
     {
         $line_items = [];

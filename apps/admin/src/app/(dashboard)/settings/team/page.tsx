@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trash2, UserPlus } from "lucide-react";
+import { Mail, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { IconFrame, MetricTile, PageIntro, SectionHeader } from "@/components/layout/admin-page";
 
 function errorMessage(err: unknown, fallback: string) {
   return err && typeof err === "object" && "message" in err
@@ -75,19 +76,32 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Team</h1>
-          <p className="text-muted-foreground">Manage who has access to your store</p>
-        </div>
-        {canInvite && (
-          <Button onClick={() => setShowInvite(true)}><UserPlus className="h-4 w-4" /> Invite</Button>
-        )}
+      <PageIntro
+        eyebrow="Access control"
+        title="Manage teammates, roles, and invitation state."
+        description="Owners can change roles and remove members; admins can invite teammates into the store workspace."
+        action={canInvite && <Button onClick={() => setShowInvite(true)}><UserPlus className="h-4 w-4" /> Invite teammate</Button>}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricTile label="Members" value={members.length} detail="total seats" icon={<Users className="h-4 w-4" />} />
+        <MetricTile label="Admins" value={members.filter((member) => member.role === "admin").length} detail="can manage setup" icon={<ShieldCheck className="h-4 w-4" />} />
+        <MetricTile label="Pending" value={members.filter((member) => member.status !== "active").length} detail="invite status" icon={<Mail className="h-4 w-4" />} />
+        <MetricTile label="Your role" value={user?.role ?? "viewer"} detail={isOwner ? "full control" : "limited access"} icon={<UserPlus className="h-4 w-4" />} />
       </div>
 
       {showInvite && (
         <Card>
-          <CardHeader><CardTitle className="text-base">Invite team member</CardTitle></CardHeader>
+          <CardHeader className="flex flex-row items-start justify-between gap-3">
+            <SectionHeader
+              eyebrow="Invitation"
+              title="Invite team member"
+              description="Send a secure invitation with the role selected below."
+            />
+            <IconFrame>
+              <UserPlus className="h-4 w-4" />
+            </IconFrame>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2"><Label>Email</Label><Input value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} /></div>
@@ -112,6 +126,14 @@ export default function TeamPage() {
       )}
 
       <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <SectionHeader
+            eyebrow="Directory"
+            title="Team members"
+            description="Review active users, pending invites, and role assignment."
+          />
+          <Badge variant={isOwner ? "success" : "secondary"}>{isOwner ? "owner controls" : "view access"}</Badge>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -126,7 +148,14 @@ export default function TeamPage() {
             <TableBody>
               {members.map((m) => (
                 <TableRow key={m.userId}>
-                  <TableCell className="font-medium">{m.name}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <IconFrame className="border-slate-200 bg-slate-100 text-slate-700">
+                        <Users className="h-4 w-4" />
+                      </IconFrame>
+                      <span className="font-medium">{m.name}</span>
+                    </div>
+                  </TableCell>
                   <TableCell>{m.email}</TableCell>
                   <TableCell>
                     {isOwner && m.role !== "owner" ? (
@@ -141,7 +170,7 @@ export default function TeamPage() {
                       <Badge variant="secondary">{m.role}</Badge>
                     )}
                   </TableCell>
-                  <TableCell>{m.status}</TableCell>
+                  <TableCell><Badge variant={m.status === "active" ? "success" : "secondary"}>{m.status}</Badge></TableCell>
                   {isOwner && (
                     <TableCell>
                       {m.role !== "owner" && m.userId !== user?.userId && (

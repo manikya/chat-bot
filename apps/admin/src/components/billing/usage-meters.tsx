@@ -1,8 +1,11 @@
 "use client";
 
 import type { BillingOverview } from "@commercechat/mock-api";
+import { BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { IconFrame } from "@/components/layout/admin-page";
 
 function Meter({
   label,
@@ -24,7 +27,7 @@ function Meter({
   const critical = pct >= 100;
 
   return (
-    <div className="space-y-2">
+    <div className="rounded-lg border bg-muted p-3">
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium">{label}</span>
         <span className={critical ? "text-destructive" : warn ? "text-amber-600" : "text-muted-foreground"}>
@@ -46,8 +49,16 @@ export function UsageMeters({ overview }: { overview: BillingOverview }) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Usage — {usage.period}</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <CardTitle className="flex items-center gap-3">
+          <IconFrame>
+            <BarChart3 className="h-4 w-4" />
+          </IconFrame>
+          Usage — {usage.period}
+        </CardTitle>
+        <Badge variant={utilization.messagesPct >= 80 ? "warning" : "success"}>
+          {utilization.messagesPct}% messages
+        </Badge>
       </CardHeader>
       <CardContent className="space-y-6">
         <Meter

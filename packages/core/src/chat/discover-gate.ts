@@ -50,7 +50,7 @@ export function shouldGateProductSearch(input: {
   market?: ChatMarket;
 }): boolean {
   const { funnelStage, subIntent, qualification, message, market = "default" } = input;
-  if (subIntent === "product_browse" && isUnderspecifiedGiftBrowse(message, qualification)) return true;
+  if (isUnderspecifiedGiftBrowse(message, qualification)) return true;
   if (funnelStage !== "discover") return false;
   if (subIntent === "product_detail" || subIntent === "product_compare") return false;
   if (hasBudgetOrExplicitShopRequest(message, qualification, market)) return false;

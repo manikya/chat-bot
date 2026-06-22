@@ -21,6 +21,10 @@ export interface CartState {
   subtotal: number;
   currency: string;
   updatedAt: string;
+  checkoutUrl?: string;
+  checkoutProvider?: "woocommerce" | "shopify" | "fallback";
+  checkoutExternalId?: string;
+  checkoutCreatedAt?: string;
 }
 
 export async function loadCart(
@@ -49,6 +53,27 @@ async function saveCart(cart: CartState, config: CoreConfig) {
       Item: { PK: Keys.tenantPk(cart.tenantId), SK: Keys.cart(cart.conversationId), ...cart, ttl },
     })
   );
+}
+
+export async function recordCartCheckout(
+  tenantId: string,
+  conversationId: string,
+  checkout: {
+    checkoutUrl: string;
+    checkoutProvider: "woocommerce" | "shopify" | "fallback";
+    checkoutExternalId?: string;
+  },
+  config: CoreConfig
+): Promise<CartState | null> {
+  const cart = await loadCart(tenantId, conversationId, config);
+  if (!cart) return null;
+  cart.checkoutUrl = checkout.checkoutUrl;
+  cart.checkoutProvider = checkout.checkoutProvider;
+  cart.checkoutExternalId = checkout.checkoutExternalId;
+  cart.checkoutCreatedAt = new Date().toISOString();
+  cart.updatedAt = cart.checkoutCreatedAt;
+  await saveCart(cart, config);
+  return cart;
 }
 
 function recalcSubtotal(items: CartItem[]) {

@@ -3,6 +3,7 @@ import type { CoreConfig } from "../../config";
 import type {
   ConnectShopifyBody,
   ShopifyCredentials,
+  ShopifyDraftOrderResult,
   ShopifyProduct,
   ShopifyProductsPage,
   ShopifyShopStatus,
@@ -169,6 +170,32 @@ export async function fetchShopifyOrderByName(
     { query: { status: "any", name: orderName, limit: 1 } }
   );
   return res.orders?.[0] ?? null;
+}
+
+export async function createShopifyDraftOrder(
+  creds: ShopifyCredentials,
+  _config: CoreConfig,
+  input: {
+    conversationId: string;
+    cartId: string;
+    lineItems: Array<{ variantId: number; quantity: number }>;
+  }
+): Promise<ShopifyDraftOrderResult> {
+  const res = await shopifyRequest<{ draft_order: ShopifyDraftOrderResult }>(creds, "/draft_orders.json", {
+    method: "POST",
+    body: {
+      draft_order: {
+        line_items: input.lineItems.map((item) => ({
+          variant_id: item.variantId,
+          quantity: item.quantity,
+        })),
+        note: `CommerceChat conversation ${input.conversationId}`,
+        tags: `commercechat,${input.cartId}`,
+        use_customer_default_address: true,
+      },
+    },
+  });
+  return res.draft_order;
 }
 
 const PRODUCT_WEBHOOK_TOPICS = ["products/create", "products/update", "products/delete"] as const;

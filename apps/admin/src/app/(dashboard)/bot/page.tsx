@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Bot, MessageSquare, Palette, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { TenantConfig } from "@commercechat/mock-api";
 import { ChatSimulator } from "@/components/chat/chat-simulator";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageSkeleton } from "@/components/layout/page-skeleton";
+import { IconFrame, MetricTile, PageIntro, SectionHeader } from "@/components/layout/admin-page";
 
 export default function BotConfigPage() {
   const [config, setConfig] = useState<TenantConfig | null>(null);
@@ -37,17 +40,30 @@ export default function BotConfigPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Bot configuration</h1>
-          <p className="text-muted-foreground">Customize how your assistant greets and replies to customers</p>
-        </div>
-        <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
+      <PageIntro
+        eyebrow="Assistant behavior"
+        title="Tune the voice shoppers hear before the bot takes action."
+        description="Prompt, greeting, channel coverage, widget suggestions, and simulator stay together so tone changes can be tested before going live."
+        action={<Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricTile label="Primary LLM" value={config.llmConfig.primaryProvider} detail="router provider" icon={<Sparkles className="h-4 w-4" />} />
+        <MetricTile label="Channels" value={config.enabledChannels.length} detail={config.enabledChannels.join(", ")} icon={<MessageSquare className="h-4 w-4" />} />
+        <MetricTile label="Suggestions" value={config.widgetConfig.suggestedQuestions.length} detail="widget chips" icon={<Bot className="h-4 w-4" />} />
+        <MetricTile label="Theme" value={config.widgetConfig.primaryColor} detail={config.widgetConfig.position} icon={<Palette className="h-4 w-4" />} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle className="text-base">Prompts</CardTitle></CardHeader>
+          <CardHeader className="flex flex-row items-start justify-between gap-3">
+            <SectionHeader
+              eyebrow="Voice control"
+              title="Prompts"
+              description="Keep responses concise, multilingual, and commerce-aware without changing the orchestration code."
+            />
+            <Badge variant="success">active</Badge>
+          </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
               Customers may write in English, Sinhala, Tamil, or Singlish. The system prompt should tell the bot to
@@ -73,7 +89,12 @@ export default function BotConfigPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Test simulator</CardTitle>
+            <CardTitle className="flex items-center gap-3">
+              <IconFrame>
+                <Bot className="h-4 w-4" />
+              </IconFrame>
+              Test simulator
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ChatSimulator

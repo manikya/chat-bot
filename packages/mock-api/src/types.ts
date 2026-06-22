@@ -185,6 +185,7 @@ export interface Conversation {
   messageCount: number;
   lastInboundAt: string;
   updatedAt: string;
+  cart?: CartSummary;
 }
 
 export interface Message {
@@ -295,6 +296,19 @@ export interface CartItem {
   unitPrice: number;
 }
 
+export interface CartSummary {
+  itemCount: number;
+  subtotal: number;
+  currency: string;
+  updatedAt: string;
+  firstItemName?: string;
+  abandoned: boolean;
+  checkoutUrl?: string;
+  checkoutProvider?: "woocommerce" | "shopify" | "fallback";
+  checkoutExternalId?: string;
+  checkoutCreatedAt?: string;
+}
+
 export interface ConversationDetail extends Conversation {
   qualification?: {
     budget?: { min?: number; max?: number };
@@ -303,5 +317,5 @@ export interface ConversationDetail extends Conversation {
     constraints?: string[];
     objectionsRaised?: string[];
   };
-  cart?: { items: CartItem[]; subtotal: number; currency: string };
+  cart?: CartSummary & { items: CartItem[] };
 }
