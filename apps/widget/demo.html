@@ -41,12 +41,15 @@
       (function () {
         var params = new URLSearchParams(window.location.search);
         var key = params.get("key");
+        var version = params.get("v") || Date.now().toString();
         var base = window.location.origin;
         var script = document.createElement("script");
-        script.src = base + "/widget/v1.js";
+        script.src = base + "/widget/v1.js?v=" + encodeURIComponent(version);
         script.async = true;
+        script.setAttribute("data-demo", "true");
         script.setAttribute("data-api-key", key || "pk_live_REPLACE_ME");
         script.setAttribute("data-api-url", base);
+        script.setAttribute("data-legal-base-url", "http://localhost:3000");
         document.body.appendChild(script);
       })();
     </script>
