@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Bot, MessageSquare, Palette, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import type { TenantConfig } from "@commercechat/mock-api";
+import type { Tenant, TenantConfig } from "@commercechat/mock-api";
 import { ChatSimulator } from "@/components/chat/chat-simulator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,12 @@ import { IconFrame, MetricTile, PageIntro, SectionHeader } from "@/components/la
 
 export default function BotConfigPage() {
   const [config, setConfig] = useState<TenantConfig | null>(null);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.tenant.getConfig().then((r) => setConfig(r.data ?? null));
+    api.tenant.getMe().then((r) => setTenant(r.data ?? null));
   }, []);
 
   if (!config) return <SplitPageSkeleton />;
@@ -100,6 +102,8 @@ export default function BotConfigPage() {
             <ChatSimulator
               greeting={config.prompts.greeting}
               suggestedQuestions={config.widgetConfig.suggestedQuestions}
+              storeName={tenant?.storeName ?? "Store assistant"}
+              primaryColor={config.widgetConfig.primaryColor}
               onSend={async (msg) => {
                 const res = await api.chat.send(msg);
                 return res.data.reply.content;
