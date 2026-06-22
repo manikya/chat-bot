@@ -1,0 +1,36 @@
+[
+  {
+    "id": "baseline",
+    "label": "Current tenant config"
+  },
+  {
+    "id": "gpt-4o-mini-low-temp",
+    "label": "GPT-4o mini, lower temperature",
+    "configPatch": {
+      "llmConfig": {
+        "models": {
+          "faq": "gpt-4o-mini",
+          "product": "gpt-4o-mini",
+          "checkout": "gpt-4o-mini"
+        },
+        "temperature": 0.2,
+        "maxOutputTokens": 450
+      }
+    }
+  },
+  {
+    "id": "gpt-4o-product",
+    "label": "GPT-4o for product and checkout",
+    "configPatch": {
+      "llmConfig": {
+        "models": {
+          "faq": "gpt-4o-mini",
+          "product": "gpt-4o",
+          "checkout": "gpt-4o"
+        },
+        "temperature": 0.3,
+        "maxOutputTokens": 500
+      }
+    }
+  }
+]

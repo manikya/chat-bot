@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "minScore": 85,
+  "dimensions": [
+    {
+      "id": "routing",
+      "label": "Intent and funnel routing",
+      "weight": 20,
+      "description": "Correct intent, sub-intent, and funnel stage so the right workflow runs."
+    },
+    {
+      "id": "response",
+      "label": "Response quality",
+      "weight": 25,
+      "description": "Concise, on-brand replies that include and exclude the expected content."
+    },
+    {
+      "id": "commerce",
+      "label": "Commerce behavior",
+      "weight": 30,
+      "description": "Correct product/tool behavior, budget limits, stock handling, and cart surfaces."
+    },
+    {
+      "id": "engagement",
+      "label": "Guided next step",
+      "weight": 15,
+      "description": "Asks at most one useful question and exposes appropriate suggested actions."
+    },
+    {
+      "id": "reliability",
+      "label": "Reliability",
+      "weight": 10,
+      "description": "Produces a usable response without API/runtime failures."
+    }
+  ]
+}

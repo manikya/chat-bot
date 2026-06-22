@@ -8,12 +8,13 @@
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { assertCase } from "./assertions.mjs";
+import { evaluateCase } from "./assertions.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API = process.env.API_URL ?? "http://localhost:3001";
 const API_KEY = process.env.WIDGET_API_KEY ?? process.env.API_KEY;
 const cases = JSON.parse(readFileSync(join(__dirname, "cases.json"), "utf8"));
+const criteria = JSON.parse(readFileSync(join(__dirname, "criteria.json"), "utf8"));
 
 async function chat(message, sessionId) {
   const path = API_KEY ? "/api/v1/widget/chat" : "/api/v1/chat";
@@ -53,10 +54,13 @@ async function chat(message, sessionId) {
 
 async function main() {
   const minPass = Number(process.env.EVAL_MIN_PASS_PCT ?? 80);
-  console.log(`Eval chat @ ${API} (${cases.length} cases, min pass ${minPass}%)\n`);
+  const minScore = Number(process.env.EVAL_MIN_SCORE ?? criteria.minScore ?? 85);
+  console.log(`Eval chat @ ${API} (${cases.length} cases, min pass ${minPass}%, min score ${minScore})\n`);
 
   let passed = 0;
   let failed = 0;
+  let totalScore = 0;
+  const dimensionTotals = new Map();
 
   for (const c of cases) {
     try {
@@ -66,11 +70,20 @@ async function main() {
       for (const message of messages) {
         out = await chat(message, sessionId);
       }
-      const failures = assertCase(out, c.expect ?? {});
+      const evaluation = evaluateCase(out, c.expect ?? {}, criteria);
+      const failures = evaluation.failures;
       const preview = String(out.reply).replace(/\s+/g, " ").slice(0, 140);
+      totalScore += evaluation.score;
+      for (const dim of Object.values(evaluation.dimensions)) {
+        if (!dim.applicable) continue;
+        const current = dimensionTotals.get(dim.id) ?? { label: dim.label, score: 0, count: 0 };
+        current.score += Math.round((dim.passed / dim.applicable) * 100);
+        current.count += 1;
+        dimensionTotals.set(dim.id, current);
+      }
       console.log(
         `[${c.id}] intent=${out.intent ?? "?"} sub=${out.subIntent ?? "?"} funnel=${out.funnelStage ?? "?"} ` +
-          `cards=${out.productCards} skus=${out.productSkus.join("|") || "-"} ` +
+          `score=${evaluation.score} cards=${out.productCards} skus=${out.productSkus.join("|") || "-"} ` +
           `actions=${out.suggestedActions} tools=${out.tools || "-"}`
       );
       console.log(`  → ${preview}${String(out.reply).length > 140 ? "…" : ""}`);
@@ -89,8 +102,13 @@ async function main() {
   }
 
   const pct = cases.length ? Math.round((passed / cases.length) * 100) : 0;
-  console.log(`Result: ${passed}/${cases.length} passed (${pct}%)`);
-  const exitFail = failed > 0 || pct < minPass;
+  const avgScore = cases.length ? Math.round(totalScore / cases.length) : 0;
+  console.log("Dimension scores:");
+  for (const [, dim] of dimensionTotals) {
+    console.log(`- ${dim.label}: ${Math.round(dim.score / dim.count)}`);
+  }
+  console.log(`Result: ${passed}/${cases.length} passed (${pct}%), average score ${avgScore}`);
+  const exitFail = failed > 0 || pct < minPass || avgScore < minScore;
   process.exit(exitFail ? 1 : 0);
 }
 

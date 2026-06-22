@@ -27,7 +27,8 @@
     "deploy:aws:full": "node scripts/deploy-aws-serverless.mjs --env=dev --with-ingest-pipeline --with-ingest-step-functions --with-widget-cdn --ensure-iam",
     "deploy:admin": "node scripts/deploy-admin-static.mjs",
     "build:woocommerce-plugin": "node scripts/build-woocommerce-plugin.mjs",
-    "eval:chat": "node apps/api/scripts/eval-chat/run.mjs"
+    "eval:chat": "node apps/api/scripts/eval-chat/run.mjs",
+    "eval:chat:experiments": "node apps/api/scripts/eval-chat/run-experiments.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
