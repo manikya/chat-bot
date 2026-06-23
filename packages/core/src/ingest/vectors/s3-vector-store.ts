@@ -45,6 +45,16 @@ function chunkToMetadata(chunk: VectorChunk): Record<string, string | number | b
   if (chunk.metadata.inStock != null) meta.inStock = chunk.metadata.inStock;
   const tags = joinMetaList(chunk.metadata.tags);
   if (tags) meta.tags = tags;
+  const material = joinMetaList(chunk.metadata.material);
+  if (material) meta.material = material;
+  const occasion = joinMetaList(chunk.metadata.occasion);
+  if (occasion) meta.occasion = occasion;
+  const recipient = joinMetaList(chunk.metadata.recipient);
+  if (recipient) meta.recipient = recipient;
+  const compatibility = joinMetaList(chunk.metadata.compatibility);
+  if (compatibility) meta.compatibility = compatibility;
+  const bundles = joinMetaList(chunk.metadata.bundles);
+  if (bundles) meta.bundles = bundles;
   if (chunk.metadata.platform) meta.platform = chunk.metadata.platform;
   if (chunk.metadata.date) meta.date = chunk.metadata.date;
   if (chunk.metadata.question) meta.question = chunk.metadata.question;
@@ -66,6 +76,11 @@ function metadataToChunk(key: string, metadata: Record<string, unknown>): Vector
   if (metadata.currency) chunkMeta.currency = String(metadata.currency);
   if (typeof metadata.inStock === "boolean") chunkMeta.inStock = metadata.inStock;
   chunkMeta.tags = splitMetaList(metadata.tags);
+  chunkMeta.material = splitMetaList(metadata.material);
+  chunkMeta.occasion = splitMetaList(metadata.occasion);
+  chunkMeta.recipient = splitMetaList(metadata.recipient);
+  chunkMeta.compatibility = splitMetaList(metadata.compatibility);
+  chunkMeta.bundles = splitMetaList(metadata.bundles);
   if (metadata.platform) chunkMeta.platform = String(metadata.platform);
   if (metadata.date) chunkMeta.date = String(metadata.date);
   if (metadata.question) chunkMeta.question = String(metadata.question);

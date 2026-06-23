@@ -201,6 +201,11 @@ async function mergeProductSearchResults(
         categories: h.chunk.metadata.categories,
         productUrl: h.chunk.metadata.url,
         tags: h.chunk.metadata.tags?.join(", "),
+        material: h.chunk.metadata.material?.join(", "),
+        occasion: h.chunk.metadata.occasion?.join(", "),
+        recipient: h.chunk.metadata.recipient?.join(", "),
+        compatibility: h.chunk.metadata.compatibility?.join(", "),
+        bundles: h.chunk.metadata.bundles?.join(", "),
       }
     );
   }
@@ -229,6 +234,11 @@ function productDto(
     imageUrls: p.imageUrls,
     url: p.productUrl,
     variants: p.variants,
+    material: p.material,
+    occasion: p.occasion,
+    recipient: p.recipient,
+    compatibility: p.compatibility,
+    bundles: p.bundles,
     matchReasons: options?.query
       ? productMatchReasons(p, options.query, {
           category: options.category,

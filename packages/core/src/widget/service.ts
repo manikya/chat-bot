@@ -170,6 +170,7 @@ export function toWidgetChatResponse(
     suggestedActions,
     suggestedQuestions,
     productCards: buildProductCards(result.toolResults as ToolRow[] | undefined),
+    retrievedChunks: result.retrievedChunks,
   };
 }
 

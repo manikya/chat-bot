@@ -162,6 +162,16 @@ export interface ChatResult {
   conversationId: string;
   reply: ChatReply;
   toolResults?: ChatToolResult[];
+  retrievedChunks?: Array<{
+    sourceType?: string;
+    sourceId?: string;
+    chunkId?: string;
+    title?: string;
+    section?: string;
+    sku?: string;
+    score: number;
+    textPreview: string;
+  }>;
   intent?: ChatIntent;
   funnelStage?: FunnelStage;
   subIntent?: ChatSubIntent;

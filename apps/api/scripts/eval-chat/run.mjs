@@ -13,7 +13,10 @@ import { evaluateCase } from "./assertions.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API = process.env.API_URL ?? "http://localhost:3001";
 const API_KEY = process.env.WIDGET_API_KEY ?? process.env.API_KEY;
-const cases = JSON.parse(readFileSync(join(__dirname, "cases.json"), "utf8"));
+const casesPath = process.env.EVAL_CASES_PATH
+  ? join(process.cwd(), process.env.EVAL_CASES_PATH)
+  : join(__dirname, "cases.json");
+const cases = JSON.parse(readFileSync(casesPath, "utf8"));
 const criteria = JSON.parse(readFileSync(join(__dirname, "criteria.json"), "utf8"));
 
 async function chat(message, sessionId) {
@@ -49,13 +52,15 @@ async function chat(message, sessionId) {
     outOfStockProducts: products.filter((p) => p.inStock === false).map((p) => p.sku || p.name),
     suggestedActions: data.suggestedActions?.length ?? 0,
     tools: (data.toolResults ?? []).map((t) => t.tool).join(", "),
+    retrievedChunks: data.retrievedChunks ?? [],
   };
 }
 
 async function main() {
   const minPass = Number(process.env.EVAL_MIN_PASS_PCT ?? 80);
   const minScore = Number(process.env.EVAL_MIN_SCORE ?? criteria.minScore ?? 85);
-  console.log(`Eval chat @ ${API} (${cases.length} cases, min pass ${minPass}%, min score ${minScore})\n`);
+  console.log(`Eval chat @ ${API} (${cases.length} cases, min pass ${minPass}%, min score ${minScore})`);
+  console.log(`Cases: ${casesPath}\n`);
 
   let passed = 0;
   let failed = 0;
@@ -87,6 +92,22 @@ async function main() {
           `actions=${out.suggestedActions} tools=${out.tools || "-"}`
       );
       console.log(`  → ${preview}${String(out.reply).length > 140 ? "…" : ""}`);
+      if (out.retrievedChunks.length) {
+        for (const chunk of out.retrievedChunks.slice(0, 5)) {
+          const label = [
+            chunk.sourceType,
+            chunk.sku,
+            chunk.title ?? chunk.section,
+            chunk.score != null ? `score=${chunk.score}` : undefined,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const contextPreview = String(chunk.textPreview ?? "").replace(/\s+/g, " ").slice(0, 120);
+          console.log(`  RAG ${label}: ${contextPreview}${contextPreview.length >= 120 ? "…" : ""}`);
+        }
+      } else {
+        console.log("  RAG -");
+      }
 
       if (failures.length) {
         console.error(`  FAIL: ${failures.join("; ")}\n`);

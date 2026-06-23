@@ -64,6 +64,27 @@ export function productCategoriesText(record: ProductRecord): string {
   return cats.length ? cats.join(", ") : "";
 }
 
+export function splitProductRelationship(value?: string): string[] {
+  return (value ?? "")
+    .split(/[,|;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function productRelationshipTerms(record: ProductRecord): string[] {
+  return [
+    ...splitProductRelationship(record.material),
+    ...splitProductRelationship(record.occasion),
+    ...splitProductRelationship(record.recipient),
+    ...splitProductRelationship(record.compatibility),
+    ...splitProductRelationship(record.bundles),
+  ];
+}
+
+function relationshipBlob(record: ProductRecord): string {
+  return productRelationshipTerms(record).join(" ").toLowerCase();
+}
+
 export function categoryFilterMatches(record: ProductRecord, filter: string): boolean {
   const needle = filter.trim().toLowerCase();
   if (!needle) return true;
@@ -77,7 +98,8 @@ export function categoryFilterMatches(record: ProductRecord, filter: string): bo
   const name = record.name.toLowerCase();
   const desc = (record.description ?? "").toLowerCase();
   const tags = (record.tags ?? "").toLowerCase();
-  return name.includes(needle) || desc.includes(needle) || tags.includes(needle);
+  const relationships = relationshipBlob(record);
+  return name.includes(needle) || desc.includes(needle) || tags.includes(needle) || relationships.includes(needle);
 }
 
 export function searchTermsFromQuery(query: string): string[] {
@@ -127,6 +149,7 @@ export function scoreProductRelevance(record: ProductRecord, terms: string[]): n
   const cats = productCategoryList(record).map((c) => c.toLowerCase());
   const catBlob = cats.join(" ");
   const sku = record.sku.toLowerCase();
+  const relationships = relationshipBlob(record);
 
   let score = 0;
   for (const term of terms) {
@@ -135,6 +158,7 @@ export function scoreProductRelevance(record: ProductRecord, terms: string[]): n
     if (cats.some((c) => c.includes(term) || term.includes(c))) score += 5;
     if (catBlob.includes(term)) score += 3;
     if (tags.includes(term)) score += 3;
+    if (relationships.includes(term)) score += 4;
     if (desc.includes(term)) score += 2;
   }
   return score;
@@ -151,6 +175,7 @@ export function productMatchReasons(
   const desc = (record.description ?? "").toLowerCase();
   const tags = (record.tags ?? "").toLowerCase();
   const cats = productCategoryList(record).map((c) => c.toLowerCase());
+  const relationships = relationshipBlob(record);
 
   if (record.inStock !== false) reasons.push("in stock");
   if (options?.category && categoryFilterMatches(record, options.category)) {
@@ -161,6 +186,7 @@ export function productMatchReasons(
   if (terms.some((term) => name.includes(term))) reasons.push("name match");
   if (terms.some((term) => desc.includes(term))) reasons.push("description match");
   if (terms.some((term) => tags.includes(term))) reasons.push("tag match");
+  if (terms.some((term) => relationships.includes(term))) reasons.push("relationship match");
   if (options?.maxPrice != null && record.price <= options.maxPrice) reasons.push("within budget");
   if (options?.minPrice != null && record.price >= options.minPrice) reasons.push("above minimum budget");
   if ((options?.vectorScore ?? 0) > 0.2) reasons.push("semantic match");

@@ -175,6 +175,48 @@ const CHECKS = [
         ? null
         : `suggestedActions expected >= ${expect.minSuggestedActions}, got ${out.suggestedActions ?? 0}`,
   },
+  {
+    id: "minRetrievedChunks",
+    dimension: "reliability",
+    applies: (expect) => expect.minRetrievedChunks != null,
+    run: (out, expect) =>
+      Number(out.retrievedChunks?.length ?? 0) >= expect.minRetrievedChunks
+        ? null
+        : `retrievedChunks expected >= ${expect.minRetrievedChunks}, got ${out.retrievedChunks?.length ?? 0}`,
+  },
+  {
+    id: "retrievedSourceTypes",
+    dimension: "commerce",
+    applies: (expect) => expect.retrievedSourceTypes,
+    run: (out, expect) => {
+      const sourceTypes = new Set((out.retrievedChunks ?? []).map((chunk) => chunk.sourceType).filter(Boolean));
+      const missing = expect.retrievedSourceTypes.filter((sourceType) => !sourceTypes.has(sourceType));
+      return missing.length ? `retrieved chunks missing source types ${missing.join(", ")}` : null;
+    },
+  },
+  {
+    id: "retrievedSkusInclude",
+    dimension: "commerce",
+    applies: (expect) => expect.retrievedSkusInclude,
+    run: (out, expect) => {
+      const skus = new Set((out.retrievedChunks ?? []).map((chunk) => chunk.sku).filter(Boolean));
+      const missing = expect.retrievedSkusInclude.filter((sku) => !skus.has(sku));
+      return missing.length ? `retrieved chunks missing SKU ${missing.join(", ")}` : null;
+    },
+  },
+  {
+    id: "retrievedTextIncludesAny",
+    dimension: "response",
+    applies: (expect) => expect.retrievedTextIncludesAny,
+    run: (out, expect) => {
+      const text = (out.retrievedChunks ?? [])
+        .map((chunk) => [chunk.title, chunk.section, chunk.sku, chunk.textPreview].filter(Boolean).join(" "))
+        .join(" ")
+        .toLowerCase();
+      const matched = expect.retrievedTextIncludesAny.some((term) => text.includes(String(term).toLowerCase()));
+      return matched ? null : `retrieved chunks missing any of ${expect.retrievedTextIncludesAny.join("|")}`;
+    },
+  },
 ];
 
 export function evaluateCase(out, expect = {}, criteria = DEFAULT_CRITERIA) {

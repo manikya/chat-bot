@@ -16,6 +16,11 @@ export interface ChunkMetadata {
   date?: string;
   /** FAQ tags e.g. objection:price, objection:shipping */
   tags?: string[];
+  material?: string[];
+  occasion?: string[];
+  recipient?: string[];
+  compatibility?: string[];
+  bundles?: string[];
 }
 
 export interface VectorChunk {

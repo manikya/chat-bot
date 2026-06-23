@@ -28,6 +28,7 @@
     "deploy:admin": "node scripts/deploy-admin-static.mjs",
     "build:woocommerce-plugin": "node scripts/build-woocommerce-plugin.mjs",
     "eval:chat": "node apps/api/scripts/eval-chat/run.mjs",
+    "eval:retrieval": "EVAL_CASES_PATH=apps/api/scripts/eval-chat/retrieval-cases.json node apps/api/scripts/eval-chat/run.mjs",
     "eval:chat:experiments": "node apps/api/scripts/eval-chat/run-experiments.mjs"
   },
   "devDependencies": {

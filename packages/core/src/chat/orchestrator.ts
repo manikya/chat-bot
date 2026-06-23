@@ -202,6 +202,19 @@ function stripProductToolResults(
   return toolResults.filter((t) => !PRODUCT_SURFACE_TOOLS.has(t.tool));
 }
 
+function summarizeRetrievedChunks(ragChunks: ScoredChunk[]): ChatResult["retrievedChunks"] {
+  return ragChunks.map((hit) => ({
+    sourceType: hit.chunk.metadata.source_type,
+    sourceId: hit.chunk.sourceId,
+    chunkId: hit.chunk.id,
+    title: hit.chunk.metadata.title,
+    section: hit.chunk.metadata.section,
+    sku: hit.chunk.metadata.sku,
+    score: Number(hit.score.toFixed(4)),
+    textPreview: hit.chunk.text.replace(/\s+/g, " ").trim().slice(0, 240),
+  }));
+}
+
 export async function runChatOrchestrator(
   auth: AuthContext,
   input: OrchestratorInput,
@@ -664,6 +677,7 @@ export async function runChatOrchestrator(
     intent,
     subIntent,
     funnelStage: finalFunnel.stage,
+    retrievedChunks: summarizeRetrievedChunks(ragChunks),
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
     handledBy: "bot",
     handlingMode: "bot",

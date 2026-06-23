@@ -8,9 +8,11 @@ import {
   categoryFilterMatches,
   productCategoryList,
   productMatchReasons,
+  productRelationshipTerms,
   rankProductsByRelevance,
   searchTermsFromQuery,
   scoreProductRelevance,
+  splitProductRelationship,
 } from "./product-search";
 
 export async function getStoreCurrency(tenantId: string, config: CoreConfig): Promise<string> {
@@ -69,6 +71,11 @@ export async function upsertProductCache(
           imageUrls: product.imageUrls,
           productUrl: product.url,
           tags: product.tags,
+          material: product.material,
+          occasion: product.occasion,
+          recipient: product.recipient,
+          compatibility: product.compatibility,
+          bundles: product.bundles,
           variants: [product.sizes, product.colors].filter(Boolean).join("; ") || undefined,
           updatedAt: now,
         },
@@ -120,6 +127,11 @@ export interface ProductRecord {
   imageUrls?: string[];
   productUrl?: string;
   tags?: string;
+  material?: string;
+  occasion?: string;
+  recipient?: string;
+  compatibility?: string;
+  bundles?: string;
   variants?: string;
 }
 
@@ -147,33 +159,46 @@ export async function getRelatedProducts(
   const limit = options?.limit ?? 5;
   const exclude = new Set((options?.excludeSkus ?? []).map((s) => s.toUpperCase()));
   let categoryHints: string[] = [];
+  let baseProduct: ProductRecord | null = null;
 
   if (options?.sku) {
     exclude.add(options.sku.toUpperCase());
-    const base = await getProductBySku(tenantId, options.sku, config);
-    if (base) categoryHints = productCategoryList(base).map((c) => c.toLowerCase());
+    baseProduct = await getProductBySku(tenantId, options.sku, config);
+    if (baseProduct) categoryHints = productCategoryList(baseProduct).map((c) => c.toLowerCase());
   } else if (options?.category) {
     categoryHints = [options.category.toLowerCase()];
   }
 
   const items = (await listProductItems(tenantId, config)) as ProductRecord[];
-  const inCategory = items.filter((p) => {
-    if (exclude.has(p.sku.toUpperCase())) return false;
-    if (!categoryHints.length) return true;
-    return categoryHints.some((hint) => categoryFilterMatches(p, hint));
-  });
+  const baseTerms = new Set(productRelationshipTerms(baseProduct ?? ({} as ProductRecord)).map((t) => t.toLowerCase()));
+  const baseTags = new Set(splitProductRelationship(baseProduct?.tags).map((t) => t.toLowerCase()));
+  const baseBundles = new Set(splitProductRelationship(baseProduct?.bundles).map((t) => t.toUpperCase()));
+  const scored = items
+    .filter((p) => !exclude.has(p.sku.toUpperCase()))
+    .map((p) => {
+      let score = 0;
+      if (categoryHints.some((hint) => categoryFilterMatches(p, hint))) score += 8;
+      if (baseBundles.has(p.sku.toUpperCase())) score += 12;
 
-  const picked = inCategory.slice(0, limit);
-  if (picked.length >= limit) return picked;
+      const relatedTerms = productRelationshipTerms(p).map((t) => t.toLowerCase());
+      for (const term of relatedTerms) {
+        if (baseTerms.has(term)) score += 5;
+      }
+      for (const tag of splitProductRelationship(p.tags).map((t) => t.toLowerCase())) {
+        if (baseTags.has(tag)) score += 3;
+      }
+      if (options?.category && categoryFilterMatches(p, options.category)) score += 8;
+      if (p.inStock !== false) score += 2;
+      if (p.imageUrl || p.imageUrls?.length) score += 1;
+      return { product: p, score };
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.product.inStock !== b.product.inStock) return a.product.inStock === false ? 1 : -1;
+      return b.product.price - a.product.price;
+    });
 
-  const seen = new Set(picked.map((p) => p.sku));
-  for (const p of items) {
-    if (picked.length >= limit) break;
-    if (exclude.has(p.sku.toUpperCase()) || seen.has(p.sku)) continue;
-    picked.push(p);
-    seen.add(p.sku);
-  }
-  return picked.slice(0, limit);
+  return scored.slice(0, limit).map((item) => item.product);
 }
 
 export async function searchProductCache(
@@ -215,7 +240,9 @@ export async function listCatalogSearchHints(
 export {
   productCategoryList,
   productMatchReasons,
+  productRelationshipTerms,
   searchTermsFromQuery,
   scoreProductRelevance,
+  splitProductRelationship,
   rankProductsByRelevance,
 };

@@ -28,6 +28,20 @@ Useful thresholds:
 EVAL_MIN_PASS_PCT=90 EVAL_MIN_SCORE=88 npm run eval:chat
 ```
 
+## Run Retrieval-Focused Evals
+
+These cases check whether the right context was retrieved before judging the final answer. The runner prints the top retrieved chunks for each case so failures can be triaged as recall, ranking, or generation problems.
+
+```sh
+API_URL=http://localhost:3001 WIDGET_API_KEY=pk_live_... npm run eval:retrieval
+```
+
+You can also point the runner at any compatible case file:
+
+```sh
+EVAL_CASES_PATH=apps/api/scripts/eval-chat/retrieval-cases.json npm run eval:chat
+```
+
 ## Run Model Or Prompt Experiments
 
 Copy the example variants and edit models, temperature, token limits, or prompt patches:

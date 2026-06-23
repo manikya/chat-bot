@@ -1,0 +1,48 @@
+[
+  {
+    "id": "retrieval-return-policy",
+    "message": "What is your return policy?",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "faq",
+      "minRetrievedChunks": 1,
+      "retrievedSourceTypes": ["website"],
+      "retrievedTextIncludesAny": ["return", "refund", "exchange"]
+    }
+  },
+  {
+    "id": "retrieval-material-product",
+    "message": "Recommend brass gifts under LKR 5000",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "minRetrievedChunks": 1,
+      "retrievedSourceTypes": ["catalog"],
+      "retrievedTextIncludesAny": ["brass", "gift", "material"]
+    }
+  },
+  {
+    "id": "retrieval-occasion-recipient",
+    "message": "im looking for fathers day gift for my dad",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "minRetrievedChunks": 1,
+      "retrievedSourceTypes": ["catalog"],
+      "retrievedTextIncludesAny": ["father", "dad", "gift", "recipient", "occasion"]
+    }
+  },
+  {
+    "id": "retrieval-sku-detail",
+    "message": "Tell me more about SKU GZ002",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "subIntent": "product_detail",
+      "minRetrievedChunks": 1,
+      "retrievedSourceTypes": ["catalog"],
+      "retrievedSkusInclude": ["GZ002"]
+    }
+  }
+]

@@ -13,6 +13,11 @@ export interface CatalogProduct {
   sizes?: string;
   colors?: string;
   tags?: string;
+  material?: string;
+  occasion?: string;
+  recipient?: string;
+  compatibility?: string;
+  bundles?: string;
   inStock: boolean;
   url?: string;
 }
@@ -129,6 +134,11 @@ export function parseCatalogCsv(csvText: string): CatalogProduct[] {
       sizes: col(row, "sizes") || undefined,
       colors: col(row, "colors") || undefined,
       tags: col(row, "tags") || undefined,
+      material: col(row, "material") || col(row, "materials") || undefined,
+      occasion: col(row, "occasion") || col(row, "occasions") || undefined,
+      recipient: col(row, "recipient") || col(row, "recipients") || undefined,
+      compatibility: col(row, "compatibility") || col(row, "compatible_with") || undefined,
+      bundles: col(row, "bundles") || col(row, "bundle_skus") || col(row, "bundle_with") || undefined,
       inStock: parseBool(col(row, "stock") || col(row, "in_stock")),
       url: col(row, "url") || undefined,
     });
