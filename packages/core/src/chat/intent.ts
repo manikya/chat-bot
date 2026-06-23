@@ -11,11 +11,26 @@ const FAQ_KEYWORDS = LK_FAQ_KEYWORDS;
 const PRODUCT_KEYWORDS = LK_PRODUCT_KEYWORDS;
 const CHECKOUT_KEYWORDS = LK_CHECKOUT_KEYWORDS;
 
+const SHOPPING_INTENT_PATTERNS = [
+  /\b(looking for|lookin for|need|want|shopping for|finding|find me)\b/i,
+  /\b(gift|gifts|gift ideas?|father'?s day|mother'?s day|birthday|anniversary|wedding|housewarming)\b/i,
+  /\b(best\s*-?\s*sellers?|top picks?|popular|trending|recommend|suggest|show me|show us)\b/i,
+  /\b(suitable|good|ideal|perfect)\s+for\b/i,
+  /\b(corporate|cooperate|event|giveaways?|table decor|awards?|appreciation)\b/i,
+  /\b(shoes|sneakers|dress|shirt|pants|jeans|bag|watch|jewelry|perfume|skincare|brass|silver|wooden|wood|ceramic|glass)\b/i,
+  /\b(under|below|less than|max|within|budget|upto|up to)\s*(?:rs\.?|lkr|\$|usd)?\s*[\d,]+/i,
+];
+
+export function messageSignalsShoppingIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+  return PRODUCT_KEYWORDS.some((k) => lower.includes(k)) || SHOPPING_INTENT_PATTERNS.some((p) => p.test(message));
+}
+
 /** Short opener with no shopping ask — works on any turn, not only the first message. */
 export function isGreetingOnlyMessage(message: string): boolean {
   const trimmed = message.trim();
   if (!LK_GREETING_PATTERN.test(trimmed)) return false;
-  if (messageMentionsProducts(trimmed)) return false;
+  if (messageSignalsShoppingIntent(trimmed)) return false;
   if (
     /\b(do you have|show me|looking for|i want|i need|how much|price|order|ship|deliver|return|gift for)\b/i.test(
       trimmed
@@ -30,15 +45,14 @@ export function detectIntent(message: string, isFirstMessage: boolean): ChatInte
   const lower = message.toLowerCase();
   if (CHECKOUT_KEYWORDS.some((k) => lower.includes(k))) return "checkout";
   if (FAQ_KEYWORDS.some((k) => lower.includes(k))) return "faq";
-  if (PRODUCT_KEYWORDS.some((k) => lower.includes(k))) return "product";
+  if (messageSignalsShoppingIntent(message)) return "product";
   if (isGreetingOnlyMessage(message)) return "greeting";
   if (isFirstMessage) return "unknown";
   return "product";
 }
 
 export function messageMentionsProducts(message: string): boolean {
-  const lower = message.toLowerCase();
-  return PRODUCT_KEYWORDS.some((k) => lower.includes(k));
+  return messageSignalsShoppingIntent(message);
 }
 
 export function detectSubIntent(
@@ -72,7 +86,7 @@ export function detectSubIntent(
   }
 
   if (intent === "product" || messageMentionsProducts(message)) {
-    if (messageSignalsCompare(message) || funnelStage === "compare") {
+    if (messageSignalsCompare(message)) {
       return "product_compare";
     }
     if (/\b(sku|details|tell me more|specs?|specification)\b/i.test(message)) {

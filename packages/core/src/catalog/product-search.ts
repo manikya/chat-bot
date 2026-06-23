@@ -52,6 +52,34 @@ const STOP_WORDS = new Set([
   "being",
   "items",
   "item",
+  "looking",
+  "lookin",
+  "find",
+  "shopping",
+  "gift",
+  "gifts",
+  "under",
+  "below",
+  "less",
+  "than",
+  "within",
+  "budget",
+  "lkr",
+  "rs",
+  "rupees",
+  "usd",
+  "max",
+  "upto",
+  "up",
+  "best",
+  "seller",
+  "sellers",
+  "recommend",
+  "suggest",
+  "suitable",
+  "good",
+  "ideal",
+  "perfect",
 ]);
 
 export function productCategoryList(record: ProductRecord): string[] {
@@ -229,6 +257,7 @@ export function rankProductsByRelevance(
     })
     .filter(({ record, score }) => {
       if (score <= 0) return false;
+      if (record.inStock === false) return false;
       if (options?.maxPrice != null && record.price > options.maxPrice) return false;
       if (options?.minPrice != null && record.price < options.minPrice) return false;
       return true;

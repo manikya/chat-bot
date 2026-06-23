@@ -70,8 +70,8 @@ export function resolveNextFunnelStage(input: FunnelResolveInput): FunnelStage {
   if (isCompare || (wantsProducts && current === "compare")) return "compare";
 
   if (wantsProducts) {
-    if (current === "discover" || current === "objection") return "compare";
-    return "compare";
+    if (current === "objection") return "discover";
+    return current === "discover" ? "discover" : current;
   }
 
   if (intent === "greeting") return "discover";

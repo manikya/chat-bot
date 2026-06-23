@@ -24,6 +24,7 @@ const CATEGORY_KEYWORDS = [
   "wooden",
   "ceramic",
   "glass",
+  "event",
 ];
 
 const RECIPIENT_PATTERNS = [
@@ -31,10 +32,22 @@ const RECIPIENT_PATTERNS = [
   /\bfor\s+(?:my\s+)?(mom|dad|mother|father|wife|husband|friend|son|daughter|brother|sister)\b/i,
 ];
 
+const NON_RECIPIENT_PHRASES = new Set([
+  "event",
+  "event giveaways",
+  "event table decor",
+  "awards",
+  "awards or appreciation gifts",
+  "appreciation gifts",
+  "table decor",
+  "personal use",
+]);
+
 const CONSTRAINT_PATTERNS = [
   /\b(red|blue|green|black|white|gold|silver|brass|wooden|wood|ceramic|glass|copper|steel|leather|cotton|silk)\b/gi,
-  /\b(birthday|anniversary|wedding|graduation|housewarming|corporate|valentine|christmas|new year)\b/gi,
+  /\b(birthday|anniversary|wedding|graduation|housewarming|corporate|cooperate|event|giveaway|giveaways|decor|awards?|appreciation|valentine|christmas|new year)\b/gi,
   /\b(small|large|mini|premium|luxury|cheap|affordable|personalized|custom)\b/gi,
+  /\bpersonal\s+use\b/gi,
 ];
 
 function parseBudgetNumber(raw: string, market: ChatMarket): number | undefined {
@@ -102,6 +115,13 @@ export function extractCategoryFromMessage(
   );
   if (material?.[1]) return material[1];
 
+  if (/\b(corporate|cooperate|event|giveaways?|table decor|awards?|appreciation)\b/i.test(lower)) {
+    return "event";
+  }
+  if (/\bpersonal\s+use\b/i.test(lower)) {
+    return "personal use";
+  }
+
   for (const cat of CATEGORY_KEYWORDS) {
     if (cat === "gift") continue;
     if (lower.includes(cat)) return cat;
@@ -123,7 +143,17 @@ export function extractRecipientFromMessage(message: string): string | undefined
   for (const pattern of RECIPIENT_PATTERNS) {
     const match = message.match(pattern);
     const who = match?.[1]?.trim();
-    if (who && who.length >= 3 && who.length <= 40) return who;
+    const normalized = who?.toLowerCase().replace(/\s+/g, " ").trim();
+    if (
+      who &&
+      normalized &&
+      who.length >= 3 &&
+      who.length <= 40 &&
+      !NON_RECIPIENT_PHRASES.has(normalized) &&
+      !/\b(event|giveaways?|decor|awards?|appreciation|personal use|budget|under|below|within)\b/i.test(who)
+    ) {
+      return who;
+    }
   }
   return undefined;
 }

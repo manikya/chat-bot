@@ -17,7 +17,24 @@
       "nonEmptyReply": true,
       "intent": "product",
       "funnelStage": ["compare", "discover"],
+      "maxProductCards": 0,
+      "minSuggestedActions": 1,
+      "replyIncludes": ["shopping for"],
       "maxReplyWords": 45,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "event-recommendation-gates",
+    "message": "can you tell me about something suitable for a cooperate event",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "funnelStage": "discover",
+      "maxProductCards": 0,
+      "minSuggestedActions": 1,
+      "replyIncludes": ["event"],
+      "maxReplyWords": 35,
       "maxQuestions": 1
     }
   },
@@ -52,7 +69,11 @@
     "message": "Looking for shoes under 5000 rupees",
     "expect": {
       "nonEmptyReply": true,
-      "intent": "product"
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "maxProductPrice": 5000,
+      "noOutOfStockProducts": true,
+      "maxQuestions": 1
     }
   },
   {
@@ -106,9 +127,9 @@
     "expect": {
       "nonEmptyReply": true,
       "intent": "product",
-      "toolsIncludes": ["search_products"],
-      "maxProductPrice": 3000,
-      "noOutOfStockProducts": true,
+      "maxProductCards": 0,
+      "minSuggestedActions": 1,
+      "replyIncludes": ["who is it for"],
       "maxReplyWords": 45,
       "maxQuestions": 1
     }
@@ -117,6 +138,23 @@
     "id": "budget-followup-retains-product-context",
     "messages": [
       "Do you have something nice for a gift?",
+      "Under LKR 5000"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "maxProductCards": 0,
+      "minSuggestedActions": 1,
+      "replyIncludes": ["who is it for"],
+      "maxReplyWords": 35,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "gift-recipient-budget-searches",
+    "messages": [
+      "Do you have something nice for a gift?",
+      "It's for my dad",
       "Under LKR 5000"
     ],
     "expect": {
