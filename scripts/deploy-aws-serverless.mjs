@@ -1076,15 +1076,38 @@ function zipHandlers(handlerFiles, artifactDir) {
   }
 }
 
+function isTransientS3UploadError(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /Connection was closed|SSL validation failed|EOF occurred|timed out|timeout|ECONNRESET|TLS/i.test(message);
+}
+
+function uploadArtifactWithRetry(handlerName, artifactDir, bucket, prefix, awsEnv) {
+  const args = [
+    "s3",
+    "cp",
+    join(artifactDir, `${handlerName}.zip`),
+    `s3://${bucket}/${prefix}/${handlerName}.zip`,
+    "--only-show-errors",
+  ];
+  const maxAttempts = Number(process.env.DEPLOY_UPLOAD_ATTEMPTS ?? 5);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      sh("aws", args, { env: awsEnv });
+      return;
+    } catch (err) {
+      if (attempt >= maxAttempts || !isTransientS3UploadError(err)) throw err;
+      const delaySec = Math.min(attempt * 2, 10);
+      console.warn(
+        `Retrying ${handlerName}.zip upload after transient S3 error (${attempt}/${maxAttempts})...`
+      );
+      sh("sleep", [String(delaySec)]);
+    }
+  }
+}
+
 function uploadArtifacts(handlerFiles, artifactDir, bucket, prefix, awsEnv) {
   for (const handlerName of handlerFiles) {
-    sh("aws", [
-      "s3",
-      "cp",
-      join(artifactDir, `${handlerName}.zip`),
-      `s3://${bucket}/${prefix}/${handlerName}.zip`,
-      "--only-show-errors",
-    ], { env: awsEnv });
+    uploadArtifactWithRetry(handlerName, artifactDir, bucket, prefix, awsEnv);
   }
 }
 
