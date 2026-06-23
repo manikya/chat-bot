@@ -1,31 +1,7 @@
 import type { QualificationState } from "@commercechat/shared";
 import type { ChatMarket } from "./locale";
 import { messageSignalsObjection } from "./funnel";
-import { LK_OBJECTION_KEYWORDS, LK_PRODUCT_KEYWORDS } from "./locale";
-
-const CATEGORY_KEYWORDS = [
-  "shoes",
-  "sneakers",
-  "dress",
-  "shirt",
-  "pants",
-  "jeans",
-  "bag",
-  "watch",
-  "phone",
-  "laptop",
-  "gift",
-  "jewelry",
-  "perfume",
-  "skincare",
-  "brass",
-  "silver",
-  "wood",
-  "wooden",
-  "ceramic",
-  "glass",
-  "event",
-];
+import { LK_OBJECTION_KEYWORDS } from "./locale";
 
 const RECIPIENT_PATTERNS = [
   /\b(?:gift\s+)?for\s+(?:my\s+)?([a-z][a-z\s]{2,30}?)(?:\s*[,.!?]|$)/i,
@@ -43,8 +19,7 @@ const NON_RECIPIENT_PHRASES = new Set([
   "personal use",
 ]);
 
-const CONSTRAINT_PATTERNS = [
-  /\b(red|blue|green|black|white|gold|silver|brass|wooden|wood|ceramic|glass|copper|steel|leather|cotton|silk)\b/gi,
+const GENERIC_CONSTRAINT_PATTERNS = [
   /\b(birthday|anniversary|wedding|graduation|housewarming|corporate|cooperate|event|giveaway|giveaways|decor|awards?|appreciation|valentine|christmas|new year)\b/gi,
   /\b(small|large|mini|premium|luxury|cheap|affordable|personalized|custom)\b/gi,
   /\bpersonal\s+use\b/gi,
@@ -56,6 +31,16 @@ function parseBudgetNumber(raw: string, market: ChatMarket): number | undefined 
   if (!Number.isFinite(n) || n <= 0) return undefined;
   if (market === "lk" && n < 500) return n * 1000;
   return n;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function messageContainsCatalogTerm(message: string, term: string): boolean {
+  const normalized = term.trim();
+  if (normalized.length < 3) return false;
+  return new RegExp(`(^|\\W)${escapeRegExp(normalized)}($|\\W)`, "i").test(message);
 }
 
 export function extractBudgetFromMessage(
@@ -99,7 +84,7 @@ function catalogTermFromMessage(message: string, terms?: string[]): string | und
     .map((term) => term.trim())
     .filter((term) => term.length >= 3)
     .sort((a, b) => b.length - a.length)
-    .find((term) => lower.includes(term.toLowerCase()));
+    .find((term) => messageContainsCatalogTerm(lower, term));
 }
 
 export function extractCategoryFromMessage(
@@ -110,11 +95,6 @@ export function extractCategoryFromMessage(
   const catalogCategory = catalogTermFromMessage(message, options?.catalogCategories);
   if (catalogCategory) return catalogCategory;
 
-  const material = lower.match(
-    /\b(brass|silver|gold|wooden|wood|ceramic|glass|copper|steel|leather|cotton|silk)\b/
-  );
-  if (material?.[1]) return material[1];
-
   if (/\b(corporate|cooperate|event|giveaways?|table decor|awards?|appreciation)\b/i.test(lower)) {
     return "event";
   }
@@ -122,18 +102,8 @@ export function extractCategoryFromMessage(
     return "personal use";
   }
 
-  for (const cat of CATEGORY_KEYWORDS) {
-    if (cat === "gift") continue;
-    if (lower.includes(cat)) return cat;
-  }
   if (lower.includes("gift")) return "gift";
-  const lookingFor = message.match(/\b(?:looking for|need|want)\s+(?:a|an|some)?\s*([a-z][a-z\s-]{2,24})/i);
-  if (lookingFor?.[1]) {
-    const phrase = lookingFor[1].trim().toLowerCase();
-    if (phrase.length >= 3 && !LK_PRODUCT_KEYWORDS.includes(phrase)) {
-      return phrase;
-    }
-  }
+
   const catalogTag = catalogTermFromMessage(message, options?.catalogTags);
   if (catalogTag) return catalogTag;
   return undefined;
@@ -170,12 +140,21 @@ export function extractObjectionTypes(message: string): string[] {
   return types;
 }
 
-export function extractConstraintsFromMessage(message: string): string[] {
+export function extractConstraintsFromMessage(
+  message: string,
+  options?: { catalogCategories?: string[]; catalogTags?: string[] }
+): string[] {
   const constraints = new Set<string>();
-  for (const pattern of CONSTRAINT_PATTERNS) {
+  for (const pattern of GENERIC_CONSTRAINT_PATTERNS) {
     for (const match of message.matchAll(pattern)) {
       const value = match[1]?.trim().toLowerCase();
       if (value) constraints.add(value);
+    }
+  }
+  for (const term of [...(options?.catalogCategories ?? []), ...(options?.catalogTags ?? [])]) {
+    const normalized = term.trim();
+    if (messageContainsCatalogTerm(message, normalized)) {
+      constraints.add(normalized);
     }
   }
   return [...constraints];
@@ -196,7 +175,7 @@ export function extractQualificationFromMessage(
   const recipient = extractRecipientFromMessage(message);
   if (recipient) patch.recipient = recipient;
 
-  const constraints = extractConstraintsFromMessage(message);
+  const constraints = extractConstraintsFromMessage(message, options);
   if (constraints.length) patch.constraints = constraints;
 
   const objections = extractObjectionTypes(message);

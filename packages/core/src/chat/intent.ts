@@ -17,7 +17,6 @@ const SHOPPING_INTENT_PATTERNS = [
   /\b(best\s*-?\s*sellers?|top picks?|popular|trending|recommend|suggest|show me|show us)\b/i,
   /\b(suitable|good|ideal|perfect)\s+for\b/i,
   /\b(corporate|cooperate|event|giveaways?|table decor|awards?|appreciation)\b/i,
-  /\b(shoes|sneakers|dress|shirt|pants|jeans|bag|watch|jewelry|perfume|skincare|brass|silver|wooden|wood|ceramic|glass)\b/i,
   /\b(under|below|less than|max|within|budget|upto|up to)\s*(?:rs\.?|lkr|\$|usd)?\s*[\d,]+/i,
 ];
 
