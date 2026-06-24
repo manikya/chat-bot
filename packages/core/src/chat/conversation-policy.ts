@@ -67,6 +67,24 @@ function budgetLabel(qualification?: QualificationState, market: ChatMarket = "d
   return null;
 }
 
+function uniquePhraseParts(parts: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const clean: string[] = [];
+  for (const part of parts) {
+    const value = part?.trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    clean.push(value);
+  }
+  return clean;
+}
+
+function isPriceTierPhrase(value: string): boolean {
+  return /^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(value.trim());
+}
+
 function budgetActions(catalogHints?: CatalogSearchHints): WidgetAction[] {
   if (catalogHints?.priceBands?.length) {
     return catalogHints.priceBands.slice(0, 3).map((band) => ({
@@ -244,10 +262,14 @@ export function buildProductResultsIntro(input: {
   if (qualification?.recipient) parts.push(`for ${qualification.recipient}`);
   const budget = budgetLabel(qualification, market);
   if (budget) parts.push(budget);
-  if (qualification?.constraints?.length) {
-    parts.push(`matching ${qualification.constraints.slice(0, 2).join(", ")}`);
+  const constraintParts = uniquePhraseParts(qualification?.constraints ?? [])
+    .filter((part) => !isPriceTierPhrase(part))
+    .slice(0, 2);
+  if (constraintParts.length) parts.push(`matching ${constraintParts.join(", ")}`);
+  const category = qualification?.category;
+  if (category && category !== "gift" && !constraintParts.some((part) => part.toLowerCase() === category.toLowerCase())) {
+    parts.push(`in ${category}`);
   }
-  if (qualification?.category && qualification.category !== "gift") parts.push(`in ${qualification.category}`);
 
   const count = productCount > 1 ? "a few options" : "an option";
   if (!parts.length) return `I found ${count} that are in stock and easy to choose from.`;

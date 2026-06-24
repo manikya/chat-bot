@@ -17,7 +17,17 @@ const NON_RECIPIENT_PHRASES = new Set([
   "appreciation gifts",
   "table decor",
   "personal use",
+  "birthday",
+  "anniversary",
+  "wedding",
+  "graduation",
+  "housewarming",
+  "christmas",
+  "new year",
+  "valentine",
 ]);
+
+const PRICE_TIER_TERMS = new Set(["budget", "budget friendly", "mid range", "premium", "premium picks", "luxury"]);
 
 const GENERIC_CONSTRAINT_PATTERNS = [
   /\b(birthday|anniversary|wedding|graduation|housewarming|corporate|cooperate|event|giveaway|giveaways|decor|awards?|appreciation|valentine|christmas|new year)\b/gi,
@@ -105,7 +115,7 @@ export function extractCategoryFromMessage(
   if (lower.includes("gift")) return "gift";
 
   const catalogTag = catalogTermFromMessage(message, options?.catalogTags);
-  if (catalogTag) return catalogTag;
+  if (catalogTag && !PRICE_TIER_TERMS.has(catalogTag.toLowerCase())) return catalogTag;
   return undefined;
 }
 
@@ -153,7 +163,7 @@ export function extractConstraintsFromMessage(
   }
   for (const term of [...(options?.catalogCategories ?? []), ...(options?.catalogTags ?? [])]) {
     const normalized = term.trim();
-    if (messageContainsCatalogTerm(message, normalized)) {
+    if (normalized && !PRICE_TIER_TERMS.has(normalized.toLowerCase()) && messageContainsCatalogTerm(message, normalized)) {
       constraints.add(normalized);
     }
   }

@@ -201,6 +201,11 @@ function roundNicePriceAtLeast(amount: number, currency: string): number {
   return Math.max(step, Math.ceil(amount / step) * step);
 }
 
+function roundNicePriceAtMost(amount: number, currency: string): number {
+  const step = nicePriceStep(amount, currency);
+  return Math.max(step, Math.floor(amount / step) * step);
+}
+
 function countAtOrBelow(values: number[], max: number): number {
   return values.filter((value) => value <= max).length;
 }
@@ -359,15 +364,18 @@ export function buildCatalogPriceBands(
   const trim = prices.length >= 20 ? Math.floor(prices.length * 0.05) : 0;
   const robustPrices = trim > 0 ? prices.slice(trim, prices.length - trim) : prices;
   const minProductsPerBand = prices.length >= 9 ? 2 : 1;
-  let lowCutoff = roundNicePrice(percentile(robustPrices, 0.35), currency);
-  let highCutoff = roundNicePrice(percentile(robustPrices, 0.7), currency);
+  let lowCutoff = roundNicePrice(percentile(robustPrices, 0.4), currency);
+  let highCutoff = roundNicePriceAtLeast(percentile(robustPrices, 0.82), currency);
 
   if (countAtOrBelow(prices, lowCutoff) < minProductsPerBand) {
     lowCutoff = roundNicePriceAtLeast(prices[minProductsPerBand - 1] ?? prices[0]!, currency);
   }
   if (highCutoff <= lowCutoff || countBetween(prices, lowCutoff, highCutoff) < minProductsPerBand) {
-    const fallbackIndex = Math.min(prices.length - 1, Math.max(minProductsPerBand, Math.floor((prices.length - 1) * 0.7)));
+    const fallbackIndex = Math.min(prices.length - 1, Math.max(minProductsPerBand, Math.floor((prices.length - 1) * 0.8)));
     highCutoff = roundNicePriceAtLeast(prices[fallbackIndex]!, currency);
+  }
+  if (highCutoff >= max && prices.length > 1) {
+    highCutoff = roundNicePriceAtMost(prices[prices.length - 2]!, currency);
   }
 
   const bands: CatalogPriceBand[] = [
@@ -387,7 +395,7 @@ export function buildCatalogPriceBands(
   }
   if (max > highCutoff) {
     bands.push({
-      label: `Premium: above ${format(highCutoff)}`,
+      label: `Premium picks: above ${format(highCutoff)}`,
       message: `Show premium options above ${format(highCutoff)}`,
       min: highCutoff,
     });
