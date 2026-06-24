@@ -1,5 +1,6 @@
 import type { ChatIntent, ChatSubIntent, FunnelStage, QualificationState, WidgetAction } from "@commercechat/shared";
 import { formatMoney, type ChatMarket } from "./locale";
+import type { CatalogSearchHints } from "../catalog/products";
 
 export type ConversationMove =
   | "ask_recipient"
@@ -13,6 +14,19 @@ export interface ConversationPolicy {
   move: ConversationMove;
   reply?: string;
   suggestedActions?: WidgetAction[];
+}
+
+function normalizeHint(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function messageMentionsHint(message: string, hint: string): boolean {
+  const normalizedMessage = normalizeHint(message);
+  const normalizedHint = normalizeHint(hint);
+  if (!normalizedHint) return false;
+  return new RegExp(`(^|\\s)${normalizedHint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`).test(
+    normalizedMessage
+  );
 }
 
 function mentionsGift(message: string, qualification?: QualificationState): boolean {
@@ -53,7 +67,7 @@ function budgetLabel(qualification?: QualificationState, market: ChatMarket = "d
   return null;
 }
 
-function budgetActions(market: ChatMarket): WidgetAction[] {
+function fallbackBudgetActions(market: ChatMarket): WidgetAction[] {
   if (market === "lk") {
     return [
       { type: "message", label: "Under LKR 3,000", message: "My budget is under LKR 3,000" },
@@ -68,28 +82,59 @@ function budgetActions(market: ChatMarket): WidgetAction[] {
   ];
 }
 
-function recipientActions(): WidgetAction[] {
-  return [
-    { type: "message", label: "For dad", message: "It's for my dad" },
-    { type: "message", label: "For mom", message: "It's for my mom" },
-    { type: "message", label: "For a friend", message: "It's for a friend" },
-  ];
+function budgetActions(market: ChatMarket, catalogHints?: CatalogSearchHints): WidgetAction[] {
+  if (catalogHints?.priceBands?.length) {
+    return catalogHints.priceBands.slice(0, 3).map((band) => ({
+      type: "message" as const,
+      label: band.label,
+      message: band.message,
+    }));
+  }
+  return fallbackBudgetActions(market);
 }
 
-function shoppingIntentActions(): WidgetAction[] {
-  return [
-    { type: "message", label: "Gift", message: "I'm shopping for a gift" },
-    { type: "message", label: "Event", message: "I need something for an event" },
-    { type: "message", label: "Personal use", message: "It's for personal use" },
-  ];
+function recipientActions(message: string, catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
+  const matchedOccasion = catalogHints?.occasions?.find((occasion) => messageMentionsHint(message, occasion));
+  const messageHasOccasion = /\b(father'?s day|mother'?s day|birthday|anniversary|wedding|housewarming)\b/i.test(message);
+  if (messageHasOccasion && !matchedOccasion) return undefined;
+  const recipients = matchedOccasion
+    ? catalogHints?.occasionRecipients?.[matchedOccasion] ?? catalogHints?.recipients
+    : catalogHints?.recipients;
+  const unique = [...new Set((recipients ?? []).map((recipient) => recipient.trim()).filter(Boolean))].slice(0, 3);
+  if (!unique.length) return undefined;
+  return unique.map((recipient) => ({
+    type: "message" as const,
+    label: `For ${recipient}`,
+    message: `It's for ${recipient}`,
+  }));
 }
 
-function eventUseCaseActions(): WidgetAction[] {
-  return [
-    { type: "message", label: "Giveaways", message: "It's for event giveaways" },
-    { type: "message", label: "Table decor", message: "It's for event table decor" },
-    { type: "message", label: "Awards", message: "It's for awards or appreciation gifts" },
+function messageAction(label: string, message: string): WidgetAction {
+  return { type: "message", label, message };
+}
+
+function hintActions(values: string[] | undefined, prefix: string, max = 3): WidgetAction[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]
+    .slice(0, max)
+    .map((value) => messageAction(value, `${prefix} ${value}`));
+}
+
+function shoppingIntentActions(catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
+  const actions = [
+    ...hintActions(catalogHints?.occasions, "I'm shopping for", 2),
+    ...hintActions(catalogHints?.categories, "Show me", 3),
   ];
+  return actions.length ? actions.slice(0, 3) : undefined;
+}
+
+function eventUseCaseActions(catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
+  const candidates = [
+    ...(catalogHints?.useCases ?? []),
+    ...(catalogHints?.occasions ?? []),
+    ...(catalogHints?.tags ?? []),
+  ].filter((value) => /event|giveaway|decor|award|appreciation|corporate|cooperate/i.test(value));
+  const actions = hintActions(candidates, "It's for", 3);
+  return actions.length ? actions : undefined;
 }
 
 function styleActions(recipient?: string): WidgetAction[] {
@@ -109,6 +154,7 @@ export function planConversationMove(input: {
   qualification?: QualificationState;
   gateProductSearch?: boolean;
   market?: ChatMarket;
+  catalogHints?: CatalogSearchHints;
 }): ConversationPolicy {
   const {
     message,
@@ -118,6 +164,7 @@ export function planConversationMove(input: {
     qualification,
     gateProductSearch,
     market = "default",
+    catalogHints,
   } = input;
 
   if (intent !== "product" && subIntent !== "product_browse") return { move: "continue" };
@@ -129,28 +176,35 @@ export function planConversationMove(input: {
   const recipient = qualification?.recipient;
 
   if (gateProductSearch && giftLike && !recipient) {
+    const actions = recipientActions(message, catalogHints);
     return {
       move: "ask_recipient",
       reply: budget
         ? `Got it, ${budget}. Who is it for?`
         : "Sure, I can help with that. Who is it for?",
-      suggestedActions: recipientActions(),
+      suggestedActions: actions,
     };
   }
 
   if (gateProductSearch && eventLike && !hasSpecificEventUseCase(qualification)) {
+    const actions = eventUseCaseActions(catalogHints);
     return {
       move: "ask_use_case",
-      reply: "Sure, what is this for at the event: giveaways, table decor, or awards/appreciation gifts?",
-      suggestedActions: eventUseCaseActions(),
+      reply: actions?.length
+        ? "Sure, what is this for at the event?"
+        : "Sure, what is this for at the event: giveaways, table decor, or awards/appreciation gifts?",
+      suggestedActions: actions,
     };
   }
 
   if (gateProductSearch && !hasUseCase(qualification) && !eventLike && !giftLike) {
+    const actions = shoppingIntentActions(catalogHints);
     return {
       move: "ask_use_case",
-      reply: "Sure, what are you shopping for: a gift, an event, or personal use?",
-      suggestedActions: shoppingIntentActions(),
+      reply: actions?.length
+        ? "Sure, what are you shopping for?"
+        : "Sure, what are you shopping for: a gift, an event, or personal use?",
+      suggestedActions: actions,
     };
   }
 
@@ -160,7 +214,7 @@ export function planConversationMove(input: {
       reply: recipient
         ? `Nice, for ${recipient}. What budget should I stay within?`
         : "Sure. What budget should I stay within?",
-      suggestedActions: budgetActions(market),
+      suggestedActions: budgetActions(market, catalogHints),
     };
   }
 

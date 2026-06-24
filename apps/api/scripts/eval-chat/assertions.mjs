@@ -176,6 +176,30 @@ const CHECKS = [
         : `suggestedActions expected >= ${expect.minSuggestedActions}, got ${out.suggestedActions ?? 0}`,
   },
   {
+    id: "suggestedActionIncludes",
+    dimension: "engagement",
+    applies: (expect) => expect.suggestedActionIncludes,
+    run: (out, expect) => {
+      const text = [...(out.suggestedActionLabels ?? []), ...(out.suggestedActionMessages ?? [])]
+        .join(" ")
+        .toLowerCase();
+      const missing = expect.suggestedActionIncludes.filter((term) => !text.includes(String(term).toLowerCase()));
+      return missing.length ? `suggested actions missing ${missing.join(", ")}` : null;
+    },
+  },
+  {
+    id: "suggestedActionExcludes",
+    dimension: "engagement",
+    applies: (expect) => expect.suggestedActionExcludes,
+    run: (out, expect) => {
+      const text = [...(out.suggestedActionLabels ?? []), ...(out.suggestedActionMessages ?? [])]
+        .join(" ")
+        .toLowerCase();
+      const present = expect.suggestedActionExcludes.filter((term) => text.includes(String(term).toLowerCase()));
+      return present.length ? `suggested actions should not include ${present.join(", ")}` : null;
+    },
+  },
+  {
     id: "minRetrievedChunks",
     dimension: "reliability",
     applies: (expect) => expect.minRetrievedChunks != null,

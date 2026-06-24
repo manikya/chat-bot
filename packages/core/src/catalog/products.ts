@@ -135,6 +135,26 @@ export interface ProductRecord {
   variants?: string;
 }
 
+export interface CatalogPriceBand {
+  label: string;
+  message: string;
+  min?: number;
+  max?: number;
+}
+
+export interface CatalogSearchHints {
+  categories: string[];
+  tags: string[];
+  materials: string[];
+  occasions: string[];
+  recipients: string[];
+  useCases: string[];
+  styles: string[];
+  priceBands: CatalogPriceBand[];
+  occasionRecipients: Record<string, string[]>;
+  relatedByCategory: Record<string, string[]>;
+}
+
 export async function getProductBySku(
   tenantId: string,
   sku: string,
@@ -212,13 +232,93 @@ export async function searchProductCache(
   return rankProductsByRelevance(items, query, { ...options, limit });
 }
 
+function addRelationshipTerms(target: Set<string>, value?: string) {
+  for (const term of splitProductRelationship(value)) {
+    if (term) target.add(term);
+  }
+}
+
+function topSkusByCategory(items: ProductRecord[]): Record<string, string[]> {
+  const byCategory = new Map<string, ProductRecord[]>();
+  for (const item of items) {
+    for (const category of productCategoryList(item)) {
+      const trimmed = category.trim();
+      if (!trimmed) continue;
+      const bucket = byCategory.get(trimmed) ?? [];
+      bucket.push(item);
+      byCategory.set(trimmed, bucket);
+    }
+  }
+  return Object.fromEntries(
+    [...byCategory.entries()].map(([category, products]) => [
+      category,
+      products
+        .filter((p) => p.inStock !== false)
+        .sort((a, b) => b.price - a.price)
+        .slice(0, 8)
+        .map((p) => p.sku),
+    ])
+  );
+}
+
+function priceBandsForCatalog(items: ProductRecord[]): CatalogPriceBand[] {
+  const inStock = items
+    .filter((p) => p.inStock !== false && Number.isFinite(p.price) && p.price > 0)
+    .sort((a, b) => a.price - b.price);
+  if (!inStock.length) return [];
+  const currency = inStock[0]?.currency ?? "USD";
+  const format = (amount: number) => {
+    try {
+      return new Intl.NumberFormat(currency === "LKR" ? "en-LK" : "en", {
+        style: "currency",
+        currency,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${currency} ${Math.round(amount)}`;
+    }
+  };
+  const q1 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.33))]!.price;
+  const q2 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.66))]!.price;
+  const max = inStock[inStock.length - 1]!.price;
+  const bands: CatalogPriceBand[] = [
+    {
+      label: `Under ${format(q1)}`,
+      message: `My budget is under ${format(q1)}`,
+      max: q1,
+    },
+  ];
+  if (q2 > q1) {
+    bands.push({
+      label: `${format(q1)}-${format(q2)}`,
+      message: `My budget is ${format(q1)} to ${format(q2)}`,
+      min: q1,
+      max: q2,
+    });
+  }
+  if (max > q2) {
+    bands.push({
+      label: `Above ${format(q2)}`,
+      message: `Budget is above ${format(q2)}`,
+      min: q2,
+    });
+  }
+  return bands.slice(0, 3);
+}
+
 export async function listCatalogSearchHints(
   tenantId: string,
   config: CoreConfig
-): Promise<{ categories: string[]; tags: string[] }> {
+): Promise<CatalogSearchHints> {
   const items = (await listProductItems(tenantId, config)) as ProductRecord[];
   const categories = new Set<string>();
   const tags = new Set<string>();
+  const materials = new Set<string>();
+  const recipients = new Set<string>();
+  const occasions = new Set<string>();
+  const useCases = new Set<string>();
+  const styles = new Set<string>();
+  const occasionRecipients = new Map<string, Set<string>>();
 
   for (const item of items) {
     for (const category of productCategoryList(item)) {
@@ -229,11 +329,40 @@ export async function listCatalogSearchHints(
       const trimmed = tag.trim();
       if (trimmed) tags.add(trimmed);
     }
+    addRelationshipTerms(materials, item.material);
+    const itemRecipients = splitProductRelationship(item.recipient);
+    const itemOccasions = splitProductRelationship(item.occasion);
+    addRelationshipTerms(useCases, item.compatibility);
+    addRelationshipTerms(styles, item.tags);
+    for (const recipient of itemRecipients) {
+      recipients.add(recipient);
+    }
+    for (const occasion of itemOccasions) {
+      occasions.add(occasion);
+      const byOccasion = occasionRecipients.get(occasion) ?? new Set<string>();
+      for (const recipient of itemRecipients) {
+        byOccasion.add(recipient);
+      }
+      occasionRecipients.set(occasion, byOccasion);
+    }
   }
 
   return {
     categories: [...categories].sort((a, b) => a.localeCompare(b)),
     tags: [...tags].sort((a, b) => a.localeCompare(b)),
+    materials: [...materials].sort((a, b) => a.localeCompare(b)),
+    recipients: [...recipients].sort((a, b) => a.localeCompare(b)),
+    occasions: [...occasions].sort((a, b) => a.localeCompare(b)),
+    useCases: [...useCases].sort((a, b) => a.localeCompare(b)),
+    styles: [...styles].sort((a, b) => a.localeCompare(b)),
+    priceBands: priceBandsForCatalog(items),
+    occasionRecipients: Object.fromEntries(
+      [...occasionRecipients.entries()].map(([occasion, values]) => [
+        occasion,
+        [...values].sort((a, b) => a.localeCompare(b)),
+      ])
+    ),
+    relatedByCategory: topSkusByCategory(items),
   };
 }
 

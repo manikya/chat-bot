@@ -105,6 +105,20 @@
     }
   },
   {
+    "id": "mothers-day-no-misleading-recipient",
+    "message": "i need a mothers day gift",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "funnelStage": "discover",
+      "maxProductCards": 0,
+      "replyIncludes": ["who is it for"],
+      "suggestedActionExcludes": ["for dad"],
+      "maxReplyWords": 35,
+      "maxQuestions": 1
+    }
+  },
+  {
     "id": "gift-recipient-then-budget",
     "messages": [
       "im looking for fathers day gift",

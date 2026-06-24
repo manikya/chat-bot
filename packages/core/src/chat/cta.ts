@@ -1,7 +1,10 @@
 import type { ChatIntent, ChatSubIntent, FunnelStage, QualificationState, WidgetAction } from "@commercechat/shared";
+import type { CatalogSearchHints } from "../catalog/products";
 import type { CartState } from "./cart";
 import type { SearchProductHit } from "./product-reply";
 import { extractProductHitsFromTools } from "./product-reply";
+
+const PAGE_WORD_STOP = new Set(["products", "product", "collections", "collection", "shop", "store"]);
 
 function formatPriceLabel(price: number, currency?: string): string {
   const code = currency || "USD";
@@ -27,6 +30,75 @@ function productActions(products: SearchProductHit[], max = 3): WidgetAction[] {
     }));
 }
 
+function messageAction(label: string, message: string): WidgetAction {
+  return { type: "message", label, message };
+}
+
+function pageTerms(pageUrl?: string): string[] {
+  if (!pageUrl) return [];
+  try {
+    return new URL(pageUrl).pathname
+      .split(/[\/\-_]+/)
+      .map((part) => part.trim().toLowerCase())
+      .filter((part) => part.length >= 3 && !PAGE_WORD_STOP.has(part))
+      .slice(-4);
+  } catch {
+    return [];
+  }
+}
+
+function termsFromHints(catalogHints?: CatalogSearchHints): string[] {
+  return [
+    ...(catalogHints?.categories ?? []),
+    ...(catalogHints?.occasions ?? []),
+    ...(catalogHints?.useCases ?? []),
+    ...(catalogHints?.materials ?? []),
+    ...(catalogHints?.styles ?? []),
+    ...(catalogHints?.tags ?? []),
+  ];
+}
+
+function rankedHintActions(input: {
+  catalogHints?: CatalogSearchHints;
+  pageUrl?: string;
+  qualification?: QualificationState;
+  max?: number;
+}): WidgetAction[] {
+  const { catalogHints, pageUrl, qualification, max = 3 } = input;
+  const page = pageTerms(pageUrl);
+  const seen = new Set<string>();
+  const terms = termsFromHints(catalogHints);
+  const ranked = terms
+    .map((term) => {
+      const normalized = term.trim();
+      let score = 0;
+      if (!normalized || seen.has(normalized.toLowerCase())) return null;
+      seen.add(normalized.toLowerCase());
+      if (qualification?.category && normalized.toLowerCase() === qualification.category.toLowerCase()) score += 6;
+      if (qualification?.constraints?.some((c) => c.toLowerCase() === normalized.toLowerCase())) score += 4;
+      if (page.some((part) => normalized.toLowerCase().includes(part) || part.includes(normalized.toLowerCase()))) score += 5;
+      if ((catalogHints?.categories ?? []).includes(normalized)) score += 3;
+      if ((catalogHints?.occasions ?? []).includes(normalized)) score += 2;
+      return { term: normalized, score };
+    })
+    .filter((item): item is { term: string; score: number } => Boolean(item))
+    .sort((a, b) => b.score - a.score || a.term.localeCompare(b.term))
+    .slice(0, max);
+
+  return ranked.map(({ term }) => messageAction(term, `Show me ${term}`));
+}
+
+function budgetActions(market: "default" | "lk", catalogHints?: CatalogSearchHints): WidgetAction[] {
+  if (catalogHints?.priceBands?.length) {
+    return catalogHints.priceBands.slice(0, 3).map((band) => messageAction(band.label, band.message));
+  }
+  const low = market === "lk" ? "Under LKR 3,000" : "Under $50";
+  const high = market === "lk" ? "Above LKR 5,000" : "Above $100";
+  const lowMsg = market === "lk" ? "My budget is under LKR 3,000" : "My budget is under $50";
+  const highMsg = market === "lk" ? "Budget is above LKR 5,000" : "Budget is above $100";
+  return [messageAction(low, lowMsg), messageAction(high, highMsg)];
+}
+
 export function buildSuggestedCtas(input: {
   funnelStage?: FunnelStage;
   subIntent?: ChatSubIntent;
@@ -35,8 +107,11 @@ export function buildSuggestedCtas(input: {
   channel?: string;
   gateProductSearch?: boolean;
   market?: "default" | "lk";
+  catalogHints?: CatalogSearchHints;
+  pageUrl?: string;
+  qualification?: QualificationState;
 }): WidgetAction[] {
-  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market = "default" } =
+  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market = "default", catalogHints, pageUrl, qualification } =
     input;
   const products = extractProductHitsFromTools(toolResults);
   const inStockProducts = products.filter((p) => p.inStock !== false);
@@ -44,15 +119,8 @@ export function buildSuggestedCtas(input: {
   const cartCount = cart?.items.length ?? 0;
 
   if (gateProductSearch) {
-    const low = market === "lk" ? "Under LKR 3,000" : "Under $50";
-    const high = market === "lk" ? "Above LKR 5,000" : "Above $100";
-    const lowMsg = market === "lk" ? "My budget is under LKR 3,000" : "My budget is under $50";
-    const highMsg = market === "lk" ? "Budget is above LKR 5,000" : "Budget is above $100";
-    return [
-      { type: "message", label: low, message: lowMsg },
-      { type: "message", label: "It's a gift", message: "It's for a gift" },
-      { type: "message", label: high, message: highMsg },
-    ];
+    const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
+    return [...hintActions, ...budgetActions(market, catalogHints)].slice(0, 3);
   }
 
   if (subIntent === "checkout_ready" || funnelStage === "checkout") {
@@ -106,13 +174,8 @@ export function buildSuggestedCtas(input: {
 
   if (subIntent === "product_compare" || funnelStage === "compare") {
     if (inStockProducts.length) return productActions(inStockProducts, 3);
-    return [
-      {
-        type: "message",
-        label: "Show best sellers",
-        message: "Show me your best sellers",
-      },
-    ];
+    const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
+    return hintActions.length ? hintActions : [];
   }
 
   if (funnelStage === "discover" || subIntent === "product_browse") {
@@ -126,18 +189,8 @@ export function buildSuggestedCtas(input: {
         },
       ];
     }
-    return [
-      {
-        type: "message",
-        label: "Show best sellers",
-        message: "Show me your best sellers",
-      },
-      {
-        type: "message",
-        label: "What's on sale?",
-        message: "Do you have any discounts or offers?",
-      },
-    ];
+    const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
+    return hintActions.length ? hintActions : [];
   }
 
   if (inStockProducts.length) return productActions(inStockProducts, 3);

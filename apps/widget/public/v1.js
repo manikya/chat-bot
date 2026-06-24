@@ -72,6 +72,8 @@
     inputFocused: false,
     inputDraft: "",
     showDisclaimer: false,
+    menuOpen: false,
+    copyNotice: "",
   };
 
   function applyDemoConfig() {
@@ -100,6 +102,67 @@
       return state.config.suggestedQuestions;
     }
     return [];
+  }
+
+  function chatTranscript() {
+    var lines = [];
+    state.messages.forEach(function (m) {
+      var speaker = m.role === "user" ? "Customer" : "Assistant";
+      if (m.text && String(m.text).trim()) {
+        lines.push(speaker + ": " + String(m.text).replace(/\s+/g, " ").trim());
+      }
+      if (m.cards && m.cards.length) {
+        m.cards.forEach(function (card) {
+          var bits = [card.name || card.sku || "Product"];
+          if (card.price) bits.push(formatPrice(card.price, card.currency));
+          if (card.sku) bits.push("SKU " + card.sku);
+          lines.push("Product: " + bits.join(" | "));
+        });
+      }
+    });
+    return lines.join("\n");
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "readonly");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      document.body.removeChild(area);
+    }
+    return Promise.resolve();
+  }
+
+  function copyChat() {
+    var transcript = chatTranscript();
+    if (!transcript.trim()) return;
+    copyText(transcript)
+      .then(function () {
+        state.menuOpen = false;
+        state.copyNotice = "Chat copied";
+        render();
+        window.setTimeout(function () {
+          if (state.copyNotice === "Chat copied") {
+            state.copyNotice = "";
+            render();
+          }
+        }, 1800);
+      })
+      .catch(function (err) {
+        state.menuOpen = false;
+        state.copyNotice = "Could not copy chat";
+        render();
+        console.warn("[CommerceChat] copy chat", err);
+      });
   }
 
   function applyChatContext(data) {
@@ -155,11 +218,14 @@
       ".cc-panel{position:fixed;z-index:2147483001;width:462px;max-width:calc(100vw - 24px);height:min(720px,calc(100vh - 40px));max-height:calc(100vh - 40px);" +
       "background:#fff;border:1px solid #d5d9e1;border-radius:10px;box-shadow:0 22px 60px rgba(15,23,42,.22),0 6px 18px rgba(15,23,42,.10);display:flex;flex-direction:column;overflow:hidden;pointer-events:auto;}" +
       ".cc-panel-br{top:max(20px,calc((100vh - min(720px,calc(100vh - 40px))) / 2));right:20px}.cc-panel-bl{top:max(20px,calc((100vh - min(720px,calc(100vh - 40px))) / 2));left:20px}" +
-      ".cc-header{height:56px;padding:0 14px;color:#111827;font-weight:700;display:grid;grid-template-columns:36px 1fr 36px;align-items:center;flex:0 0 auto;background:#fff;}" +
+      ".cc-header{height:56px;padding:0 14px;color:#111827;font-weight:700;display:grid;grid-template-columns:36px 1fr 36px;align-items:center;flex:0 0 auto;background:#fff;position:relative;}" +
       ".cc-brand{display:flex;align-items:center;justify-content:center;gap:8px;min-width:0;grid-column:2}.cc-brand-logo{display:none}.cc-brand-copy{min-width:0;display:flex;align-items:center;gap:8px}.cc-brand-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:17px;line-height:1.2;color:#111827}.cc-brand-status{display:none}" +
       ".cc-menu{grid-column:1;width:30px;height:30px;border:none;background:transparent;color:#111827;font-size:22px;line-height:1;cursor:pointer}.cc-menu:before{content:'⋮'}" +
       ".cc-close{grid-column:3;width:30px;height:30px;border:none;background:transparent;color:#374151;font-size:24px;cursor:pointer;line-height:1;opacity:.95}" +
       ".cc-close:hover,.cc-menu:hover{background:#f3f4f6;border-radius:8px}" +
+      ".cc-menu-popover{position:absolute;top:46px;left:10px;z-index:2;min-width:160px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;box-shadow:0 14px 38px rgba(15,23,42,.18);padding:6px;}" +
+      ".cc-menu-item{width:100%;border:0;background:#fff;color:#111827;border-radius:9px;padding:10px 12px;text-align:left;font-size:14px;font-weight:700;cursor:pointer}.cc-menu-item:hover{background:#f3f4f6}.cc-menu-item:disabled{opacity:.55;cursor:not-allowed}" +
+      ".cc-toast{margin:8px 16px 0;padding:9px 12px;border-radius:10px;background:#ecfdf5;color:#065f46;font-size:13px;font-weight:700;flex:0 0 auto;}" +
       ".cc-gradient-rule{height:3px;flex:0 0 auto;background:linear-gradient(90deg,#d946ef 0%,#8b5cf6 48%,#2dd4bf 100%)}" +
       ".cc-messages{flex:1;min-height:0;overflow-y:auto;padding:18px 24px;background:#fff;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}" +
       ".cc-msg{margin-bottom:14px;max-width:82%;padding:13px 16px;border-radius:10px;word-wrap:break-word;white-space:pre-wrap;font-size:15px;line-height:1.55;}" +
@@ -321,11 +387,39 @@
       '</span><span class="cc-brand-copy"><span class="cc-brand-name">' +
       escapeHtml((state.config && state.config.storeName) || "Chat") +
       '</span></span></span><button class="cc-close" aria-label="Close">−</button>';
+    header.querySelector(".cc-menu").onclick = function (e) {
+      e.stopPropagation();
+      state.menuOpen = !state.menuOpen;
+      render();
+    };
     header.querySelector(".cc-close").onclick = function () {
+      state.menuOpen = false;
       state.open = false;
       render();
     };
+    if (state.menuOpen) {
+      var menu = document.createElement("div");
+      menu.className = "cc-menu-popover";
+      var copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "cc-menu-item";
+      copy.textContent = "Copy chat";
+      copy.disabled = !state.messages.length;
+      copy.onclick = function (e) {
+        e.stopPropagation();
+        copyChat();
+      };
+      menu.appendChild(copy);
+      header.appendChild(menu);
+    }
     panel.appendChild(header);
+
+    if (state.copyNotice) {
+      var toast = document.createElement("div");
+      toast.className = "cc-toast";
+      toast.textContent = state.copyNotice;
+      panel.appendChild(toast);
+    }
 
     var rule = document.createElement("div");
     rule.className = "cc-gradient-rule";

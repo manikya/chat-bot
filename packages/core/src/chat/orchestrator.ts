@@ -425,6 +425,7 @@ export async function runChatOrchestrator(
     qualification,
     gateProductSearch,
     market,
+    catalogHints,
   });
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,
@@ -640,6 +641,9 @@ export async function runChatOrchestrator(
           channel: input.channel,
           gateProductSearch,
           market,
+          catalogHints,
+          pageUrl,
+          qualification,
         });
   replyContent = appendEngagementQuestion(replyContent, {
     intent,

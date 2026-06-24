@@ -51,6 +51,8 @@ async function chat(message, sessionId) {
     productPrices: products.map((p) => p.price).filter((p) => typeof p === "number"),
     outOfStockProducts: products.filter((p) => p.inStock === false).map((p) => p.sku || p.name),
     suggestedActions: data.suggestedActions?.length ?? 0,
+    suggestedActionLabels: (data.suggestedActions ?? []).map((a) => a.label).filter(Boolean),
+    suggestedActionMessages: (data.suggestedActions ?? []).map((a) => a.message).filter(Boolean),
     tools: (data.toolResults ?? []).map((t) => t.tool).join(", "),
     retrievedChunks: data.retrievedChunks ?? [],
   };
