@@ -155,16 +155,32 @@ export function productSearchWasEmpty(
 export function buildNoProductResultsReply(input: {
   query: string;
   category?: string;
+  constraints?: string[];
   maxPrice?: number;
   minPrice?: number;
   currency: string;
   channel?: string;
 }): string {
+  const seen = new Set<string>();
   const parts: string[] = [];
-  if (input.category) parts.push(input.category);
+  const addPart = (value?: string) => {
+    const label = value?.trim();
+    const key = label?.toLowerCase();
+    if (!label || !key || seen.has(key)) return;
+    seen.add(key);
+    parts.push(label);
+  };
+  addPart(input.category);
+  for (const constraint of input.constraints ?? []) {
+    if (/^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(constraint)) continue;
+    addPart(constraint);
+  }
   if (input.maxPrice != null) parts.push(`under ${formatMoney(input.maxPrice, input.currency)}`);
   if (input.minPrice != null) parts.push(`from ${formatMoney(input.minPrice, input.currency)}`);
   const scope = parts.length ? ` matching ${parts.join(", ")}` : "";
+  if (parts.length) {
+    return `I couldn't find in-stock products${scope} for that search. I can adjust one preference or show higher-value options.`;
+  }
   const ending =
     input.channel === "whatsapp" || input.channel === "messenger" || input.channel === "instagram"
       ? "Would you like me to try a broader search or show best sellers?"

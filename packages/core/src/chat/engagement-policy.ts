@@ -243,11 +243,7 @@ function resultRefinementMove(input: {
         suggestedActions: preferenceActions(options),
       };
     }
-    const fallback = ["Festive", "Minimal", "Decorative"];
-    return {
-      question: "Would you prefer something festive, minimal, or more decorative?",
-      suggestedActions: preferenceActions(fallback),
-    };
+    return null;
   }
 
   if (isGiftLike(qualification)) {

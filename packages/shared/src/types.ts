@@ -119,6 +119,7 @@ export interface QualificationState {
   category?: string;
   recipient?: string;
   constraints?: string[];
+  removeConstraints?: string[];
   objectionsRaised?: string[];
   lastComparedSkus?: string[];
 }

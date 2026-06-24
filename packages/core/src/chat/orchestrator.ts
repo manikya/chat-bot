@@ -581,6 +581,7 @@ export async function runChatOrchestrator(
     replyContent = buildNoProductResultsReply({
       query: text,
       category: qualification.category,
+      constraints: qualification.constraints,
       maxPrice: qualification.budget?.max,
       minPrice: qualification.budget?.min,
       currency,

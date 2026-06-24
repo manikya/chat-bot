@@ -3,8 +3,9 @@ import { buildCatalogPriceBands, type CatalogSearchHints } from "../catalog/prod
 import type { StoredMessage } from "./conversation";
 import type { CartState } from "./cart";
 import type { SearchProductHit } from "./product-reply";
-import { extractProductHitsFromTools } from "./product-reply";
+import { extractProductHitsFromTools, productSearchWasEmpty } from "./product-reply";
 import { chooseEngagementMove } from "./engagement-policy";
+import { formatMoney } from "./locale";
 
 const PAGE_WORD_STOP = new Set(["products", "product", "collections", "collection", "shop", "store"]);
 
@@ -95,6 +96,100 @@ function budgetActions(catalogHints?: CatalogSearchHints, products: SearchProduc
   return bands.slice(0, 3).map((band) => messageAction(band.label, band.message));
 }
 
+function hasFocusedQualification(qualification?: QualificationState): boolean {
+  return Boolean(
+    qualification?.recipient ||
+      qualification?.category ||
+      qualification?.constraints?.some((constraint) => !/^(decor|decoration|gift|gifting|home decor|event|personal use)$/i.test(constraint.trim()))
+  );
+}
+
+function normalizeTerm(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function uniqueTerms(values: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const value of values) {
+    const label = value?.trim();
+    const key = label ? normalizeTerm(label) : "";
+    if (!label || !key || seen.has(key)) continue;
+    seen.add(key);
+    terms.push(label);
+  }
+  return terms;
+}
+
+function focusedConstraintTerms(qualification?: QualificationState): string[] {
+  return uniqueTerms(
+    (qualification?.constraints ?? []).filter(
+      (constraint) => !/^(decor|decoration|gift|gifting|home decor|event|personal use|budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(constraint.trim())
+    )
+  );
+}
+
+function budgetPhrase(qualification?: QualificationState, market: "default" | "lk" = "default"): string {
+  const currency = market === "lk" ? "LKR" : "USD";
+  if (qualification?.budget?.max != null) return `under ${formatMoney(qualification.budget.max, currency)}`;
+  if (qualification?.budget?.min != null) return `above ${formatMoney(qualification.budget.min, currency)}`;
+  return "";
+}
+
+function isBroadAnchorTerm(value?: string): boolean {
+  return /^(decor|decoration|decorative|gift|gifting|home decor|event|personal use)$/i.test(value?.trim() ?? "");
+}
+
+function phraseFromTerms(terms: Array<string | undefined>): string {
+  return uniqueTerms(terms).join(" ").trim();
+}
+
+function appendContextPhrase(base: string, context?: string): string {
+  if (!context) return base;
+  const normalizedBase = normalizeTerm(base);
+  const normalizedContext = normalizeTerm(context);
+  if (!base || !normalizedContext || normalizedBase.includes(normalizedContext)) return base;
+  return phraseFromTerms([base, context]);
+}
+
+function recoveryActions(input: {
+  qualification?: QualificationState;
+  catalogHints?: CatalogSearchHints;
+  market?: "default" | "lk";
+}): WidgetAction[] {
+  const { qualification, catalogHints, market = "default" } = input;
+  const focused = focusedConstraintTerms(qualification);
+  const latest = focused.at(-1);
+  const broadContext = isBroadAnchorTerm(qualification?.category) ? qualification?.category : undefined;
+  const anchorPhrase = phraseFromTerms([...focused.filter((term) => term !== latest), broadContext]);
+  const failedRefinementPhrase = appendContextPhrase(latest ?? "", broadContext);
+  const premiumPhrase = appendContextPhrase(anchorPhrase || focused[0] || "", broadContext);
+  const budget = budgetPhrase(qualification, market);
+  const actions: WidgetAction[] = [];
+  const add = (label: string, message: string) => {
+    const key = normalizeTerm(label);
+    if (key && !actions.some((action) => normalizeTerm(action.label) === key)) actions.push(messageAction(label, message));
+  };
+
+  if (latest && anchorPhrase) {
+    add(`All ${anchorPhrase}`, `Show ${anchorPhrase}${budget ? ` ${budget}` : ""} without ${latest}`);
+  }
+  if (qualification?.budget?.max != null && premiumPhrase) {
+    add(`Premium ${premiumPhrase}`, `Show premium ${premiumPhrase} above ${formatMoney(qualification.budget.max, market === "lk" ? "LKR" : "USD")}`);
+  }
+  if (latest) {
+    const materialTerms = new Set((catalogHints?.materials ?? []).map(normalizeTerm));
+    const latestKey = normalizeTerm(latest);
+    if (materialTerms.has(latestKey)) {
+      add(`${latest} any style`, `Show ${latest}${budget ? ` ${budget}` : ""} in any style`);
+    } else {
+      add(`${failedRefinementPhrase || latest} any material`, `Show ${failedRefinementPhrase || latest}${budget ? ` ${budget}` : ""} in any material`);
+    }
+  }
+
+  return actions.slice(0, 3);
+}
+
 export function buildSuggestedCtas(input: {
   funnelStage?: FunnelStage;
   subIntent?: ChatSubIntent;
@@ -107,11 +202,12 @@ export function buildSuggestedCtas(input: {
   pageUrl?: string;
   qualification?: QualificationState;
 }): WidgetAction[] {
-  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, catalogHints, pageUrl, qualification } =
+  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market, catalogHints, pageUrl, qualification } =
     input;
   const products = extractProductHitsFromTools(toolResults);
   const inStockProducts = products.filter((p) => p.inStock !== false);
   const hasCards = inStockProducts.length > 0;
+  const emptyProductSearch = productSearchWasEmpty(toolResults);
   const cartCount = cart?.items.length ?? 0;
 
   if (gateProductSearch) {
@@ -184,6 +280,9 @@ export function buildSuggestedCtas(input: {
           message: "Show similar items that are in stock",
         },
       ];
+    }
+    if (emptyProductSearch && hasFocusedQualification(qualification)) {
+      return recoveryActions({ qualification, catalogHints, market });
     }
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
     return hintActions.length ? hintActions : [];

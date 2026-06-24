@@ -106,6 +106,35 @@ function catalogTermFromMessage(message: string, terms?: string[]): string | und
     .find((term) => messageContainsCatalogTerm(lower, term));
 }
 
+function constraintsToRemoveFromMessage(message: string, options?: QualificationExtractionOptions): string[] {
+  const removals = new Map<string, string>();
+  const lower = message.toLowerCase();
+  const addRemoval = (value: string) => {
+    const normalized = value.trim();
+    if (normalized) removals.set(normalized.toLowerCase(), normalized);
+  };
+  for (const term of [
+    ...(options?.catalogCategories ?? []),
+    ...(options?.catalogTags ?? []),
+    ...(options?.catalogMaterials ?? []),
+    ...(options?.catalogOccasions ?? []),
+    ...(options?.catalogUseCases ?? []),
+    ...(options?.catalogStyles ?? []),
+  ]) {
+    const normalized = term.trim();
+    if (normalized && new RegExp(`\\bwithout\\s+${escapeRegExp(normalized)}\\b`, "i").test(message)) {
+      addRemoval(normalized);
+    }
+  }
+  if (/\bany\s+style\b|\bany\s+tone\b|\bany\s+occasion\b/i.test(lower)) {
+    for (const term of [...(options?.catalogStyles ?? []), ...(options?.catalogOccasions ?? [])]) addRemoval(term);
+  }
+  if (/\bany\s+material\b/i.test(lower)) {
+    for (const term of options?.catalogMaterials ?? []) addRemoval(term);
+  }
+  return [...removals.values()];
+}
+
 export function extractCategoryFromMessage(
   message: string,
   options?: QualificationExtractionOptions
@@ -217,6 +246,9 @@ export function extractQualificationFromMessage(
   const constraints = extractConstraintsFromMessage(message, options);
   if (constraints.length) patch.constraints = constraints;
 
+  const removeConstraints = constraintsToRemoveFromMessage(message, options);
+  if (removeConstraints.length) patch.removeConstraints = removeConstraints;
+
   const objections = extractObjectionTypes(message);
   if (objections.length) patch.objectionsRaised = objections;
 
@@ -240,13 +272,16 @@ export function mergeQualification(
   }
   if (patch.category) merged.category = patch.category;
   if (patch.recipient) merged.recipient = patch.recipient;
+  const removals = new Set((patch.removeConstraints ?? []).map((constraint) => constraint.trim().toLowerCase()).filter(Boolean));
   if (patch.constraints?.length) {
     const constraints = new Map<string, string>();
     for (const constraint of [...(base.constraints ?? []), ...patch.constraints]) {
       const normalized = constraint.trim();
-      if (normalized) constraints.set(normalized.toLowerCase(), normalized);
+      if (normalized && !removals.has(normalized.toLowerCase())) constraints.set(normalized.toLowerCase(), normalized);
     }
     merged.constraints = [...constraints.values()];
+  } else if (removals.size && base.constraints?.length) {
+    merged.constraints = base.constraints.filter((constraint) => !removals.has(constraint.trim().toLowerCase()));
   }
   if (patch.objectionsRaised?.length) {
     merged.objectionsRaised = [
