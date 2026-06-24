@@ -227,6 +227,7 @@ export function rankProductsByRelevance(
   query: string,
   options?: {
     category?: string;
+    requiredTerms?: string[];
     maxPrice?: number;
     minPrice?: number;
     limit?: number;
@@ -258,6 +259,7 @@ export function rankProductsByRelevance(
     .filter(({ record, score }) => {
       if (score <= 0) return false;
       if (record.inStock === false) return false;
+      if (options?.requiredTerms?.some((term) => !categoryFilterMatches(record, term))) return false;
       if (options?.maxPrice != null && record.price > options.maxPrice) return false;
       if (options?.minPrice != null && record.price < options.minPrice) return false;
       return true;

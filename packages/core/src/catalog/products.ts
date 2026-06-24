@@ -473,7 +473,7 @@ export async function searchProductCache(
   tenantId: string,
   query: string,
   config: CoreConfig,
-  options?: { category?: string; maxPrice?: number; minPrice?: number; limit?: number }
+  options?: { category?: string; requiredTerms?: string[]; maxPrice?: number; minPrice?: number; limit?: number }
 ): Promise<ProductRecord[]> {
   const items = (await listProductItems(tenantId, config)) as ProductRecord[];
   const limit = options?.limit ?? 5;

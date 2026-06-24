@@ -29,6 +29,15 @@ const NON_RECIPIENT_PHRASES = new Set([
 
 const PRICE_TIER_TERMS = new Set(["budget", "budget friendly", "mid range", "premium", "premium picks", "luxury"]);
 
+interface QualificationExtractionOptions {
+  catalogCategories?: string[];
+  catalogTags?: string[];
+  catalogMaterials?: string[];
+  catalogOccasions?: string[];
+  catalogUseCases?: string[];
+  catalogStyles?: string[];
+}
+
 const GENERIC_CONSTRAINT_PATTERNS = [
   /\b(birthday|anniversary|wedding|graduation|housewarming|corporate|cooperate|event|giveaway|giveaways|decor|awards?|appreciation|valentine|christmas|new year)\b/gi,
   /\b(small|large|mini|premium|luxury|cheap|affordable|personalized|custom|practical|sentimental|decorative)\b/gi,
@@ -99,7 +108,7 @@ function catalogTermFromMessage(message: string, terms?: string[]): string | und
 
 export function extractCategoryFromMessage(
   message: string,
-  options?: { catalogCategories?: string[]; catalogTags?: string[] }
+  options?: QualificationExtractionOptions
 ): string | undefined {
   const lower = message.toLowerCase();
   const catalogCategory = catalogTermFromMessage(message, options?.catalogCategories);
@@ -152,28 +161,48 @@ export function extractObjectionTypes(message: string): string[] {
 
 export function extractConstraintsFromMessage(
   message: string,
-  options?: { catalogCategories?: string[]; catalogTags?: string[] }
+  options?: QualificationExtractionOptions
 ): string[] {
-  const constraints = new Set<string>();
+  const constraints = new Map<string, string>();
+  const addConstraint = (value: string) => {
+    const normalized = value.trim();
+    if (normalized) constraints.set(normalized.toLowerCase(), normalized);
+  };
   for (const pattern of GENERIC_CONSTRAINT_PATTERNS) {
     for (const match of message.matchAll(pattern)) {
       const value = match[1]?.trim().toLowerCase();
-      if (value) constraints.add(value);
+      if (value) addConstraint(value);
     }
   }
   for (const term of [...(options?.catalogCategories ?? []), ...(options?.catalogTags ?? [])]) {
     const normalized = term.trim();
     if (normalized && !PRICE_TIER_TERMS.has(normalized.toLowerCase()) && messageContainsCatalogTerm(message, normalized)) {
-      constraints.add(normalized);
+      addConstraint(normalized);
     }
   }
-  return [...constraints];
+  for (const term of options?.catalogMaterials ?? []) {
+    const normalized = term.trim();
+    if (normalized && messageContainsCatalogTerm(message, normalized)) {
+      addConstraint(normalized);
+    }
+  }
+  for (const term of [
+    ...(options?.catalogOccasions ?? []),
+    ...(options?.catalogUseCases ?? []),
+    ...(options?.catalogStyles ?? []),
+  ]) {
+    const normalized = term.trim();
+    if (normalized && !PRICE_TIER_TERMS.has(normalized.toLowerCase()) && messageContainsCatalogTerm(message, normalized)) {
+      addConstraint(normalized);
+    }
+  }
+  return [...constraints.values()];
 }
 
 export function extractQualificationFromMessage(
   message: string,
   market: ChatMarket = "default",
-  options?: { catalogCategories?: string[]; catalogTags?: string[] }
+  options?: QualificationExtractionOptions
 ): QualificationState {
   const patch: QualificationState = {};
   const budget = extractBudgetFromMessage(message, market);
@@ -212,7 +241,12 @@ export function mergeQualification(
   if (patch.category) merged.category = patch.category;
   if (patch.recipient) merged.recipient = patch.recipient;
   if (patch.constraints?.length) {
-    merged.constraints = [...new Set([...(base.constraints ?? []), ...patch.constraints])];
+    const constraints = new Map<string, string>();
+    for (const constraint of [...(base.constraints ?? []), ...patch.constraints]) {
+      const normalized = constraint.trim();
+      if (normalized) constraints.set(normalized.toLowerCase(), normalized);
+    }
+    merged.constraints = [...constraints.values()];
   }
   if (patch.objectionsRaised?.length) {
     merged.objectionsRaised = [

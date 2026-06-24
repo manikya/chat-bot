@@ -6,6 +6,7 @@ import {
   getStoreCurrency,
   productMatchReasons,
   searchProductCache,
+  type CatalogSearchHints,
   type ProductRecord,
 } from "../catalog/products";
 import { rankProductsByRelevance } from "../catalog/product-search";
@@ -175,7 +176,7 @@ async function mergeProductSearchResults(
   config: CoreConfig,
   storeCurrency: string,
   query: string,
-  options?: { category?: string; maxPrice?: number; minPrice?: number; limit?: number }
+  options?: { category?: string; requiredTerms?: string[]; maxPrice?: number; minPrice?: number; limit?: number }
 ): Promise<ProductRecord[]> {
   const bySku = new Map<string, ProductRecord>();
   const vectorScores = new Map<string, number>();
@@ -258,7 +259,38 @@ export interface ToolExecutionContext {
   channel?: string;
   externalUserId?: string;
   qualification?: QualificationState;
+  catalogHints?: CatalogSearchHints;
   pageUrl?: string;
+}
+
+const BROAD_FOCUSED_TERMS = new Set([
+  "decor",
+  "decoration",
+  "decorative",
+  "gift",
+  "gifting",
+  "home decor",
+  "event",
+  "personal use",
+  "display",
+  "collectible",
+]);
+
+function focusedPreferenceTerms(qualification?: QualificationState, catalogHints?: CatalogSearchHints): string[] {
+  const focusedHints = [
+    ...(catalogHints?.materials ?? []),
+    ...(catalogHints?.occasions ?? []),
+    ...(catalogHints?.styles ?? []),
+    ...(catalogHints?.useCases ?? []).filter((term) => !BROAD_FOCUSED_TERMS.has(term.trim().toLowerCase())),
+  ];
+  const focused = new Map(focusedHints.map((term) => [term.toLowerCase(), term]));
+  return [
+    ...new Set(
+      (qualification?.constraints ?? [])
+        .map((constraint) => focused.get(constraint.trim().toLowerCase()))
+        .filter((term): term is string => Boolean(term))
+    ),
+  ];
 }
 
 export async function executeTool(
@@ -281,6 +313,7 @@ export async function executeTool(
         (args.category ? String(args.category) : undefined) ?? ctx.qualification?.category;
       const maxPrice = (args.maxPrice as number | undefined) ?? ctx.qualification?.budget?.max;
       const minPrice = (args.minPrice as number | undefined) ?? ctx.qualification?.budget?.min;
+      const requiredTerms = focusedPreferenceTerms(ctx.qualification, ctx.catalogHints);
       const searchQuery = buildProductSearchQuery({
         message: query,
         qualification: {
@@ -299,6 +332,7 @@ export async function executeTool(
         }),
         searchProductCache(ctx.auth.tenantId, searchQuery, ctx.config, {
           category: categoryFilter,
+          requiredTerms,
           maxPrice,
           minPrice,
           limit: recallLimit,
@@ -311,7 +345,7 @@ export async function executeTool(
         ctx.config,
         storeCurrency,
         searchQuery,
-        { category: categoryFilter, maxPrice, minPrice, limit }
+        { category: categoryFilter, requiredTerms, maxPrice, minPrice, limit }
       );
       const vectorScores = new Map(
         vectorHits.map((hit) => [String(hit.chunk.metadata.sku ?? hit.chunk.id), hit.score])

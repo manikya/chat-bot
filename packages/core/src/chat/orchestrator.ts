@@ -279,6 +279,10 @@ export async function runChatOrchestrator(
     extractQualificationFromMessage(text, market, {
       catalogCategories: catalogHints?.categories,
       catalogTags: catalogHints?.tags,
+      catalogMaterials: catalogHints?.materials,
+      catalogOccasions: catalogHints?.occasions,
+      catalogUseCases: catalogHints?.useCases,
+      catalogStyles: catalogHints?.styles,
     })
   );
   const funnelOrQualChanged =
@@ -447,6 +451,7 @@ export async function runChatOrchestrator(
     channel: input.channel,
     externalUserId: input.externalUserId,
     qualification,
+    catalogHints,
     pageUrl,
   };
 
