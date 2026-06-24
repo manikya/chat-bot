@@ -39,6 +39,26 @@
     }
   },
   {
+    "id": "home-decor-budget-no-recipient-followup",
+    "messages": [
+      "Best sellers",
+      "home decor items",
+      "My budget is LKR 1,090 to LKR 3,590"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "replyIncludes": ["festive", "everyday"],
+      "replyExcludes": ["who is this for", "who is it for"],
+      "minSuggestedActions": 2,
+      "suggestedActionIncludes": ["festive", "everyday"],
+      "maxProductPrice": 3590,
+      "noOutOfStockProducts": true,
+      "maxQuestions": 1
+    }
+  },
+  {
     "id": "faq",
     "message": "What is your return policy?",
     "expect": {
@@ -91,7 +111,7 @@
     }
   },
   {
-    "id": "fathers-day-gift-gates",
+    "id": "fathers-day-gift-asks-recipient",
     "message": "im looking for fathers day gift",
     "expect": {
       "nonEmptyReply": true,
@@ -99,7 +119,9 @@
       "funnelStage": "discover",
       "maxProductCards": 0,
       "minSuggestedActions": 1,
-      "replyIncludes": ["who is it for"],
+      "replyIncludes": ["dad", "husband", "someone else"],
+      "suggestedActionIncludes": ["for husband"],
+      "suggestedActionExcludes": ["for mom"],
       "maxReplyWords": 35,
       "maxQuestions": 1
     }
@@ -112,7 +134,8 @@
       "intent": "product",
       "funnelStage": "discover",
       "maxProductCards": 0,
-      "replyIncludes": ["who is it for"],
+      "replyIncludes": ["mom", "wife", "someone else"],
+      "suggestedActionIncludes": ["for wife"],
       "suggestedActionExcludes": ["for dad"],
       "maxReplyWords": 35,
       "maxQuestions": 1

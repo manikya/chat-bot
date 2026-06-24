@@ -155,6 +155,53 @@ export interface CatalogSearchHints {
   relatedByCategory: Record<string, string[]>;
 }
 
+export function buildCatalogPriceBands(
+  items: Array<{ price: number; currency?: string; inStock?: boolean }>
+): CatalogPriceBand[] {
+  const inStock = items
+    .filter((p) => p.inStock !== false && Number.isFinite(p.price) && p.price > 0)
+    .sort((a, b) => a.price - b.price);
+  if (!inStock.length) return [];
+  const currency = inStock[0]?.currency ?? "USD";
+  const format = (amount: number) => {
+    try {
+      return new Intl.NumberFormat(currency === "LKR" ? "en-LK" : "en", {
+        style: "currency",
+        currency,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${currency} ${Math.round(amount)}`;
+    }
+  };
+  const q1 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.33))]!.price;
+  const q2 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.66))]!.price;
+  const max = inStock[inStock.length - 1]!.price;
+  const bands: CatalogPriceBand[] = [
+    {
+      label: `Under ${format(q1)}`,
+      message: `My budget is under ${format(q1)}`,
+      max: q1,
+    },
+  ];
+  if (q2 > q1) {
+    bands.push({
+      label: `${format(q1)}-${format(q2)}`,
+      message: `My budget is ${format(q1)} to ${format(q2)}`,
+      min: q1,
+      max: q2,
+    });
+  }
+  if (max > q2) {
+    bands.push({
+      label: `Above ${format(q2)}`,
+      message: `Budget is above ${format(q2)}`,
+      min: q2,
+    });
+  }
+  return bands.slice(0, 3);
+}
+
 export async function getProductBySku(
   tenantId: string,
   sku: string,
@@ -262,48 +309,7 @@ function topSkusByCategory(items: ProductRecord[]): Record<string, string[]> {
 }
 
 function priceBandsForCatalog(items: ProductRecord[]): CatalogPriceBand[] {
-  const inStock = items
-    .filter((p) => p.inStock !== false && Number.isFinite(p.price) && p.price > 0)
-    .sort((a, b) => a.price - b.price);
-  if (!inStock.length) return [];
-  const currency = inStock[0]?.currency ?? "USD";
-  const format = (amount: number) => {
-    try {
-      return new Intl.NumberFormat(currency === "LKR" ? "en-LK" : "en", {
-        style: "currency",
-        currency,
-        maximumFractionDigits: 0,
-      }).format(amount);
-    } catch {
-      return `${currency} ${Math.round(amount)}`;
-    }
-  };
-  const q1 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.33))]!.price;
-  const q2 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.66))]!.price;
-  const max = inStock[inStock.length - 1]!.price;
-  const bands: CatalogPriceBand[] = [
-    {
-      label: `Under ${format(q1)}`,
-      message: `My budget is under ${format(q1)}`,
-      max: q1,
-    },
-  ];
-  if (q2 > q1) {
-    bands.push({
-      label: `${format(q1)}-${format(q2)}`,
-      message: `My budget is ${format(q1)} to ${format(q2)}`,
-      min: q1,
-      max: q2,
-    });
-  }
-  if (max > q2) {
-    bands.push({
-      label: `Above ${format(q2)}`,
-      message: `Budget is above ${format(q2)}`,
-      min: q2,
-    });
-  }
-  return bands.slice(0, 3);
+  return buildCatalogPriceBands(items);
 }
 
 export async function listCatalogSearchHints(

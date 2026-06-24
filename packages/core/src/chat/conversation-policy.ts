@@ -67,22 +67,7 @@ function budgetLabel(qualification?: QualificationState, market: ChatMarket = "d
   return null;
 }
 
-function fallbackBudgetActions(market: ChatMarket): WidgetAction[] {
-  if (market === "lk") {
-    return [
-      { type: "message", label: "Under LKR 3,000", message: "My budget is under LKR 3,000" },
-      { type: "message", label: "LKR 3,000-5,000", message: "My budget is LKR 3,000 to LKR 5,000" },
-      { type: "message", label: "Above LKR 5,000", message: "Budget is above LKR 5,000" },
-    ];
-  }
-  return [
-    { type: "message", label: "Under $50", message: "My budget is under $50" },
-    { type: "message", label: "$50-$100", message: "My budget is $50 to $100" },
-    { type: "message", label: "Above $100", message: "Budget is above $100" },
-  ];
-}
-
-function budgetActions(market: ChatMarket, catalogHints?: CatalogSearchHints): WidgetAction[] {
+function budgetActions(catalogHints?: CatalogSearchHints): WidgetAction[] {
   if (catalogHints?.priceBands?.length) {
     return catalogHints.priceBands.slice(0, 3).map((band) => ({
       type: "message" as const,
@@ -90,23 +75,46 @@ function budgetActions(market: ChatMarket, catalogHints?: CatalogSearchHints): W
       message: band.message,
     }));
   }
-  return fallbackBudgetActions(market);
+  return [];
 }
 
 function recipientActions(message: string, catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
   const matchedOccasion = catalogHints?.occasions?.find((occasion) => messageMentionsHint(message, occasion));
   const messageHasOccasion = /\b(father'?s day|mother'?s day|birthday|anniversary|wedding|housewarming)\b/i.test(message);
-  if (messageHasOccasion && !matchedOccasion) return undefined;
+  const fallbackRecipients = /\bfather'?s day\b/i.test(message)
+    ? ["dad", "husband", "grandpa"]
+    : /\bmother'?s day\b/i.test(message)
+      ? ["mom", "wife", "grandma"]
+      : [];
   const recipients = matchedOccasion
     ? catalogHints?.occasionRecipients?.[matchedOccasion] ?? catalogHints?.recipients
-    : catalogHints?.recipients;
+    : fallbackRecipients.length
+      ? fallbackRecipients
+      : catalogHints?.recipients;
   const unique = [...new Set((recipients ?? []).map((recipient) => recipient.trim()).filter(Boolean))].slice(0, 3);
-  if (!unique.length) return undefined;
-  return unique.map((recipient) => ({
-    type: "message" as const,
-    label: `For ${recipient}`,
-    message: `It's for ${recipient}`,
-  }));
+  if (!unique.length) return messageHasOccasion ? [{ type: "message" as const, label: "Someone else", message: "It's for someone else" }] : undefined;
+  return [
+    ...unique.map((recipient) => ({
+      type: "message" as const,
+      label: `For ${recipient}`,
+      message: `It's for ${recipient}`,
+    })),
+    ...(messageHasOccasion ? [{ type: "message" as const, label: "Someone else", message: "It's for someone else" }] : []),
+  ].slice(0, 4);
+}
+
+function recipientQuestion(message: string, budget?: string): string {
+  const prefix = budget ? `Got it, ${budget}.` : "Sure, I can help with that.";
+  if (/\bfather'?s day\b/i.test(message)) {
+    return `${prefix} Is this for dad, husband, grandpa, or someone else?`;
+  }
+  if (/\bmother'?s day\b/i.test(message)) {
+    return `${prefix} Is this for mom, wife, grandma, or someone else?`;
+  }
+  if (/\b(birthday|anniversary|wedding|housewarming)\b/i.test(message)) {
+    return `${prefix} Who is the gift for?`;
+  }
+  return budget ? `Got it, ${budget}. Who is it for?` : "Sure, I can help with that. Who is it for?";
 }
 
 function messageAction(label: string, message: string): WidgetAction {
@@ -179,9 +187,7 @@ export function planConversationMove(input: {
     const actions = recipientActions(message, catalogHints);
     return {
       move: "ask_recipient",
-      reply: budget
-        ? `Got it, ${budget}. Who is it for?`
-        : "Sure, I can help with that. Who is it for?",
+      reply: recipientQuestion(message, budget ?? undefined),
       suggestedActions: actions,
     };
   }
@@ -214,7 +220,7 @@ export function planConversationMove(input: {
       reply: recipient
         ? `Nice, for ${recipient}. What budget should I stay within?`
         : "Sure. What budget should I stay within?",
-      suggestedActions: budgetActions(market, catalogHints),
+      suggestedActions: budgetActions(catalogHints),
     };
   }
 

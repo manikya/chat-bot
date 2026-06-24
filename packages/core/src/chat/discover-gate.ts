@@ -1,4 +1,5 @@
 import type { ChatSubIntent, FunnelStage, QualificationState } from "@commercechat/shared";
+import type { CatalogSearchHints } from "../catalog/products";
 import type { ChatMarket } from "./locale";
 import { extractBudgetFromMessage } from "./qualification";
 
@@ -155,19 +156,26 @@ export function shouldGateProductSearch(input: {
 
 export function discoverQualifyPrompt(
   message: string,
-  market: ChatMarket = "default"
+  _market: ChatMarket = "default",
+  catalogHints?: CatalogSearchHints
 ): string {
   const lower = normalize(message);
-  const budgetExample = market === "lk" ? "under LKR 3,000 or higher" : "under $50 or higher";
+  const budgetExample = catalogHints?.priceBands?.length
+    ? catalogHints.priceBands
+        .slice(0, 2)
+        .map((band) => band.label.toLowerCase())
+        .join(" or ")
+    : "";
+  const budgetSuffix = budgetExample ? ` (${budgetExample})` : "";
 
   if (/\bgifts?\b/.test(lower) || /\bfor\s+(my\s+)?(mom|dad|wife|husband|friend|him|her)\b/i.test(lower)) {
-    return `Sure. Who is it for, and what budget do you have in mind (${budgetExample})?`;
+    return `Sure. Who is it for, and what budget do you have in mind${budgetSuffix}?`;
   }
   if (/\b(corporate|cooperate|event)\b/i.test(lower)) {
-    return `Sure. What budget should I stay within for the event (${budgetExample})?`;
+    return `Sure. What budget should I stay within for the event${budgetSuffix}?`;
   }
   if (/\bbest\s*-?\s*sellers?\b/i.test(lower)) {
-    return `Sure. What budget should I stay within before I show best sellers (${budgetExample})?`;
+    return `Sure. What budget should I stay within before I show best sellers${budgetSuffix}?`;
   }
-  return `Sure. Is it for a gift or personal use, and what's your budget (${budgetExample})?`;
+  return `Sure. Is it for a gift or personal use, and what's your budget${budgetSuffix}?`;
 }

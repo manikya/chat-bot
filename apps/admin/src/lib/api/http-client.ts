@@ -29,6 +29,55 @@ export interface ApiErrorShape {
   message?: string;
 }
 
+export interface CommerceProductListItem {
+  sku: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency?: string;
+  category?: string;
+  categories?: string[];
+  inStock?: boolean;
+  imageUrl?: string;
+  imageUrls?: string[];
+  productUrl?: string;
+  tags?: string[];
+  material?: string[];
+  occasion?: string[];
+  recipient?: string[];
+  compatibility?: string[];
+  bundles?: string[];
+  variants?: string;
+  sourceId?: string;
+  updatedAt?: string;
+}
+
+export interface CommerceCategorySummary {
+  name: string;
+  productCount: number;
+  inStockCount: number;
+  sampleSkus: string[];
+}
+
+export interface CommerceCatalogData {
+  items: CommerceProductListItem[];
+  total?: number;
+  returned?: number;
+  categories?: CommerceCategorySummary[];
+  generated?: {
+    priceBands?: Array<{ label: string; message: string; min?: number; max?: number }>;
+    tags?: string[];
+    materials?: string[];
+    occasions?: string[];
+    recipients?: string[];
+    useCases?: string[];
+    styles?: string[];
+    occasionRecipients?: Record<string, string[]>;
+    relatedByCategory?: Record<string, string[]>;
+  };
+  sources?: Array<{ sourceId: string; productCount: number }>;
+}
+
 type RequestOptions = RequestInit & { _authRetry?: boolean };
 
 /** Paths where 401 is expected credentials failure — never attempt token refresh */
@@ -444,9 +493,7 @@ export function createHttpApi() {
         if (params?.q) search.set("q", params.q);
         if (params?.limit != null) search.set("limit", String(params.limit));
         const qs = search.toString();
-        return request<{ items: Array<{ sku: string; name: string; price: number }> }>(
-          `/api/v1/commerce/products${qs ? `?${qs}` : ""}`
-        );
+        return request<CommerceCatalogData>(`/api/v1/commerce/products${qs ? `?${qs}` : ""}`);
       },
       wordpressStatus: () =>
         request<{

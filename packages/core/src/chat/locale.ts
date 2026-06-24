@@ -180,8 +180,12 @@ export function suggestedQuestionsForChatContext(options: {
 
 export function formatMoney(amount: number, currency = "USD"): string {
   try {
-    return new Intl.NumberFormat("en-LK", { style: "currency", currency }).format(amount);
+    return new Intl.NumberFormat("en-LK", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
   } catch {
-    return `${currency} ${amount.toFixed(2)}`;
+    return `${currency} ${Math.round(amount)}`;
   }
 }

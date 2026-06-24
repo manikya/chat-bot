@@ -21,7 +21,7 @@ const NON_RECIPIENT_PHRASES = new Set([
 
 const GENERIC_CONSTRAINT_PATTERNS = [
   /\b(birthday|anniversary|wedding|graduation|housewarming|corporate|cooperate|event|giveaway|giveaways|decor|awards?|appreciation|valentine|christmas|new year)\b/gi,
-  /\b(small|large|mini|premium|luxury|cheap|affordable|personalized|custom)\b/gi,
+  /\b(small|large|mini|premium|luxury|cheap|affordable|personalized|custom|practical|sentimental|decorative)\b/gi,
   /\bpersonal\s+use\b/gi,
 ];
 

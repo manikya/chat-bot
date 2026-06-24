@@ -1,8 +1,10 @@
 import type { ChatIntent, ChatSubIntent, FunnelStage, QualificationState, WidgetAction } from "@commercechat/shared";
-import type { CatalogSearchHints } from "../catalog/products";
+import { buildCatalogPriceBands, type CatalogSearchHints } from "../catalog/products";
+import type { StoredMessage } from "./conversation";
 import type { CartState } from "./cart";
 import type { SearchProductHit } from "./product-reply";
 import { extractProductHitsFromTools } from "./product-reply";
+import { chooseEngagementMove } from "./engagement-policy";
 
 const PAGE_WORD_STOP = new Set(["products", "product", "collections", "collection", "shop", "store"]);
 
@@ -88,15 +90,9 @@ function rankedHintActions(input: {
   return ranked.map(({ term }) => messageAction(term, `Show me ${term}`));
 }
 
-function budgetActions(market: "default" | "lk", catalogHints?: CatalogSearchHints): WidgetAction[] {
-  if (catalogHints?.priceBands?.length) {
-    return catalogHints.priceBands.slice(0, 3).map((band) => messageAction(band.label, band.message));
-  }
-  const low = market === "lk" ? "Under LKR 3,000" : "Under $50";
-  const high = market === "lk" ? "Above LKR 5,000" : "Above $100";
-  const lowMsg = market === "lk" ? "My budget is under LKR 3,000" : "My budget is under $50";
-  const highMsg = market === "lk" ? "Budget is above LKR 5,000" : "Budget is above $100";
-  return [messageAction(low, lowMsg), messageAction(high, highMsg)];
+function budgetActions(catalogHints?: CatalogSearchHints, products: SearchProductHit[] = []): WidgetAction[] {
+  const bands = catalogHints?.priceBands?.length ? catalogHints.priceBands : buildCatalogPriceBands(products);
+  return bands.slice(0, 3).map((band) => messageAction(band.label, band.message));
 }
 
 export function buildSuggestedCtas(input: {
@@ -111,7 +107,7 @@ export function buildSuggestedCtas(input: {
   pageUrl?: string;
   qualification?: QualificationState;
 }): WidgetAction[] {
-  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market = "default", catalogHints, pageUrl, qualification } =
+  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, catalogHints, pageUrl, qualification } =
     input;
   const products = extractProductHitsFromTools(toolResults);
   const inStockProducts = products.filter((p) => p.inStock !== false);
@@ -120,7 +116,7 @@ export function buildSuggestedCtas(input: {
 
   if (gateProductSearch) {
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
-    return [...hintActions, ...budgetActions(market, catalogHints)].slice(0, 3);
+    return [...hintActions, ...budgetActions(catalogHints, products)].slice(0, 3);
   }
 
   if (subIntent === "checkout_ready" || funnelStage === "checkout") {
@@ -221,34 +217,29 @@ export function appendCtaPromptLine(
   return reply;
 }
 
-export function appendEngagementQuestion(
+export function applyEngagementQuestion(
   reply: string,
   input: {
     intent?: ChatIntent;
     funnelStage?: FunnelStage;
     subIntent?: ChatSubIntent;
     qualification?: QualificationState;
-    hasProductResults?: boolean;
+    products?: SearchProductHit[];
+    catalogHints?: CatalogSearchHints;
+    suggestedActions?: WidgetAction[];
+    history?: StoredMessage[];
   }
-): string {
+): { reply: string; suggestedActions?: WidgetAction[] } {
   const trimmed = reply.trim();
-  if (!trimmed || trimmed.endsWith("?")) return reply;
-  if (input.intent !== "product" && input.subIntent !== "product_browse") return reply;
-  if (input.funnelStage === "cart" || input.funnelStage === "checkout" || input.funnelStage === "objection") {
-    return reply;
-  }
+  const move = chooseEngagementMove({ reply, ...input });
+  return move
+    ? { reply: `${trimmed}\n\n${move.question}`, suggestedActions: move.suggestedActions }
+    : { reply };
+}
 
-  const qualification = input.qualification;
-  let question: string | null = null;
-  if (!qualification?.budget?.max && !qualification?.budget?.min) {
-    question = "What budget should I stay within?";
-  } else if (!qualification?.recipient) {
-    question = "Who is this for?";
-  } else if (!qualification?.constraints?.length) {
-    question = "Is it for gifting, home, or personal use?";
-  } else if (!input.hasProductResults && !qualification?.category) {
-    question = "What type of item are you looking for?";
-  }
-
-  return question ? `${trimmed}\n\n${question}` : reply;
+export function appendEngagementQuestion(
+  reply: string,
+  input: Parameters<typeof applyEngagementQuestion>[1]
+): string {
+  return applyEngagementQuestion(reply, input).reply;
 }

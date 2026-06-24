@@ -10,6 +10,15 @@ export interface SearchProductHit {
   imageUrl?: string;
   imageUrls?: string[];
   url?: string;
+  category?: string;
+  categories?: string[];
+  tags?: string;
+  material?: string;
+  occasion?: string;
+  recipient?: string;
+  compatibility?: string;
+  bundles?: string;
+  variants?: string;
   matchReasons?: string[];
 }
 

@@ -31,7 +31,7 @@ import {
   productSearchWasEmpty,
   sanitizeReplyText,
 } from "./product-reply";
-import { appendCtaPromptLine, appendEngagementQuestion, buildSuggestedCtas } from "./cta";
+import { appendCtaPromptLine, applyEngagementQuestion, buildSuggestedCtas } from "./cta";
 import { buildProductResultsIntro, planConversationMove } from "./conversation-policy";
 import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
 import { buildProductSearchQuery } from "./product-query";
@@ -514,7 +514,7 @@ export async function runChatOrchestrator(
     }
 
     if (gateProductSearch && replyContent && replyContent.split(/\s+/).length > 100) {
-      replyContent = discoverQualifyPrompt(text, market);
+      replyContent = discoverQualifyPrompt(text, market, catalogHints);
     }
   }
 
@@ -522,7 +522,7 @@ export async function runChatOrchestrator(
     if (conversationPolicy.reply) {
       replyContent = conversationPolicy.reply;
     } else if (gateProductSearch) {
-      replyContent = discoverQualifyPrompt(text, market);
+      replyContent = discoverQualifyPrompt(text, market, catalogHints);
     } else if (shouldRunProductSearch(intent, text, gateProductSearch)) {
       const { result, success } = await executeTool(
         "search_products",
@@ -630,7 +630,7 @@ export async function runChatOrchestrator(
     conversation.lastSubIntent = subIntent;
   }
 
-  const suggestedActions =
+  let suggestedActions =
     gateProductSearch && conversationPolicy.suggestedActions?.length
       ? conversationPolicy.suggestedActions
       : buildSuggestedCtas({
@@ -645,13 +645,20 @@ export async function runChatOrchestrator(
           pageUrl,
           qualification,
         });
-  replyContent = appendEngagementQuestion(replyContent, {
+  const engagement = applyEngagementQuestion(replyContent, {
     intent,
     subIntent,
     funnelStage: finalFunnel.stage,
     qualification,
-    hasProductResults: finalProducts.length > 0,
+    products: finalProducts,
+    catalogHints,
+    suggestedActions,
+    history,
   });
+  replyContent = engagement.reply;
+  if (engagement.suggestedActions?.length) {
+    suggestedActions = engagement.suggestedActions;
+  }
   replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
   replyContent = compactReplyText(replyContent, { channel: input.channel });
 
