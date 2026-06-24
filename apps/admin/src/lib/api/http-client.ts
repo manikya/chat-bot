@@ -495,6 +495,12 @@ export function createHttpApi() {
         const qs = search.toString();
         return request<CommerceCatalogData>(`/api/v1/commerce/products${qs ? `?${qs}` : ""}`);
       },
+      regenerateProductAttributes: () =>
+        request<{
+          updated: number;
+          total: number;
+          generated: CommerceCatalogData["generated"];
+        }>("/api/v1/commerce/products/regenerate-attributes", { method: "POST", body: JSON.stringify({}) }),
       wordpressStatus: () =>
         request<{
           connected: boolean;

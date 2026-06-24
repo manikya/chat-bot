@@ -74,6 +74,7 @@ const BASE_ROUTES = [
   ["GET", "/api/v1/knowledge/page-voice/export", "knowledge-page-voice"],
   ["POST", "/api/v1/knowledge/detect-platform", "knowledge-detect-platform"],
   ["GET", "/api/v1/commerce/products", "commerce-products"],
+  ["POST", "/api/v1/commerce/products/regenerate-attributes", "commerce-products"],
   ["GET", "/api/v1/commerce/wordpress/status", "commerce-wordpress", "statusHandler"],
   ["POST", "/api/v1/commerce/wordpress/connect", "commerce-wordpress", "connectHandler"],
   ["POST", "/api/v1/commerce/wordpress/sync", "commerce-wordpress", "syncHandler"],

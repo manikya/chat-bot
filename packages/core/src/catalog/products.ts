@@ -1,4 +1,4 @@
-import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
@@ -155,6 +155,186 @@ export interface CatalogSearchHints {
   relatedByCategory: Record<string, string[]>;
 }
 
+function mostCommonCurrency(items: Array<{ currency?: string }>): string {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const currency = item.currency?.trim().toUpperCase();
+    if (!currency) continue;
+    counts.set(currency, (counts.get(currency) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
+}
+
+function percentile(values: number[], point: number): number {
+  if (!values.length) return 0;
+  if (values.length === 1) return values[0]!;
+  const index = (values.length - 1) * point;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return values[lower]!;
+  const weight = index - lower;
+  return values[lower]! * (1 - weight) + values[upper]! * weight;
+}
+
+function nicePriceStep(amount: number, currency: string): number {
+  if (currency === "LKR") {
+    if (amount < 1_000) return 100;
+    if (amount < 5_000) return 500;
+    if (amount < 20_000) return 1_000;
+    if (amount < 100_000) return 5_000;
+    return 10_000;
+  }
+  if (amount < 50) return 5;
+  if (amount < 200) return 10;
+  if (amount < 1_000) return 50;
+  if (amount < 5_000) return 100;
+  return 500;
+}
+
+function roundNicePrice(amount: number, currency: string): number {
+  const step = nicePriceStep(amount, currency);
+  return Math.max(step, Math.round(amount / step) * step);
+}
+
+function roundNicePriceAtLeast(amount: number, currency: string): number {
+  const step = nicePriceStep(amount, currency);
+  return Math.max(step, Math.ceil(amount / step) * step);
+}
+
+function countAtOrBelow(values: number[], max: number): number {
+  return values.filter((value) => value <= max).length;
+}
+
+function countBetween(values: number[], min: number, max: number): number {
+  return values.filter((value) => value > min && value <= max).length;
+}
+
+const MATERIAL_TERMS = [
+  "ceramic",
+  "clay",
+  "airdry clay",
+  "epoxy",
+  "resin",
+  "wood",
+  "wooden",
+  "glass",
+  "metal",
+  "brass",
+  "silver",
+  "gold",
+  "fabric",
+  "cotton",
+  "paper",
+];
+
+const OCCASION_TERMS = [
+  "christmas",
+  "new year",
+  "valentine",
+  "birthday",
+  "anniversary",
+  "wedding",
+  "housewarming",
+  "father's day",
+  "fathers day",
+  "mother's day",
+  "mothers day",
+  "corporate event",
+  "event",
+];
+
+const RECIPIENT_TERMS = [
+  "dad",
+  "father",
+  "husband",
+  "grandpa",
+  "mom",
+  "mother",
+  "wife",
+  "grandma",
+  "friend",
+  "kids",
+  "children",
+];
+
+const USE_CASE_TERMS = [
+  "home decor",
+  "decoration",
+  "decor",
+  "gift",
+  "gifting",
+  "table decor",
+  "giveaway",
+  "appreciation",
+  "award",
+  "collectible",
+  "figurine",
+  "display",
+];
+
+const STYLE_TERMS = [
+  "festive",
+  "minimal",
+  "decorative",
+  "cute",
+  "mini",
+  "premium",
+  "personalized",
+  "handmade",
+  "christmas",
+  "ceramic",
+];
+
+function textContainsTerm(text: string, term: string): boolean {
+  return new RegExp(`(^|\\W)${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\W|$)`, "i").test(text);
+}
+
+function addTermsFromText(target: Set<string>, text: string, terms: string[]) {
+  for (const term of terms) {
+    if (textContainsTerm(text, term)) target.add(term.replace(/\b\w/g, (char) => char.toUpperCase()));
+  }
+}
+
+function inferProductAttributes(item: ProductRecord) {
+  const categories = productCategoryList(item);
+  const text = [item.name, item.description, item.category, ...categories, item.tags, item.material, item.occasion, item.recipient, item.compatibility]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const tags = new Set(splitProductRelationship(item.tags));
+  const materials = new Set(splitProductRelationship(item.material));
+  const occasions = new Set(splitProductRelationship(item.occasion));
+  const recipients = new Set(splitProductRelationship(item.recipient));
+  const compatibility = new Set(splitProductRelationship(item.compatibility));
+
+  for (const category of categories) {
+    if (category) tags.add(category);
+  }
+  addTermsFromText(materials, text, MATERIAL_TERMS);
+  addTermsFromText(occasions, text, OCCASION_TERMS);
+  addTermsFromText(recipients, text, RECIPIENT_TERMS);
+  addTermsFromText(compatibility, text, USE_CASE_TERMS);
+  addTermsFromText(tags, text, STYLE_TERMS);
+
+  if (textContainsTerm(text, "christmas")) {
+    tags.add("Festive");
+    compatibility.add("Home decor");
+    compatibility.add("Gift");
+  }
+  if (textContainsTerm(text, "angel") || textContainsTerm(text, "santa") || textContainsTerm(text, "ornament")) {
+    compatibility.add("Home decor");
+    tags.add("Decorative");
+  }
+
+  return {
+    tags: [...tags].filter(Boolean).join(", ") || undefined,
+    material: [...materials].filter(Boolean).join(", ") || undefined,
+    occasion: [...occasions].filter(Boolean).join(", ") || undefined,
+    recipient: [...recipients].filter(Boolean).join(", ") || undefined,
+    compatibility: [...compatibility].filter(Boolean).join(", ") || undefined,
+  };
+}
+
 export function buildCatalogPriceBands(
   items: Array<{ price: number; currency?: string; inStock?: boolean }>
 ): CatalogPriceBand[] {
@@ -162,7 +342,7 @@ export function buildCatalogPriceBands(
     .filter((p) => p.inStock !== false && Number.isFinite(p.price) && p.price > 0)
     .sort((a, b) => a.price - b.price);
   if (!inStock.length) return [];
-  const currency = inStock[0]?.currency ?? "USD";
+  const currency = mostCommonCurrency(inStock);
   const format = (amount: number) => {
     try {
       return new Intl.NumberFormat(currency === "LKR" ? "en-LK" : "en", {
@@ -174,29 +354,42 @@ export function buildCatalogPriceBands(
       return `${currency} ${Math.round(amount)}`;
     }
   };
-  const q1 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.33))]!.price;
-  const q2 = inStock[Math.max(0, Math.floor((inStock.length - 1) * 0.66))]!.price;
-  const max = inStock[inStock.length - 1]!.price;
+  const prices = inStock.map((item) => item.price);
+  const max = prices[prices.length - 1]!;
+  const trim = prices.length >= 20 ? Math.floor(prices.length * 0.05) : 0;
+  const robustPrices = trim > 0 ? prices.slice(trim, prices.length - trim) : prices;
+  const minProductsPerBand = prices.length >= 9 ? 2 : 1;
+  let lowCutoff = roundNicePrice(percentile(robustPrices, 0.35), currency);
+  let highCutoff = roundNicePrice(percentile(robustPrices, 0.7), currency);
+
+  if (countAtOrBelow(prices, lowCutoff) < minProductsPerBand) {
+    lowCutoff = roundNicePriceAtLeast(prices[minProductsPerBand - 1] ?? prices[0]!, currency);
+  }
+  if (highCutoff <= lowCutoff || countBetween(prices, lowCutoff, highCutoff) < minProductsPerBand) {
+    const fallbackIndex = Math.min(prices.length - 1, Math.max(minProductsPerBand, Math.floor((prices.length - 1) * 0.7)));
+    highCutoff = roundNicePriceAtLeast(prices[fallbackIndex]!, currency);
+  }
+
   const bands: CatalogPriceBand[] = [
     {
-      label: `Under ${format(q1)}`,
-      message: `My budget is under ${format(q1)}`,
-      max: q1,
+      label: `Budget friendly: under ${format(lowCutoff)}`,
+      message: `Show budget friendly options under ${format(lowCutoff)}`,
+      max: lowCutoff,
     },
   ];
-  if (q2 > q1) {
+  if (highCutoff > lowCutoff && countBetween(prices, lowCutoff, highCutoff) > 0) {
     bands.push({
-      label: `${format(q1)}-${format(q2)}`,
-      message: `My budget is ${format(q1)} to ${format(q2)}`,
-      min: q1,
-      max: q2,
+      label: `Mid range: ${format(lowCutoff)}-${format(highCutoff)}`,
+      message: `Show mid range options from ${format(lowCutoff)} to ${format(highCutoff)}`,
+      min: lowCutoff,
+      max: highCutoff,
     });
   }
-  if (max > q2) {
+  if (max > highCutoff) {
     bands.push({
-      label: `Above ${format(q2)}`,
-      message: `Budget is above ${format(q2)}`,
-      min: q2,
+      label: `Premium: above ${format(highCutoff)}`,
+      message: `Show premium options above ${format(highCutoff)}`,
+      min: highCutoff,
     });
   }
   return bands.slice(0, 3);
@@ -277,6 +470,62 @@ export async function searchProductCache(
   const items = (await listProductItems(tenantId, config)) as ProductRecord[];
   const limit = options?.limit ?? 5;
   return rankProductsByRelevance(items, query, { ...options, limit });
+}
+
+export async function regenerateProductAttributes(
+  tenantId: string,
+  config: CoreConfig
+): Promise<{ updated: number; total: number }> {
+  const items = (await listProductItems(tenantId, config)) as Array<ProductRecord & { PK: string; SK: string }>;
+  const db = getDocClient(config);
+  const now = new Date().toISOString();
+  let updated = 0;
+
+  for (const item of items) {
+    const inferred = inferProductAttributes(item);
+    const next = {
+      tags: item.tags || inferred.tags,
+      material: item.material || inferred.material,
+      occasion: item.occasion || inferred.occasion,
+      recipient: item.recipient || inferred.recipient,
+      compatibility: item.compatibility || inferred.compatibility,
+    };
+    const changed =
+      next.tags !== item.tags ||
+      next.material !== item.material ||
+      next.occasion !== item.occasion ||
+      next.recipient !== item.recipient ||
+      next.compatibility !== item.compatibility;
+    if (!changed) continue;
+
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: item.PK, SK: item.SK },
+        UpdateExpression:
+          "SET #tags = :tags, #material = :material, #occasion = :occasion, #recipient = :recipient, #compatibility = :compatibility, #updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#tags": "tags",
+          "#material": "material",
+          "#occasion": "occasion",
+          "#recipient": "recipient",
+          "#compatibility": "compatibility",
+          "#updatedAt": "updatedAt",
+        },
+        ExpressionAttributeValues: {
+          ":tags": next.tags ?? "",
+          ":material": next.material ?? "",
+          ":occasion": next.occasion ?? "",
+          ":recipient": next.recipient ?? "",
+          ":compatibility": next.compatibility ?? "",
+          ":updatedAt": now,
+        },
+      })
+    );
+    updated += 1;
+  }
+
+  return { updated, total: items.length };
 }
 
 function addRelationshipTerms(target: Set<string>, value?: string) {

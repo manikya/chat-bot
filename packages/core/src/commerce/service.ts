@@ -4,6 +4,7 @@ import {
   listCatalogSearchHints,
   listProductItems,
   productCategoryList,
+  regenerateProductAttributes,
   searchProductCache,
   splitProductRelationship,
   type ProductRecord,
@@ -85,5 +86,22 @@ export async function listCommerceProducts(
       sourceId,
       productCount: allItems.filter((item) => item.sourceId === sourceId).length,
     })),
+  });
+}
+
+export async function regenerateCommerceProductAttributes(auth: AuthContext, config: CoreConfig) {
+  const result = await regenerateProductAttributes(auth.tenantId, config);
+  const catalogHints = await listCatalogSearchHints(auth.tenantId, config);
+  return ok({
+    ...result,
+    generated: {
+      tags: catalogHints.tags,
+      materials: catalogHints.materials,
+      occasions: catalogHints.occasions,
+      recipients: catalogHints.recipients,
+      useCases: catalogHints.useCases,
+      styles: catalogHints.styles,
+      priceBands: catalogHints.priceBands,
+    },
   });
 }

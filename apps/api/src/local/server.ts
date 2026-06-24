@@ -156,6 +156,7 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/knowledge/page-voice/upload", handler: knowledgePageVoiceHandler },
   { method: "POST", path: "/api/v1/knowledge/detect-platform", handler: knowledgeDetectPlatformHandler },
   { method: "GET", path: "/api/v1/commerce/products", handler: commerceProductsHandler },
+  { method: "POST", path: "/api/v1/commerce/products/regenerate-attributes", handler: commerceProductsHandler },
   { method: "GET", path: "/api/v1/commerce/wordpress/status", handler: wordpressStatusHandler },
   { method: "POST", path: "/api/v1/commerce/wordpress/connect", handler: wordpressConnectHandler },
   { method: "POST", path: "/api/v1/commerce/wordpress/sync", handler: wordpressSyncHandler },
