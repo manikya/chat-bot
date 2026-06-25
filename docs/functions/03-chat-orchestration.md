@@ -1,15 +1,15 @@
 # Function Spec: Chat Orchestration
 
 **Parent:** [00-MASTER-ARCHITECTURE.md](../00-MASTER-ARCHITECTURE.md)  
-**Version:** 1.2  
+**Version:** 1.3  
 **Implementation:** `packages/core/src/chat/orchestrator.ts`  
-**Related:** [07-chat-quality-roadmap.md](../implementation/07-chat-quality-roadmap.md) (funnel, sub-intents, CTAs)
+**Related:** [07-chat-quality-roadmap.md](../implementation/07-chat-quality-roadmap.md) (funnel, sub-intents, CTAs, sales planner)
 
 ---
 
 ## 1. Purpose
 
-Process every inbound customer message end-to-end: session management, intent detection, RAG retrieval, LLM invocation, tool execution, and outbound reply — channel-agnostic.
+Process every inbound customer message end-to-end: session management, intent detection, sales planning, RAG retrieval, LLM invocation, tool execution, and outbound reply — channel-agnostic.
 
 ---
 
@@ -65,13 +65,15 @@ flowchart TD
   C --> D[Load tenant config + conversation history]
   D --> E[detectIntent + detectSubIntent]
   E --> E2[resolveFunnelContext + qualification]
-  E2 --> F[Persist inbound MSG]
+  E2 --> P[runSalesPlanner JSON call]
+  P --> Q[Merge deterministic + grounded planner slots]
+  Q --> F[Persist inbound MSG]
   F --> G[retrieveForIntent RAG]
   G --> H[buildSystemPrompt + load cart]
   H --> I[createLLMProvider]
   I --> J{LLM available?}
   J -->|yes| K[Select model by intent]
-  K --> L[LLM chat loop max 3 rounds]
+  K --> L[Main LLM chat loop max 3 rounds]
   L --> M{tool_calls?}
   M -->|yes| N[executeTool]
   N --> L
@@ -95,16 +97,18 @@ Numbered steps (spec):
 8.  Detect intent (faq | product | checkout | greeting | unknown)
 9.  Detect sub-intent (browse, compare, detail, objection_*, etc.)
 10. Resolve funnel stage (discover → compare → objection → cart → checkout)
-11. Update qualification slots (budget, category, recipient, objections)
-12. Retrieve RAG context (filtered by intent + source_type; objection FAQ tag boost)
-13. Build LLM messages array (system + history + user + funnel hints)
-14. Call OpenAI via createLLMProvider (model per intent from tenant llmConfig)
-15. If tool_calls → execute tools → loop (max 3 rounds)
-16. Build suggestedActions (CTAs) for web channel
-17. Fallback reply if no LLM or empty response
-18. Persist outbound message(s) to DynamoDB (with funnelStage, subIntent)
-19. Increment usage counters (messages, tokens)
-20. Return reply to channel handler (Meta send / widget SSE / JSON)
+11. Load catalog hints for product-like turns
+12. Run sales planner JSON call when product-like (`sales-planner.ts`)
+13. Merge deterministic qualification with trusted, grounded planner slots
+14. Retrieve RAG context using planner search query when trusted
+15. Build main LLM messages array (system + history + user + funnel hints)
+16. Call LLM via `createLLMProvider` (model per intent from tenant `llmConfig`)
+17. If `tool_calls` → execute tools → loop (max 3 rounds)
+18. Build `suggestedActions` (CTAs) for web channel
+19. Fallback reply if no LLM or empty response
+20. Persist outbound message(s) to DynamoDB (with `funnelStage`, `subIntent`)
+21. Increment usage counters (messages, tokens, including planner call)
+22. Return reply to channel handler (Meta send / widget SSE / JSON)
 ```
 
 ---
@@ -181,9 +185,34 @@ Funnel stage (`packages/core/src/chat/funnel.ts`) advances from conversation + c
 | `cart` | items in cart |
 | `checkout` | checkout link / order status |
 
-### Future
+### Sales planner layer (shipped)
 
-Lightweight LLM classifier (GPT-4.1 nano) when rules confidence < 0.6.
+For product-like turns, `runSalesPlanner()` performs a low-temperature JSON LLM call before the main reply call. It does not answer the shopper directly. It extracts the next sales move:
+
+```typescript
+{
+  confidence,
+  languageStyle,
+  intent,
+  searchQuery,
+  missingSlot,
+  resetContext,
+  productType,
+  material,
+  occasion,
+  recipient,
+  useCase,
+  style,
+  quantity,
+  budget,
+  availabilityQuestion,
+  nextQuestion,
+  replyTone,
+  recoveryActions
+}
+```
+
+Planner output is merged only when trusted and grounded in the latest user message or tenant catalog aliases. This prevents stale context such as old recipient/style/budget filters from leaking into a new request like `show me silver elephant`.
 
 ---
 
@@ -199,7 +228,8 @@ Lightweight LLM classifier (GPT-4.1 nano) when rules confidence < 0.6.
 ### RAG injection
 
 ```
-[System prompt + store config]
+[Sales planner JSON call: latest message + recent history + existing qualification + catalog hints]
+[Main system prompt + store config]
 [Retrieved chunks — max 5, ~500 tokens each]
 [Conversation history]
 [Current user message]
@@ -213,6 +243,64 @@ Lightweight LLM classifier (GPT-4.1 nano) when rules confidence < 0.6.
 | `product` | catalog, website | social |
 | `checkout` | catalog | website (shipping) |
 | `greeting` | — (use prompts only) | — |
+
+---
+
+## 6a. LLM call structure and prompt locations
+
+### Sales planner call
+
+**Prompt location:** `packages/core/src/chat/sales-planner.ts` in `runSalesPlanner()`.
+
+Shape:
+
+```typescript
+await llm.chat({
+  model,
+  temperature: 0.1,
+  maxOutputTokens: 350,
+  messages: [
+    { role: "system", content: "You are a multilingual ecommerce sales planning module..." },
+    {
+      role: "user",
+      content: JSON.stringify({
+        latestMessage,
+        recentHistory,
+        existingQualification,
+        catalogHints,
+      }),
+    },
+  ],
+});
+```
+
+The response is parsed as compact JSON and exposed as `salesPlan` in chat responses/evals.
+
+### Main chat call
+
+**Prompt location:** `packages/core/src/chat/prompts.ts` in `buildSystemPrompt()`. The tenant base prompt is `config.prompts.systemPrompt`.
+
+**Call location:** `packages/core/src/chat/orchestrator.ts`.
+
+Shape:
+
+```typescript
+const messages = [
+  { role: "system", content: systemPrompt },
+  ...historyToChatMessages(history),
+  { role: "user", content: text },
+];
+
+await llm.chat({
+  model,
+  messages,
+  tools,
+  temperature,
+  maxOutputTokens,
+});
+```
+
+If the LLM returns tool calls, the orchestrator appends assistant/tool messages and repeats the main chat call up to `MAX_TOOL_ROUNDS`.
 
 ---
 

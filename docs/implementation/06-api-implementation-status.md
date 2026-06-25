@@ -1,14 +1,14 @@
 # API Implementation Status
 
 **Parent:** [02-api-specification.md](02-api-specification.md)  
-**Last updated:** 2026-06-16  
+**Last updated:** 2026-06-25  
 **Local API:** `http://localhost:3001` (real Lambdas + mock fallback)  
 **AWS dev API:** `https://fimfx57xwl.execute-api.us-east-1.amazonaws.com`  
 **AWS dev admin:** `https://d3g8dfkodwqrza.cloudfront.net`  
 **AWS dev widget CDN:** `https://dtm79sin0m5bg.cloudfront.net/widget/v1.js`  
 **AWS dev ingest SFN:** `commercechat-dev-ingest`  
 **AWS dev vectors:** `commercechat-dev-vectors`  
-**Chat quality:** Phases 1–4 shipped — see [07-chat-quality-roadmap.md](07-chat-quality-roadmap.md)
+**Chat quality:** Phases 1–5 shipped locally — see [07-chat-quality-roadmap.md](07-chat-quality-roadmap.md)
 
 ---
 
@@ -57,8 +57,10 @@
 | 2026-06-16 | **Eval suite:** `apps/api/scripts/eval-chat/` + `npm run eval:chat` (6 golden cases; dev verified 6/6) |
 | 2026-06-16 | **Admin:** conversation funnel badge + shopper context card; analytics `funnelStageBreakdown` + `subIntentBreakdown` |
 | 2026-06-16 | **AWS deploy:** API `commercechat-dev-2026-06-16T20-05-02-022Z.json`; widget CDN invalidation `20-05-35` |
+| 2026-06-25 | **Chat quality Phase 5:** LLM sales planner (`sales-planner.ts`), tenant catalog aliases, contextual price bands, sales recovery CTAs, `salesPlan` eval visibility |
+| 2026-06-25 | **Conversation state hardening:** grounded planner slot merge, explicit-topic context reset, uncertainty replies ignored as constraints (`no idea`, `not sure`) |
 
-**Git (local `main`):** chat quality roadmap + widget cart (uncommitted at doc time).
+**Git (local `main`):** `ea0d8e6 Harden sales planner context handling` committed locally. Push to GitHub blocked by current credential permissions (`manikya-capricon` 403). Untracked deployment inventory JSON intentionally excluded.
 
 ---
 
@@ -79,6 +81,7 @@ flowchart TB
   WH & W & C --> ORCH
   ORCH --> INTENT[detectIntent + detectSubIntent]
   ORCH --> FUNNEL[resolveFunnelContext]
+  ORCH --> PLAN[runSalesPlanner JSON plan]
   ORCH --> RAG[retrieveKnowledge]
   ORCH --> LLM[OpenAILLMProvider]
   ORCH --> TOOLS[executeTool]
@@ -198,7 +201,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 
 **Also built (not a route):**
 - `jwt-authorizer` — API Gateway authorizer; Bearer in handlers locally
-- Chat orchestrator — `packages/core/src/chat/` ([07-chat-quality-roadmap.md](07-chat-quality-roadmap.md): funnel, sub-intents, CTAs, `compare_products`, `get_related_products`)
+- Chat orchestrator — `packages/core/src/chat/` ([07-chat-quality-roadmap.md](07-chat-quality-roadmap.md): funnel, sub-intents, CTAs, sales planner, `compare_products`, `get_related_products`)
 - Messenger inbound/outbound — `packages/core/src/meta/messenger-*.ts`, `process-messenger-inbound.ts`
 - Meta credentials — DynamoDB tenant credential records `commercechat/{tenantId}/meta/{whatsapp|messenger}` when `META_SECRETS_BACKEND=dynamodb`; else `.data/meta/*.json`
 - Meta token refresh — EventBridge `cron(0 3 * * ? *)` UTC + optional `POST /internal/cron/meta-token-refresh`
@@ -214,6 +217,8 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 - Ingest pipeline (AWS) — SQS + Step Functions `commercechat-{env}-ingest` when deployed with `--with-ingest-step-functions`
 - **Shopify app** — `apps/api/src/shopify-app/` (cookieless OAuth, DynamoDB sessions, stale-token re-auth); ScriptTag via `packages/core/src/commerce/shopify/widget-script.ts`
 - **Catalog debounce** — `packages/core/src/commerce/catalog-sync-trigger.ts` queues ingest when Shopify/Woo product webhooks fire
+- **Sales planner layer** — `packages/core/src/chat/sales-planner.ts` makes a low-temperature JSON LLM call before the main chat call. It outputs `confidence`, `searchQuery`, `missingSlot`, `resetContext`, slot hints, language style, and recovery actions; trusted slots are grounded against the latest message/catalog aliases before merging.
+- **Tenant catalog intelligence** — `listCatalogSearchHints()` now includes contextual price bands by category/material and aliases such as `piththala` → `Brass`, `ridi`/`රිදී` → `Silver`, `aliya`/`අලියා` → `Elephant` when supported by catalog data.
 
 **Code locations:**
 - Handlers: `apps/api/src/handlers/`
@@ -275,7 +280,7 @@ MFA (TOTP + email OTP), full payment gateway adapter (Sri Lankan provider — St
 - **Website crawl on AWS** — `crawl.json` in data S3 bucket
 - **WordPress plugin CDN** — `widgetScriptUrl` from register-cloud / widget-bootstrap
 - **Shopify widget toggle** — `widgetConfig.widgetEnabled` + ScriptTag sync; admin Knowledge card + Shopify app `/app`
-- **Chat quality Phases 1–4** — funnel/sub-intent on messages; `cta.ts`; widget cart API; eval suite
+- **Chat quality Phases 1–5** — funnel/sub-intent on messages; `cta.ts`; widget cart API; eval suite; LLM sales planner; grounded context reset
 
 ---
 
