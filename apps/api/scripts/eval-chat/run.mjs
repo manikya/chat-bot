@@ -55,6 +55,7 @@ async function chat(message, sessionId) {
     suggestedActionMessages: (data.suggestedActions ?? []).map((a) => a.message).filter(Boolean),
     tools: (data.toolResults ?? []).map((t) => t.tool).join(", "),
     retrievedChunks: data.retrievedChunks ?? [],
+    salesPlan: data.salesPlan ?? null,
   };
 }
 
@@ -93,6 +94,12 @@ async function main() {
           `score=${evaluation.score} cards=${out.productCards} skus=${out.productSkus.join("|") || "-"} ` +
           `actions=${out.suggestedActions} tools=${out.tools || "-"}`
       );
+      if (out.salesPlan) {
+        console.log(
+          `  plan trusted=${out.salesPlan.trusted ?? "?"} confidence=${out.salesPlan.confidence ?? "?"} ` +
+            `lang=${out.salesPlan.languageStyle ?? "?"} query=${out.salesPlan.searchQuery ?? "-"} slot=${out.salesPlan.missingSlot ?? "-"}`
+        );
+      }
       console.log(`  → ${preview}${String(out.reply).length > 140 ? "…" : ""}`);
       if (out.retrievedChunks.length) {
         for (const chunk of out.retrievedChunks.slice(0, 5)) {

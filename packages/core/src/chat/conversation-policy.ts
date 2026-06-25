@@ -54,7 +54,7 @@ function hasUseCase(qualification?: QualificationState): boolean {
   return Boolean(
     qualification?.category ||
       qualification?.recipient ||
-      qualification?.constraints?.some((c) => /gift|corporate|cooperate|event|giveaway|decor|award|personal/i.test(c))
+      qualification?.constraints?.some((c) => !isPriceTierPhrase(c))
   );
 }
 
@@ -85,9 +85,21 @@ function isPriceTierPhrase(value: string): boolean {
   return /^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(value.trim());
 }
 
-function budgetActions(catalogHints?: CatalogSearchHints): WidgetAction[] {
-  if (catalogHints?.priceBands?.length) {
-    return catalogHints.priceBands.slice(0, 3).map((band) => ({
+function priceBandsForQualification(catalogHints?: CatalogSearchHints, qualification?: QualificationState) {
+  const terms = [qualification?.category, ...(qualification?.constraints ?? [])].map((term) => term?.trim()).filter(Boolean) as string[];
+  for (const term of terms) {
+    const materialBands = catalogHints?.priceBandsByMaterial?.[term];
+    if (materialBands?.length) return materialBands;
+    const categoryBands = catalogHints?.priceBandsByCategory?.[term];
+    if (categoryBands?.length) return categoryBands;
+  }
+  return catalogHints?.priceBands;
+}
+
+function budgetActions(catalogHints?: CatalogSearchHints, qualification?: QualificationState): WidgetAction[] {
+  const bands = priceBandsForQualification(catalogHints, qualification);
+  if (bands?.length) {
+    return bands.slice(0, 3).map((band) => ({
       type: "message" as const,
       label: band.label,
       message: band.message,
@@ -238,7 +250,7 @@ export function planConversationMove(input: {
       reply: recipient
         ? `Nice, for ${recipient}. What budget should I stay within?`
         : "Sure. What budget should I stay within?",
-      suggestedActions: budgetActions(catalogHints),
+      suggestedActions: budgetActions(catalogHints, qualification),
     };
   }
 

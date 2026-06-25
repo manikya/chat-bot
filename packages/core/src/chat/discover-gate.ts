@@ -107,7 +107,7 @@ function hasUseCase(qualification?: QualificationState): boolean {
   return Boolean(
     qualification?.category ||
       qualification?.recipient ||
-      qualification?.constraints?.some((c) => /gift|corporate|cooperate|event|giveaway|decor|award|personal/i.test(c))
+      qualification?.constraints?.some((c) => !/^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(c.trim()))
   );
 }
 

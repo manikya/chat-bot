@@ -118,6 +118,7 @@ export interface QualificationState {
   budget?: { min?: number; max?: number };
   category?: string;
   recipient?: string;
+  quantity?: number;
   constraints?: string[];
   removeConstraints?: string[];
   objectionsRaised?: string[];
@@ -177,6 +178,7 @@ export interface ChatResult {
   funnelStage?: FunnelStage;
   subIntent?: ChatSubIntent;
   suggestedActions?: WidgetAction[];
+  salesPlan?: Record<string, unknown> | null;
   usage?: { inputTokens: number; outputTokens: number };
   /** Set when inbound was stored but the bot did not auto-reply (human handling). */
   handledBy?: "bot" | "human";

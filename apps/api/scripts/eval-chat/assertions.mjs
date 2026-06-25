@@ -241,6 +241,25 @@ const CHECKS = [
       return matched ? null : `retrieved chunks missing any of ${expect.retrievedTextIncludesAny.join("|")}`;
     },
   },
+  {
+    id: "salesPlanTrusted",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanTrusted != null,
+    run: (out, expect) =>
+      Boolean(out.salesPlan?.trusted) === Boolean(expect.salesPlanTrusted)
+        ? null
+        : `salesPlan trusted expected ${expect.salesPlanTrusted}, got ${out.salesPlan?.trusted ?? "?"}`,
+  },
+  {
+    id: "salesPlanSearchIncludes",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanSearchIncludes,
+    run: (out, expect) => {
+      const query = String(out.salesPlan?.searchQuery ?? "").toLowerCase();
+      const missing = expect.salesPlanSearchIncludes.filter((term) => !query.includes(String(term).toLowerCase()));
+      return missing.length ? `salesPlan searchQuery missing ${missing.join(", ")}` : null;
+    },
+  },
 ];
 
 export function evaluateCase(out, expect = {}, criteria = DEFAULT_CRITERIA) {

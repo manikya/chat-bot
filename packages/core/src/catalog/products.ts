@@ -151,6 +151,9 @@ export interface CatalogSearchHints {
   useCases: string[];
   styles: string[];
   priceBands: CatalogPriceBand[];
+  priceBandsByCategory: Record<string, CatalogPriceBand[]>;
+  priceBandsByMaterial: Record<string, CatalogPriceBand[]>;
+  aliases: Record<string, string[]>;
   occasionRecipients: Record<string, string[]>;
   relatedByCategory: Record<string, string[]>;
 }
@@ -569,6 +572,57 @@ function priceBandsForCatalog(items: ProductRecord[]): CatalogPriceBand[] {
   return buildCatalogPriceBands(items);
 }
 
+function priceBandsByTerm(items: ProductRecord[], terms: string[], matcher: (item: ProductRecord, term: string) => boolean) {
+  return Object.fromEntries(
+    terms
+      .map((term) => [term, buildCatalogPriceBands(items.filter((item) => matcher(item, term)))] as const)
+      .filter(([, bands]) => bands.length)
+  );
+}
+
+function buildCatalogAliases(items: ProductRecord[], materials: string[], categories: string[]): Record<string, string[]> {
+  const aliases = new Map<string, Set<string>>();
+  const add = (alias: string, target: string) => {
+    const key = alias.trim().toLowerCase();
+    const value = target.trim();
+    if (!key || !value) return;
+    const bucket = aliases.get(key) ?? new Set<string>();
+    bucket.add(value);
+    aliases.set(key, bucket);
+  };
+
+  const materialSet = new Set(materials.map((item) => item.toLowerCase()));
+  if (materialSet.has("brass")) {
+    add("piththala", "Brass");
+    add("pittala", "Brass");
+    add("පිත්තල", "Brass");
+  }
+  if (materialSet.has("silver")) {
+    add("ridi", "Silver");
+    add("ridiya", "Silver");
+    add("රිදී", "Silver");
+  }
+
+  const text = items.map((item) => [item.name, item.description, item.category, ...productCategoryList(item)].join(" ")).join(" ").toLowerCase();
+  if (/oil\s+lamp|පහන|පහන්|lamp/.test(text)) {
+    add("pahan", "Oil Lamp");
+    add("pahana", "Oil Lamp");
+    add("පහන්", "Oil Lamp");
+    add("පහන", "Oil Lamp");
+  }
+  if (/elephant|aliya|අලියා/.test(text)) {
+    add("aliya", "Elephant");
+    add("aliyaa", "Elephant");
+    add("අලියා", "Elephant");
+  }
+  for (const category of categories) {
+    const normalized = category.toLowerCase();
+    if (normalized.includes("lamp")) add("lamp", category);
+    if (normalized.includes("decor")) add("decor", category);
+  }
+  return Object.fromEntries([...aliases.entries()].map(([alias, values]) => [alias, [...values]]));
+}
+
 export async function listCatalogSearchHints(
   tenantId: string,
   config: CoreConfig
@@ -610,15 +664,21 @@ export async function listCatalogSearchHints(
     }
   }
 
+  const categoryList = [...categories].sort((a, b) => a.localeCompare(b));
+  const materialList = [...materials].sort((a, b) => a.localeCompare(b));
+
   return {
-    categories: [...categories].sort((a, b) => a.localeCompare(b)),
+    categories: categoryList,
     tags: [...tags].sort((a, b) => a.localeCompare(b)),
-    materials: [...materials].sort((a, b) => a.localeCompare(b)),
+    materials: materialList,
     recipients: [...recipients].sort((a, b) => a.localeCompare(b)),
     occasions: [...occasions].sort((a, b) => a.localeCompare(b)),
     useCases: [...useCases].sort((a, b) => a.localeCompare(b)),
     styles: [...styles].sort((a, b) => a.localeCompare(b)),
     priceBands: priceBandsForCatalog(items),
+    priceBandsByCategory: priceBandsByTerm(items, categoryList, (item, term) => productCategoryList(item).some((category) => category.toLowerCase() === term.toLowerCase())),
+    priceBandsByMaterial: priceBandsByTerm(items, materialList, (item, term) => splitProductRelationship(item.material).some((material) => material.toLowerCase() === term.toLowerCase())),
+    aliases: buildCatalogAliases(items, materialList, categoryList),
     occasionRecipients: Object.fromEntries(
       [...occasionRecipients.entries()].map(([occasion, values]) => [
         occasion,

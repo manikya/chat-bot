@@ -6,6 +6,7 @@ import type { SearchProductHit } from "./product-reply";
 import { extractProductHitsFromTools, productSearchWasEmpty } from "./product-reply";
 import { chooseEngagementMove } from "./engagement-policy";
 import { formatMoney } from "./locale";
+import { plannerRecoveryActions, type SalesPlan } from "./sales-planner";
 
 const PAGE_WORD_STOP = new Set(["products", "product", "collections", "collection", "shop", "store"]);
 
@@ -91,8 +92,22 @@ function rankedHintActions(input: {
   return ranked.map(({ term }) => messageAction(term, `Show me ${term}`));
 }
 
-function budgetActions(catalogHints?: CatalogSearchHints, products: SearchProductHit[] = []): WidgetAction[] {
-  const bands = catalogHints?.priceBands?.length ? catalogHints.priceBands : buildCatalogPriceBands(products);
+function contextualPriceBands(catalogHints?: CatalogSearchHints, qualification?: QualificationState) {
+  const candidates = [qualification?.category, ...(qualification?.constraints ?? [])]
+    .map((term) => term?.trim())
+    .filter((term): term is string => Boolean(term));
+  for (const term of candidates) {
+    const materialBands = catalogHints?.priceBandsByMaterial?.[term];
+    if (materialBands?.length) return materialBands;
+    const categoryBands = catalogHints?.priceBandsByCategory?.[term];
+    if (categoryBands?.length) return categoryBands;
+  }
+  return catalogHints?.priceBands;
+}
+
+function budgetActions(catalogHints?: CatalogSearchHints, products: SearchProductHit[] = [], qualification?: QualificationState): WidgetAction[] {
+  const contextualBands = contextualPriceBands(catalogHints, qualification);
+  const bands = contextualBands?.length ? contextualBands : buildCatalogPriceBands(products);
   return bands.slice(0, 3).map((band) => messageAction(band.label, band.message));
 }
 
@@ -201,8 +216,9 @@ export function buildSuggestedCtas(input: {
   catalogHints?: CatalogSearchHints;
   pageUrl?: string;
   qualification?: QualificationState;
+  salesPlan?: SalesPlan | null;
 }): WidgetAction[] {
-  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market, catalogHints, pageUrl, qualification } =
+  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market, catalogHints, pageUrl, qualification, salesPlan } =
     input;
   const products = extractProductHitsFromTools(toolResults);
   const inStockProducts = products.filter((p) => p.inStock !== false);
@@ -212,7 +228,7 @@ export function buildSuggestedCtas(input: {
 
   if (gateProductSearch) {
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
-    return [...hintActions, ...budgetActions(catalogHints, products)].slice(0, 3);
+    return [...hintActions, ...budgetActions(catalogHints, products, qualification)].slice(0, 3);
   }
 
   if (subIntent === "checkout_ready" || funnelStage === "checkout") {
@@ -282,7 +298,8 @@ export function buildSuggestedCtas(input: {
       ];
     }
     if (emptyProductSearch && hasFocusedQualification(qualification)) {
-      return recoveryActions({ qualification, catalogHints, market });
+      const plannerActions = plannerRecoveryActions(salesPlan ?? null);
+      return (plannerActions.length ? plannerActions : recoveryActions({ qualification, catalogHints, market })).slice(0, 3);
     }
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
     return hintActions.length ? hintActions : [];

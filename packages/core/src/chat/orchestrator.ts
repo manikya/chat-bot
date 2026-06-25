@@ -36,6 +36,15 @@ import { buildProductResultsIntro, planConversationMove } from "./conversation-p
 import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
 import { buildProductSearchQuery } from "./product-query";
 import {
+  plannerFallbackQuestion,
+  plannerProductResultsIntro,
+  plannerSearchQuery,
+  publicSalesPlan,
+  runSalesPlanner,
+  salesPlanToQualificationPatch,
+  trustedSalesPlan,
+} from "./sales-planner";
+import {
   handleStaleCartMessage,
   isCartAbandonmentReply,
   isCartContinuationReply,
@@ -48,6 +57,8 @@ import { notifyAgentInboundMessage, getHandlingMode } from "./agent-notify";
 import { marketFromTimezone } from "./locale";
 
 const MAX_TOOL_ROUNDS = 3;
+const PRICE_TIER_CONSTRAINTS = /^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i;
+const STYLE_ONLY_CONSTRAINTS = /^(practical|sentimental|decorative|minimal|modern|traditional|classic)$/i;
 
 export interface OrchestratorInput {
   channel: string;
@@ -170,6 +181,24 @@ function shouldRunProductSearch(
   return intent === "product" || intent === "checkout" || messageMentionsProducts(message);
 }
 
+function shouldResetShoppingContextForMessage(input: {
+  message: string;
+  deterministicPatch: ReturnType<typeof extractQualificationFromMessage>;
+  plannedSearchQuery?: string;
+  hasExistingQualification: boolean;
+}): boolean {
+  if (!input.hasExistingQualification) return false;
+  if (!/\b(show\s+me|show\s+us|do\s+you\s+have|looking\s+for|i\s+need|need|i\s+want|want)\b/i.test(input.message)) {
+    return false;
+  }
+  const meaningfulConstraints = (input.deterministicPatch.constraints ?? []).filter(
+    (constraint) => !PRICE_TIER_CONSTRAINTS.test(constraint.trim()) && !STYLE_ONLY_CONSTRAINTS.test(constraint.trim())
+  );
+  if (meaningfulConstraints.length) return true;
+  const query = input.plannedSearchQuery?.trim();
+  return Boolean(query && query.split(/\s+/).length >= 2 && !/\b(premium|budget|affordable|cheap|mid range)\b/i.test(query));
+}
+
 function isCatalogOverviewQuestion(message: string): boolean {
   const normalized = message.toLowerCase().replace(/\btyoe\b/g, "type");
   return /\b(what\s+(type|types|kind|kinds)\s+of\s+(products|items)|what\s+(products|items)\s+do\s+you\s+have|what\s+do\s+you\s+(sell|have)|categories|product\s+categories)\b/i.test(
@@ -270,20 +299,52 @@ export async function runChatOrchestrator(
   const subIntent = detectSubIntent(text, intent, funnel.stage);
   const market = marketFromTimezone(timezone);
   const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
+  const llm = createLLMProvider(config);
+  const salesPlanningEnabled = intent === "product" || messageMentionsProducts(text);
   const catalogHints =
-    intent === "product" || messageMentionsProducts(text)
+    salesPlanningEnabled
       ? await listCatalogSearchHints(auth.tenantId, config)
       : undefined;
-  const qualification = mergeQualification(
-    conversation.qualification ?? funnel.qualification,
-    extractQualificationFromMessage(text, market, {
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  const planner = await runSalesPlanner({
+    llm: salesPlanningEnabled ? llm : null,
+    model: tenantConfig.llmConfig.models.product ?? config.llmModel,
+    message: text,
+    history,
+    qualification: conversation.qualification ?? funnel.qualification,
+    catalogHints,
+  });
+  totalInputTokens += planner.usage.inputTokens;
+  totalOutputTokens += planner.usage.outputTokens;
+  const trustedPlan = trustedSalesPlan(planner.plan);
+  const extractionOptions = {
       catalogCategories: catalogHints?.categories,
       catalogTags: catalogHints?.tags,
       catalogMaterials: catalogHints?.materials,
       catalogOccasions: catalogHints?.occasions,
       catalogUseCases: catalogHints?.useCases,
       catalogStyles: catalogHints?.styles,
-    })
+      catalogAliases: catalogHints?.aliases,
+  };
+  const deterministicPatch = extractQualificationFromMessage(text, market, extractionOptions);
+  const plannedSearchQuery = plannerSearchQuery(trustedPlan);
+  const plannedPatch = salesPlanToQualificationPatch(trustedPlan, {
+    latestMessage: text,
+    catalogAliases: catalogHints?.aliases,
+  });
+  const shouldResetContext =
+    trustedPlan?.resetContext ||
+    shouldResetShoppingContextForMessage({
+      message: text,
+      deterministicPatch,
+      plannedSearchQuery,
+      hasExistingQualification: Boolean(conversation.qualification ?? funnel.qualification),
+    });
+  const qualificationBase = shouldResetContext ? undefined : conversation.qualification ?? funnel.qualification;
+  const qualification = mergeQualification(
+    mergeQualification(qualificationBase, deterministicPatch),
+    plannedPatch
   );
   const funnelOrQualChanged =
     funnel.changed ||
@@ -404,7 +465,7 @@ export async function runChatOrchestrator(
   }
 
   const productAwareQuery = buildProductSearchQuery({
-    message: text,
+    message: plannedSearchQuery ?? text,
     qualification,
     pageUrl,
   });
@@ -431,6 +492,7 @@ export async function runChatOrchestrator(
     market,
     catalogHints,
   });
+  const plannerQuestion = trustedPlan?.nextQuestion?.trim() || plannerFallbackQuestion(trustedPlan);
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,
     timezone,
@@ -441,7 +503,6 @@ export async function runChatOrchestrator(
     pageUrl,
   });
 
-  const llm = createLLMProvider(config);
   const tools = toolsForIntent(intent, text, funnel.stage, subIntent, { gateProductSearch });
   const toolCtx = {
     auth,
@@ -462,8 +523,6 @@ export async function runChatOrchestrator(
   ];
 
   const toolResults: Array<{ tool: string; success: boolean; result: unknown }> = [];
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
   let replyContent = "";
 
   if (llm && !(gateProductSearch && conversationPolicy.reply)) {
@@ -524,7 +583,9 @@ export async function runChatOrchestrator(
   }
 
   if (!replyContent) {
-    if (conversationPolicy.reply) {
+    if (gateProductSearch && plannerQuestion) {
+      replyContent = plannerQuestion;
+    } else if (conversationPolicy.reply) {
       replyContent = conversationPolicy.reply;
     } else if (gateProductSearch) {
       replyContent = discoverQualifyPrompt(text, market, catalogHints);
@@ -532,7 +593,7 @@ export async function runChatOrchestrator(
       const { result, success } = await executeTool(
         "search_products",
         JSON.stringify({
-          query: text,
+          query: plannedSearchQuery ?? text,
           limit: 3,
           category: qualification.category,
           maxPrice: qualification.budget?.max,
@@ -562,7 +623,7 @@ export async function runChatOrchestrator(
     const { result, success } = await executeTool(
       "search_products",
       JSON.stringify({
-        query: text,
+        query: plannedSearchQuery ?? text,
         limit: 3,
         category: qualification.category,
         maxPrice: qualification.budget?.max,
@@ -597,7 +658,11 @@ export async function runChatOrchestrator(
   const finalToolResults = surfaceProducts ? toolResults : stripProductToolResults(toolResults);
   const finalProducts = extractProductHitsFromTools(finalToolResults);
   if (input.channel === "web" && finalProducts.length) {
-    replyContent = buildProductResultsIntro({
+    replyContent = plannerProductResultsIntro({
+      plan: trustedPlan,
+      productCount: finalProducts.length,
+      scope: qualification.constraints?.slice(0, 2).join(", "),
+    }) ?? buildProductResultsIntro({
       qualification,
       productCount: finalProducts.length,
       market,
@@ -650,6 +715,7 @@ export async function runChatOrchestrator(
           catalogHints,
           pageUrl,
           qualification,
+          salesPlan: trustedPlan,
         });
   const engagement = applyEngagementQuestion(replyContent, {
     intent,
@@ -699,5 +765,6 @@ export async function runChatOrchestrator(
     handledBy: "bot",
     handlingMode: "bot",
     suggestedActions,
+    salesPlan: publicSalesPlan(planner.plan),
   };
 }

@@ -8,26 +8,38 @@ const RECIPIENT_PATTERNS = [
   /\bfor\s+(?:my\s+)?(mom|dad|mother|father|wife|husband|friend|son|daughter|brother|sister)\b/i,
 ];
 
-const NON_RECIPIENT_PHRASES = new Set([
-  "event",
-  "event giveaways",
-  "event table decor",
-  "awards",
-  "awards or appreciation gifts",
-  "appreciation gifts",
-  "table decor",
-  "personal use",
-  "birthday",
-  "anniversary",
-  "wedding",
-  "graduation",
-  "housewarming",
-  "christmas",
-  "new year",
-  "valentine",
-]);
-
 const PRICE_TIER_TERMS = new Set(["budget", "budget friendly", "mid range", "premium", "premium picks", "luxury"]);
+const GENERIC_NON_RECIPIENT_TERMS = /\b(event|giveaways?|decor|awards?|appreciation|personal use|budget|under|below|within|gift|gifts?|shopping|looking|need|want)\b/i;
+const UNKNOWN_PREFERENCE_PATTERN =
+  /^(?:i\s+)?(?:have\s+)?(?:no\s+idea|not\s+sure|unsure|don'?t\s+know|dont\s+know|no\s+preference|anything|any)$/i;
+const CONCRETE_ITEM_STOP_WORDS = new Set([
+  "hi",
+  "hello",
+  "hey",
+  "do",
+  "you",
+  "have",
+  "any",
+  "show",
+  "me",
+  "looking",
+  "for",
+  "need",
+  "want",
+  "items",
+  "item",
+  "products",
+  "product",
+  "thiyenawada",
+  "tiyenawada",
+  "thiyenavada",
+  "tiyenavada",
+  "thiyenawa",
+  "tiyenawa",
+  "thiyeda",
+  "tibeda",
+  "nedda",
+]);
 
 interface QualificationExtractionOptions {
   catalogCategories?: string[];
@@ -36,6 +48,7 @@ interface QualificationExtractionOptions {
   catalogOccasions?: string[];
   catalogUseCases?: string[];
   catalogStyles?: string[];
+  catalogAliases?: Record<string, string[]>;
 }
 
 const GENERIC_CONSTRAINT_PATTERNS = [
@@ -106,6 +119,44 @@ function catalogTermFromMessage(message: string, terms?: string[]): string | und
     .find((term) => messageContainsCatalogTerm(lower, term));
 }
 
+function cleanRecipientCandidate(value: string): string {
+  return value
+    .replace(/\b(gifts?|presents?)\b/gi, "")
+    .replace(/\b(for|to)\b$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function candidateMatchesAnyCatalogTerm(candidate: string, terms: string[] = []): boolean {
+  const normalizedCandidate = candidate.trim();
+  if (!normalizedCandidate) return false;
+  return terms
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 3)
+    .some(
+      (term) =>
+        messageContainsCatalogTerm(normalizedCandidate, term) ||
+        messageContainsCatalogTerm(term, normalizedCandidate)
+    );
+}
+
+function isRecipientCandidate(candidate: string, options?: QualificationExtractionOptions): boolean {
+  const normalized = candidate.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized || candidate.length < 3 || candidate.length > 40) return false;
+  if (GENERIC_NON_RECIPIENT_TERMS.test(candidate)) return false;
+  if (
+    candidateMatchesAnyCatalogTerm(candidate, [
+      ...(options?.catalogOccasions ?? []),
+      ...(options?.catalogUseCases ?? []),
+      ...(options?.catalogCategories ?? []),
+      ...(options?.catalogTags ?? []),
+    ])
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function constraintsToRemoveFromMessage(message: string, options?: QualificationExtractionOptions): string[] {
   const removals = new Map<string, string>();
   const lower = message.toLowerCase();
@@ -135,6 +186,39 @@ function constraintsToRemoveFromMessage(message: string, options?: Qualification
   return [...removals.values()];
 }
 
+function concreteItemPhraseFromMessage(message: string): string | undefined {
+  if (UNKNOWN_PREFERENCE_PATTERN.test(message.trim())) return undefined;
+  const cleaned = message
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s'-]+/gu, " ")
+    .replace(/\b(i'?m|im|i am|i|am|please|pls)\b/g, " ")
+    .replace(/\b(do you have|have you got|looking for|need|want|show me|can you show|can i see)\b/g, " ")
+    .replace(/\b(thiyenawada|tiyenawada|thiyenavada|tiyenavada|thiyenawa|tiyenawa|thiyeda|tibeda|nedda)\b/g, " ")
+    .replace(/\b(items?|products?|options?)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return undefined;
+  if (/\b(best sellers?|recommend|suggest|gift|gifts?|birthday|anniversary|wedding|housewarming|event|personal use|budget|premium|affordable)\b/i.test(cleaned)) {
+    return undefined;
+  }
+  const words = cleaned.split(/\s+/).filter((word) => word && !CONCRETE_ITEM_STOP_WORDS.has(word));
+  if (words.length < 1 || words.length > 4) return undefined;
+  if (words.every((word) => word.length < 3)) return undefined;
+  return words.join(" ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function aliasConstraintsFromMessage(message: string, aliases?: Record<string, string[]>): string[] {
+  const constraints = new Map<string, string>();
+  for (const [alias, values] of Object.entries(aliases ?? {})) {
+    if (!messageContainsCatalogTerm(message, alias)) continue;
+    for (const value of values) {
+      const normalized = value.trim();
+      if (normalized) constraints.set(normalized.toLowerCase(), normalized);
+    }
+  }
+  return [...constraints.values()];
+}
+
 export function extractCategoryFromMessage(
   message: string,
   options?: QualificationExtractionOptions
@@ -157,19 +241,11 @@ export function extractCategoryFromMessage(
   return undefined;
 }
 
-export function extractRecipientFromMessage(message: string): string | undefined {
+export function extractRecipientFromMessage(message: string, options?: QualificationExtractionOptions): string | undefined {
   for (const pattern of RECIPIENT_PATTERNS) {
     const match = message.match(pattern);
-    const who = match?.[1]?.trim();
-    const normalized = who?.toLowerCase().replace(/\s+/g, " ").trim();
-    if (
-      who &&
-      normalized &&
-      who.length >= 3 &&
-      who.length <= 40 &&
-      !NON_RECIPIENT_PHRASES.has(normalized) &&
-      !/\b(event|giveaways?|decor|awards?|appreciation|personal use|budget|under|below|within)\b/i.test(who)
-    ) {
+    const who = cleanRecipientCandidate(match?.[1]?.trim() ?? "");
+    if (who && isRecipientCandidate(who, options)) {
       return who;
     }
   }
@@ -192,6 +268,7 @@ export function extractConstraintsFromMessage(
   message: string,
   options?: QualificationExtractionOptions
 ): string[] {
+  if (UNKNOWN_PREFERENCE_PATTERN.test(message.trim())) return [];
   const constraints = new Map<string, string>();
   const addConstraint = (value: string) => {
     const normalized = value.trim();
@@ -225,6 +302,13 @@ export function extractConstraintsFromMessage(
       addConstraint(normalized);
     }
   }
+  const concreteItemPhrase = concreteItemPhraseFromMessage(message);
+  if (concreteItemPhrase && !candidateMatchesAnyCatalogTerm(concreteItemPhrase, [...constraints.values()])) {
+    addConstraint(concreteItemPhrase);
+  }
+  for (const aliasConstraint of aliasConstraintsFromMessage(message, options?.catalogAliases)) {
+    addConstraint(aliasConstraint);
+  }
   return [...constraints.values()];
 }
 
@@ -240,7 +324,7 @@ export function extractQualificationFromMessage(
   const category = extractCategoryFromMessage(message, options);
   if (category) patch.category = category;
 
-  const recipient = extractRecipientFromMessage(message);
+  const recipient = extractRecipientFromMessage(message, options);
   if (recipient) patch.recipient = recipient;
 
   const constraints = extractConstraintsFromMessage(message, options);
@@ -268,7 +352,12 @@ export function mergeQualification(
   const merged: QualificationState = { ...base };
 
   if (patch.budget) {
-    merged.budget = { ...base.budget, ...patch.budget };
+    merged.budget =
+      patch.budget.min != null && patch.budget.max != null
+        ? { min: patch.budget.min, max: patch.budget.max }
+        : patch.budget.min != null
+          ? { min: patch.budget.min }
+          : { max: patch.budget.max };
   }
   if (patch.category) merged.category = patch.category;
   if (patch.recipient) merged.recipient = patch.recipient;
