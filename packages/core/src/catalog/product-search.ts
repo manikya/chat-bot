@@ -232,6 +232,7 @@ export function rankProductsByRelevance(
     minPrice?: number;
     limit?: number;
     vectorScores?: Map<string, number>;
+    excludeSkus?: string[];
   }
 ): ProductRecord[] {
   let terms = searchTermsFromQuery(query);
@@ -239,6 +240,7 @@ export function rankProductsByRelevance(
     terms = [...new Set([...terms, ...searchTermsFromQuery(options.category)])];
   }
   const limit = options?.limit ?? 5;
+  const excludedSkus = new Set((options?.excludeSkus ?? []).map((sku) => sku.trim().toUpperCase()));
 
   const scored = products
     .map((record) => {
@@ -258,6 +260,7 @@ export function rankProductsByRelevance(
     })
     .filter(({ record, score }) => {
       if (score <= 0) return false;
+      if (excludedSkus.has(record.sku.toUpperCase())) return false;
       if (record.inStock === false) return false;
       if (options?.requiredTerms?.some((term) => !categoryFilterMatches(record, term))) return false;
       if (options?.maxPrice != null && record.price > options.maxPrice) return false;

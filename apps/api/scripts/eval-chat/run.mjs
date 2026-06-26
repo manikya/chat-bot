@@ -75,8 +75,13 @@ async function main() {
       const sessionId = `eval-${Date.now()}-${c.id}`;
       const messages = c.messages ?? [c.message];
       let out;
+      const outputs = [];
       for (const message of messages) {
         out = await chat(message, sessionId);
+        outputs.push(out);
+      }
+      if (out && outputs.length > 1) {
+        out.previousProductSkus = outputs.at(-2)?.productSkus ?? [];
       }
       const evaluation = evaluateCase(out, c.expect ?? {}, criteria);
       const failures = evaluation.failures;
@@ -97,7 +102,9 @@ async function main() {
       if (out.salesPlan) {
         console.log(
           `  plan trusted=${out.salesPlan.trusted ?? "?"} confidence=${out.salesPlan.confidence ?? "?"} ` +
-            `lang=${out.salesPlan.languageStyle ?? "?"} query=${out.salesPlan.searchQuery ?? "-"} slot=${out.salesPlan.missingSlot ?? "-"}`
+            `intent=${out.salesPlan.intent ?? "?"} sub=${out.salesPlan.subIntent ?? "?"} stage=${out.salesPlan.funnelStage ?? "?"} ` +
+            `action=${out.salesPlan.action ?? "?"} gate=${out.salesPlan.gateProductSearch ?? "?"} ` +
+            `move=${out.salesPlan.userMove ?? "?"} lang=${out.salesPlan.languageStyle ?? "?"} query=${out.salesPlan.searchQuery ?? "-"} slot=${out.salesPlan.missingSlot ?? "-"}`
         );
       }
       console.log(`  → ${preview}${String(out.reply).length > 140 ? "…" : ""}`);

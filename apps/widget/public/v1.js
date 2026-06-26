@@ -946,7 +946,11 @@
       render();
       return;
     }
-    fetch(apiBase + "/api/v1/widget/config", {
+    var configUrl = apiBase + "/api/v1/widget/config";
+    try {
+      configUrl += "?pageUrl=" + encodeURIComponent(window.location.href);
+    } catch (e) {}
+    fetch(configUrl, {
       headers: { "X-API-Key": apiKey },
     })
       .then(function (res) {

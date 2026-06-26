@@ -63,8 +63,8 @@ flowchart TD
   B -->|no| X[Reject]
   B --> C[reserveMessageQuota]
   C --> D[Load tenant config + conversation history]
-  D --> E[detectIntent + detectSubIntent]
-  E --> E2[resolveFunnelContext + qualification]
+  D --> E[fallback detectIntent + detectSubIntent]
+  E --> E2[fallback resolveFunnelContext + qualification]
   E2 --> P[runSalesPlanner JSON call]
   P --> Q[Merge deterministic + grounded planner slots]
   Q --> F[Persist inbound MSG]
@@ -94,13 +94,13 @@ Numbered steps (spec):
 5.  Resolve conversationId from externalUserId + channel
 6.  Persist inbound message to DynamoDB
 7.  Load conversation history + cart
-8.  Detect intent (faq | product | checkout | greeting | unknown)
-9.  Detect sub-intent (browse, compare, detail, objection_*, etc.)
-10. Resolve funnel stage (discover → compare → objection → cart → checkout)
-11. Load catalog hints for product-like turns
-12. Run sales planner JSON call when product-like (`sales-planner.ts`)
-13. Merge deterministic qualification with trusted, grounded planner slots
-14. Retrieve RAG context using planner search query when trusted
+8.  Compute fallback intent/sub-intent/funnel using deterministic rules
+9.  Load catalog hints for the planner
+10. Run the LLM chat planner JSON call (`sales-planner.ts`)
+11. Use trusted planner values as primary intent, sub-intent, funnel stage, action, gate, query, and tool policy
+12. Merge deterministic qualification with trusted, grounded planner slots
+13. Retrieve RAG context using planner `ragQuery` or search query when trusted
+14. Persist inbound message with planner-derived route metadata
 15. Build main LLM messages array (system + history + user + funnel hints)
 16. Call LLM via `createLLMProvider` (model per intent from tenant `llmConfig`)
 17. If `tool_calls` → execute tools → loop (max 3 rounds)
@@ -152,9 +152,9 @@ Numbered steps (spec):
 
 ## 5. Intent detection
 
-### MVP approach
+### Current approach
 
-Rule-based classifier first (fast, no extra LLM cost):
+The LLM planner is now the primary router for intent, sub-intent, funnel stage, and next action. Rule-based classifiers in `intent.ts`, `funnel.ts`, `discover-gate.ts`, and `conversation-policy.ts` remain as fallback inputs only when planner JSON is missing, low-confidence, or invalid.
 
 | Signal | Intent |
 |--------|--------|
@@ -164,7 +164,7 @@ Rule-based classifier first (fast, no extra LLM cost):
 | First message in session | `greeting` |
 | Default | `product` |
 
-### Phase 2+ (shipped)
+### Fallback rules
 
 Sub-intents refine product/checkout turns (`packages/core/src/chat/intent.ts`):
 
@@ -185,16 +185,22 @@ Funnel stage (`packages/core/src/chat/funnel.ts`) advances from conversation + c
 | `cart` | items in cart |
 | `checkout` | checkout link / order status |
 
-### Sales planner layer (shipped)
+### LLM planner layer (primary)
 
-For product-like turns, `runSalesPlanner()` performs a low-temperature JSON LLM call before the main reply call. It does not answer the shopper directly. It extracts the next sales move:
+For every bot-handled turn, `runSalesPlanner()` performs a low-temperature JSON LLM call before the main reply call. It does not answer the shopper directly. It extracts the route and next move:
 
 ```typescript
 {
   confidence,
   languageStyle,
   intent,
+  subIntent,
+  funnelStage,
+  action,
+  gateProductSearch,
   searchQuery,
+  ragQuery,
+  toolPolicy,
   missingSlot,
   resetContext,
   productType,
@@ -208,11 +214,12 @@ For product-like turns, `runSalesPlanner()` performs a low-temperature JSON LLM 
   availabilityQuestion,
   nextQuestion,
   replyTone,
+  suggestedActions,
   recoveryActions
 }
 ```
 
-Planner output is merged only when trusted and grounded in the latest user message or tenant catalog aliases. This prevents stale context such as old recipient/style/budget filters from leaking into a new request like `show me silver elephant`.
+Planner output is used only when trusted and normalized. Slot values are persisted only when grounded in the latest user message, existing state, or tenant catalog aliases. Planner `nextQuestion` and `suggestedActions` are authoritative for engagement on trusted turns; deterministic engagement runs only as fallback. This prevents stale context such as old recipient/style/budget filters from leaking into a new request like `show me silver elephant`.
 
 ---
 
@@ -228,7 +235,7 @@ Planner output is merged only when trusted and grounded in the latest user messa
 ### RAG injection
 
 ```
-[Sales planner JSON call: latest message + recent history + existing qualification + catalog hints]
+[Chat planner JSON call: latest message + recent history + existing qualification + cart count + page URL + catalog hints + fallback route]
 [Main system prompt + store config]
 [Retrieved chunks — max 5, ~500 tokens each]
 [Conversation history]
@@ -248,7 +255,7 @@ Planner output is merged only when trusted and grounded in the latest user messa
 
 ## 6a. LLM call structure and prompt locations
 
-### Sales planner call
+### Chat planner call
 
 **Prompt location:** `packages/core/src/chat/sales-planner.ts` in `runSalesPlanner()`.
 
@@ -260,7 +267,7 @@ await llm.chat({
   temperature: 0.1,
   maxOutputTokens: 350,
   messages: [
-    { role: "system", content: "You are a multilingual ecommerce sales planning module..." },
+    { role: "system", content: "You are a multilingual ecommerce chat router and sales planning module..." },
     {
       role: "user",
       content: JSON.stringify({
@@ -268,13 +275,16 @@ await llm.chat({
         recentHistory,
         existingQualification,
         catalogHints,
+        fallback,
+        cartItemCount,
+        pageUrl,
       }),
     },
   ],
 });
 ```
 
-The response is parsed as compact JSON and exposed as `salesPlan` in chat responses/evals.
+The response is normalized, validated, and exposed as `salesPlan` in chat responses/evals.
 
 ### Main chat call
 

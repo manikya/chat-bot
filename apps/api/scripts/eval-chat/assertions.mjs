@@ -137,6 +137,16 @@ const CHECKS = [
     },
   },
   {
+    id: "noRepeatedProductSkusFromPreviousTurn",
+    dimension: "commerce",
+    applies: (expect) => expect.noRepeatedProductSkusFromPreviousTurn,
+    run: (out) => {
+      const previous = new Set(out.previousProductSkus ?? []);
+      const repeated = (out.productSkus ?? []).filter((sku) => previous.has(sku));
+      return repeated.length ? `repeated product SKU from previous turn ${repeated.join(", ")}` : null;
+    },
+  },
+  {
     id: "productNameIncludesAny",
     dimension: "commerce",
     applies: (expect) => expect.productNameIncludesAny,
@@ -154,6 +164,17 @@ const CHECKS = [
       const tooExpensive = (out.products ?? []).filter((p) => Number(p.price) > expect.maxProductPrice);
       return tooExpensive.length
         ? `products above ${expect.maxProductPrice}: ${tooExpensive.map((p) => `${p.sku ?? p.name}:${p.price}`).join(", ")}`
+        : null;
+    },
+  },
+  {
+    id: "minProductPrice",
+    dimension: "commerce",
+    applies: (expect) => expect.minProductPrice != null,
+    run: (out, expect) => {
+      const tooCheap = (out.products ?? []).filter((p) => Number(p.price) < expect.minProductPrice);
+      return tooCheap.length
+        ? `products below ${expect.minProductPrice}: ${tooCheap.map((p) => `${p.sku ?? p.name}:${p.price}`).join(", ")}`
         : null;
     },
   },
@@ -259,6 +280,66 @@ const CHECKS = [
       const missing = expect.salesPlanSearchIncludes.filter((term) => !query.includes(String(term).toLowerCase()));
       return missing.length ? `salesPlan searchQuery missing ${missing.join(", ")}` : null;
     },
+  },
+  {
+    id: "salesPlanIntent",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanIntent,
+    run: (out, expect) =>
+      out.salesPlan?.intent === expect.salesPlanIntent
+        ? null
+        : `salesPlan intent expected ${expect.salesPlanIntent}, got ${out.salesPlan?.intent ?? "?"}`,
+  },
+  {
+    id: "salesPlanSubIntent",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanSubIntent,
+    run: (out, expect) =>
+      out.salesPlan?.subIntent === expect.salesPlanSubIntent
+        ? null
+        : `salesPlan subIntent expected ${expect.salesPlanSubIntent}, got ${out.salesPlan?.subIntent ?? "?"}`,
+  },
+  {
+    id: "salesPlanFunnelStage",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanFunnelStage,
+    run: (out, expect) => {
+      const allowed = Array.isArray(expect.salesPlanFunnelStage) ? expect.salesPlanFunnelStage : [expect.salesPlanFunnelStage];
+      return allowed.includes(out.salesPlan?.funnelStage)
+        ? null
+        : `salesPlan funnelStage expected one of ${allowed.join("|")}, got ${out.salesPlan?.funnelStage ?? "?"}`;
+    },
+  },
+  {
+    id: "salesPlanAction",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanAction,
+    run: (out, expect) => {
+      const allowed = Array.isArray(expect.salesPlanAction) ? expect.salesPlanAction : [expect.salesPlanAction];
+      return allowed.includes(out.salesPlan?.action)
+        ? null
+        : `salesPlan action expected one of ${allowed.join("|")}, got ${out.salesPlan?.action ?? "?"}`;
+    },
+  },
+  {
+    id: "salesPlanUserMove",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanUserMove,
+    run: (out, expect) => {
+      const allowed = Array.isArray(expect.salesPlanUserMove) ? expect.salesPlanUserMove : [expect.salesPlanUserMove];
+      return allowed.includes(out.salesPlan?.userMove)
+        ? null
+        : `salesPlan userMove expected one of ${allowed.join("|")}, got ${out.salesPlan?.userMove ?? "?"}`;
+    },
+  },
+  {
+    id: "salesPlanGateProductSearch",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanGateProductSearch != null,
+    run: (out, expect) =>
+      Boolean(out.salesPlan?.gateProductSearch) === Boolean(expect.salesPlanGateProductSearch)
+        ? null
+        : `salesPlan gate expected ${expect.salesPlanGateProductSearch}, got ${out.salesPlan?.gateProductSearch ?? "?"}`,
   },
 ];
 

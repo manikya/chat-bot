@@ -476,7 +476,14 @@ export async function searchProductCache(
   tenantId: string,
   query: string,
   config: CoreConfig,
-  options?: { category?: string; requiredTerms?: string[]; maxPrice?: number; minPrice?: number; limit?: number }
+  options?: {
+    category?: string;
+    requiredTerms?: string[];
+    maxPrice?: number;
+    minPrice?: number;
+    limit?: number;
+    excludeSkus?: string[];
+  }
 ): Promise<ProductRecord[]> {
   const items = (await listProductItems(tenantId, config)) as ProductRecord[];
   const limit = options?.limit ?? 5;
@@ -582,6 +589,7 @@ function priceBandsByTerm(items: ProductRecord[], terms: string[], matcher: (ite
 
 function buildCatalogAliases(items: ProductRecord[], materials: string[], categories: string[]): Record<string, string[]> {
   const aliases = new Map<string, Set<string>>();
+  const aliasStopWords = new Set(["item", "items", "product", "products", "gift", "gifts", "decor", "decoration"]);
   const add = (alias: string, target: string) => {
     const key = alias.trim().toLowerCase();
     const value = target.trim();
@@ -590,8 +598,38 @@ function buildCatalogAliases(items: ProductRecord[], materials: string[], catego
     bucket.add(value);
     aliases.set(key, bucket);
   };
+  const addGeneratedForms = (target: string) => {
+    const normalized = target
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return;
+    add(normalized, target);
+    const lower = normalized.toLowerCase();
+    if (lower.endsWith(" items")) add(normalized.slice(0, -6), target);
+    if (lower.endsWith(" item")) add(normalized.slice(0, -5), target);
+    if (lower.endsWith("s") && normalized.length > 4) add(normalized.slice(0, -1), target);
+    for (const part of normalized.split(/\s+/)) {
+      if (part.length >= 4 && !aliasStopWords.has(part.toLowerCase())) add(part, target);
+    }
+  };
 
   const materialSet = new Set(materials.map((item) => item.toLowerCase()));
+  for (const material of materials) addGeneratedForms(material);
+  for (const category of categories) addGeneratedForms(category);
+
+  for (const item of items.slice(0, 500)) {
+    for (const term of [
+      ...splitProductRelationship(item.material),
+      ...splitProductRelationship(item.occasion),
+      ...splitProductRelationship(item.compatibility),
+      ...splitProductRelationship(item.tags),
+      ...productCategoryList(item),
+    ]) {
+      addGeneratedForms(term);
+    }
+  }
+
   if (materialSet.has("brass")) {
     add("piththala", "Brass");
     add("pittala", "Brass");
@@ -609,6 +647,12 @@ function buildCatalogAliases(items: ProductRecord[], materials: string[], catego
     add("pahana", "Oil Lamp");
     add("පහන්", "Oil Lamp");
     add("පහන", "Oil Lamp");
+  }
+  if (/punkalasa|pun\s+kalasa|kalasa|කලස/.test(text)) {
+    add("punkalasa", "Punkalasa");
+    add("pun kalasa", "Punkalasa");
+    add("kalasa", "Punkalasa");
+    add("කලස", "Punkalasa");
   }
   if (/elephant|aliya|අලියා/.test(text)) {
     add("aliya", "Elephant");

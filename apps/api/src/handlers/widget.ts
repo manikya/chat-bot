@@ -16,8 +16,10 @@ import { ApiError, ErrorCodes } from "@commercechat/shared";
 import { createApiKeyHandler, createTenantHandler } from "../lib/handler";
 import { corsHeaders, getApiKey, handleError, parseBody } from "../lib/apigw";
 
-export const configHandler = createTenantHandler(async (_event, tenantId) =>
-  getWidgetConfig(tenantId, loadConfig())
+export const configHandler = createTenantHandler(async (event, tenantId) =>
+  getWidgetConfig(tenantId, loadConfig(), {
+    pageUrl: event.queryStringParameters?.pageUrl,
+  })
 );
 
 export const chatHandler = createApiKeyHandler(async (event, tenantId) => {

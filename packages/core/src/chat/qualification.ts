@@ -106,6 +106,14 @@ export function extractBudgetFromMessage(
     if (min != null) return { min };
   }
 
+  const approximateMatch = lower.match(
+    /\b(?:around|about|roughly|approximately|approx\.?|near|close\s+to)\s*(?:rs\.?|lkr|usd|\$|€|£)?\s*([\d,]+(?:\.\d+)?)\s*(?:k|lkr|rs)?\b/i
+  );
+  if (approximateMatch?.[1]) {
+    const max = parseBudgetNumber(approximateMatch[1], market);
+    if (max != null) return { max };
+  }
+
   return undefined;
 }
 

@@ -223,7 +223,133 @@
     "expect": {
       "nonEmptyReply": true,
       "intent": "product",
-      "subIntent": "product_detail"
+      "subIntent": "product_detail",
+      "salesPlanAction": ["get_product_details", "answer"]
+    }
+  },
+  {
+    "id": "concrete-product-search-no-budget-gate",
+    "message": "buddha prathima",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "salesPlanIntent": "product",
+      "salesPlanAction": ["search_products", "ask_question"],
+      "salesPlanGateProductSearch": false,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "uncertainty-does-not-become-search-term",
+    "messages": [
+      "ridi aliya",
+      "i have no idea"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "salesPlanIntent": "product",
+      "replyExcludes": ["No Idea"],
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "explicit-topic-change-resets-context",
+    "messages": [
+      "ridi aliya",
+      "i have no idea",
+      "show me silver elephant"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "salesPlanIntent": "product",
+      "salesPlanAction": ["search_products", "answer"],
+      "salesPlanSearchIncludes": ["silver", "elephant"],
+      "replyExcludes": ["No Idea"],
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "explicit-chip-selection-searches-focused-context",
+    "messages": [
+      "do you have brass gift items",
+      "Show me Gift"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanIntent": "product",
+      "salesPlanUserMove": "chip_selection",
+      "replyExcludes": ["කුමක් වගේ", "what type"],
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "budget-tier-selection-searches-client-gift",
+    "messages": [
+      "hi good morning i need a gift for a client of mine",
+      "mid range"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanIntent": "product",
+      "salesPlanUserMove": ["budget_answer", "chip_selection"],
+      "replyExcludes": ["It's priced.", "couple of mid-range gift options"],
+      "minSuggestedActions": 1,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "approx-budget-searches-mothers-day-gift",
+    "messages": [
+      "do you have mothers day gifts",
+      "around 5000"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanIntent": "product",
+      "salesPlanUserMove": "budget_answer",
+      "replyExcludes": ["It's priced.", "Here are some lovely Mother's Day gift options"],
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "premium-band-message-applies-min-price",
+    "messages": [
+      "brass gifts for coperate event",
+      "Show premium options above LKR 18,000"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanIntent": "product",
+      "salesPlanUserMove": ["budget_answer", "chip_selection"],
+      "minProductPrice": 18000,
+      "replyExcludes": ["LKR 4,990", "LKR 6,900"],
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "show-more-birthday-gifts-avoids-repeating-products",
+    "messages": [
+      "What unique gifts do you have for birthdays?",
+      "what else do you have"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanIntent": "product",
+      "salesPlanUserMove": "show_more",
+      "noRepeatedProductSkusFromPreviousTurn": true,
+      "minProductCards": 1,
+      "maxQuestions": 1
     }
   }
 ]

@@ -22,6 +22,8 @@
     "docker:down": "docker compose down",
     "cost:aws": "node scripts/aws-cost-report.mjs",
     "deploy:aws": "node scripts/deploy-aws-serverless.mjs",
+    "deploy:lambda": "node scripts/deploy-lambda-code.mjs",
+    "deploy:chat": "node scripts/deploy-lambda-code.mjs --handlers=widget,chat-api,onboarding-test-chat",
     "ensure:deploy-iam": "node scripts/ensure-deploy-iam.mjs",
     "deploy:widget": "node scripts/deploy-widget-static.mjs",
     "deploy:aws:full": "node scripts/deploy-aws-serverless.mjs --env=dev --with-ingest-pipeline --with-ingest-step-functions --with-widget-cdn --ensure-iam",

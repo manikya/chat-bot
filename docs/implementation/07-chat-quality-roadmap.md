@@ -3,7 +3,7 @@
 **Parent:** [03-chat-orchestration.md](../functions/03-chat-orchestration.md)  
 **Implementation:** `packages/core/src/chat/`  
 **Last updated:** 2026-06-25  
-**Status:** Phases 1–5 shipped locally · Phases 1–4 deployed to AWS dev 2026-06-16 · Phase 5 API deployed in dev during sales-planner iteration
+**Status:** Phases 1–5 shipped locally · Phase 5 now uses LLM-primary routing with deterministic fallback
 
 ---
 
@@ -13,8 +13,8 @@ CommerceChat uses a **single orchestrator** (`runChatOrchestrator`) — not sepa
 
 | Logical role | Implementation |
 |--------------|----------------|
-| Qualifier | `funnelStage` + `qualification` slots + prompt hints |
-| Sales planner | `sales-planner.ts` low-temperature JSON call for search query, missing slot, language style, reset/recovery plan |
+| Qualifier | LLM `ChatPlan` + grounded `qualification` slots + prompt hints |
+| Sales planner | `sales-planner.ts` low-temperature JSON call for intent, sub-intent, funnel stage, action, search query, missing slot, language style, reset/recovery plan |
 | Recommender | `search_products`, `compare_products`, `get_related_products` |
 | Closer | Stage CTAs + `add_to_cart` + `create_checkout_link` + widget actions |
 
@@ -216,11 +216,11 @@ Widget chat response includes `funnelStage`, `subIntent`, `suggestedActions` (wi
 
 ### 6.1 LLM call structure
 
-There are now two LLM calls in product-like turns:
+There are now two LLM calls in normal bot-handled turns:
 
 | Call | File | Purpose | Output |
 |------|------|---------|--------|
-| Sales planner | `packages/core/src/chat/sales-planner.ts` | Parse latest message + recent history + existing qualification + catalog hints into structured sales state | Compact JSON `SalesPlan` |
+| Chat planner | `packages/core/src/chat/sales-planner.ts` | Parse latest message + recent history + existing qualification + catalog hints into structured routing and sales state | Compact JSON `ChatPlan` / `SalesPlan` |
 | Main chat | `packages/core/src/chat/orchestrator.ts` + `prompts.ts` | Produce the customer-facing answer or tool calls using RAG, cart, tools, and qualification | Assistant text + optional `tool_calls` |
 
 Planner prompt location: `runSalesPlanner()` system message in `packages/core/src/chat/sales-planner.ts`.
@@ -233,8 +233,14 @@ Main prompt location: `buildSystemPrompt()` in `packages/core/src/chat/prompts.t
 interface SalesPlan {
   confidence?: number;
   languageStyle?: "english" | "sinhala" | "tamil" | "singlish" | "mixed" | "unknown";
-  intent?: "product_search" | "gift" | "event" | "faq" | "checkout" | "unknown";
+  intent?: "faq" | "product" | "checkout" | "greeting" | "unknown";
+  subIntent?: ChatSubIntent;
+  funnelStage?: FunnelStage;
+  action?: "ask_question" | "answer" | "search_products" | "compare_products" | "get_product_details" | "cart_action" | "handoff_suggested";
+  gateProductSearch?: boolean;
   searchQuery?: string;
+  ragQuery?: string;
+  toolPolicy?: { allowedTools?: string[] };
   missingSlot?: "budget" | "recipient" | "use_case" | "style" | "quantity" | "none";
   resetContext?: boolean;
   productType?: string;
@@ -248,15 +254,19 @@ interface SalesPlan {
   availabilityQuestion?: boolean;
   nextQuestion?: string;
   replyTone?: "concise" | "consultative" | "premium" | "friendly";
+  suggestedActions?: WidgetAction[];
   recoveryActions?: Array<{ label: string; message: string; strategy?: string }>;
+  reasonCodes?: string[];
 }
 ```
 
-The public chat response includes `salesPlan` for eval/debug visibility: `trusted`, `confidence`, `languageStyle`, `searchQuery`, `missingSlot`, slot values, and recovery actions.
+The public chat response includes `salesPlan` for eval/debug visibility: `trusted`, `confidence`, `intent`, `subIntent`, `funnelStage`, `action`, `gateProductSearch`, `languageStyle`, `searchQuery`, `missingSlot`, slot values, allowed tools, and recovery actions.
 
 ### 6.3 Guardrails
 
 - Planner output is trusted only above `PLANNER_CONFIDENCE_THRESHOLD`.
+- Planner intent, sub-intent, funnel stage, action, gate, and tool policy are primary when trusted.
+- Planner `nextQuestion` and `suggestedActions` are the primary engagement/sales path when trusted; deterministic engagement policy runs only as fallback.
 - Planner slot values are persisted only when grounded in the latest user message or a tenant catalog alias.
 - Budget from the planner is only accepted when the latest message actually contains budget/price-tier language.
 - Explicit new item requests such as `show me silver elephant` reset stale qualification context instead of carrying old filters into the intro/search.
@@ -294,10 +304,16 @@ Current alias examples are generated only when supported by the tenant catalog:
 
 - `salesPlanTrusted`
 - `salesPlanSearchIncludes`
+- `salesPlanIntent`
+- `salesPlanSubIntent`
+- `salesPlanFunnelStage`
+- `salesPlanAction`
+- `salesPlanGateProductSearch`
 
 ### 6.7 Acceptance criteria
 
 - [x] `salesPlan` returned in chat result for debugging/evals
+- [x] Planner intent, sub-intent, funnel stage, action, and gate are primary when trusted
 - [x] Planner search query used for RAG/product search when trusted
 - [x] Planner missing slot can override discovery question
 - [x] Planner recovery actions can become widget CTAs

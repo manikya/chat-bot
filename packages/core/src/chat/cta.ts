@@ -192,6 +192,14 @@ function recoveryActions(input: {
   if (qualification?.budget?.max != null && premiumPhrase) {
     add(`Premium ${premiumPhrase}`, `Show premium ${premiumPhrase} above ${formatMoney(qualification.budget.max, market === "lk" ? "LKR" : "USD")}`);
   }
+  if (qualification?.budget?.min != null && (anchorPhrase || focused[0])) {
+    const phrase = anchorPhrase || focused[0]!;
+    add(
+      `Lower-priced ${phrase}`,
+      `Show ${phrase} under ${formatMoney(qualification.budget.min, market === "lk" ? "LKR" : "USD")}`
+    );
+    add(`All ${phrase}`, `Show all ${phrase}`);
+  }
   if (latest) {
     const materialTerms = new Set((catalogHints?.materials ?? []).map(normalizeTerm));
     const latestKey = normalizeTerm(latest);

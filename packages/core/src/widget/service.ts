@@ -10,10 +10,160 @@ import { Keys } from "../db/keys";
 import { buildWidgetEmbedPlaceholder } from "./embed";
 import { assertWidgetChatRateLimit, assertWidgetConfigRateLimit } from "./rate-limit";
 import { assertTenantOperational, resolveTenantProfile, tenantIsOperational } from "../tenant/status";
-import { marketFromTimezone, suggestedQuestionsForChatContext } from "../chat/locale";
+import { defaultSuggestedQuestions, marketFromTimezone, suggestedQuestionsForChatContext } from "../chat/locale";
 import type { WidgetAction } from "@commercechat/shared";
+import { listCatalogSearchHints, type CatalogSearchHints } from "../catalog/products";
+import { createLLMProvider } from "../llm/provider";
 
-export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
+function pageContext(pageUrl?: string): string[] {
+  if (!pageUrl) return [];
+  try {
+    const url = new URL(pageUrl);
+    return url.pathname
+      .split(/[\/\-_]+/)
+      .map((part) => part.trim().toLowerCase())
+      .filter((part) => part.length >= 3 && !["products", "product", "collections", "collection", "shop", "store"].includes(part))
+      .slice(-4);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeStarter(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function isBadInitialStarter(value: string): boolean {
+  const normalized = normalizeStarter(value);
+  if (!normalized) return true;
+  if (/\b(budget|budget friendly|mid range|premium|lkr|rs|under|above|from|cheap|affordable|price)\b/i.test(normalized)) {
+    return true;
+  }
+  if (/^(what are you looking for|what do you need|how can i help|choose a question)$/i.test(normalized)) return true;
+  return false;
+}
+
+function fallbackInitialSuggestedQuestions(input: {
+  defaults: string[];
+  market?: "default" | "lk";
+  pageUrl?: string;
+  catalogHints?: CatalogSearchHints;
+}): string[] {
+  const { defaults, market = "default", pageUrl, catalogHints } = input;
+  const candidates: string[] = [];
+  const add = (value?: string) => {
+    const text = value?.trim();
+    if (text && !isBadInitialStarter(text)) candidates.push(text);
+  };
+  const pageTerms = pageContext(pageUrl);
+  const catalogTerms = [
+    ...(catalogHints?.categories ?? []),
+    ...(catalogHints?.materials ?? []).map((material) => `${material} items`),
+    ...(catalogHints?.occasions ?? []).map((occasion) => `${occasion} gifts`),
+    ...(catalogHints?.useCases ?? []),
+  ];
+  const pageMatch = catalogTerms.find((term) => {
+    const normalized = normalizeStarter(term);
+    return pageTerms.some((pageTerm) => normalized.includes(pageTerm) || pageTerm.includes(normalized));
+  });
+  if (pageMatch) add(`Show me ${pageMatch}`);
+  for (const category of catalogHints?.categories ?? []) add(`Show me ${category}`);
+  for (const material of catalogHints?.materials ?? []) add(`Show me ${material} items`);
+  for (const occasion of catalogHints?.occasions ?? []) add(`I need a ${occasion} gift`);
+  for (const fallback of defaults) add(fallback);
+  add(market === "lk" ? "Best sellers pennanna" : "Show best sellers");
+  add("I need help choosing a gift");
+  add("What products do you have?");
+
+  const seen = new Set<string>();
+  return candidates
+    .filter((item) => {
+      const key = normalizeStarter(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
+}
+
+function parseSuggestedQuestions(content: string): string[] {
+  const jsonText = content.trim().match(/\{[\s\S]*\}/)?.[0] ?? content.trim();
+  try {
+    const parsed = JSON.parse(jsonText) as { suggestedQuestions?: unknown };
+    if (!Array.isArray(parsed.suggestedQuestions)) return [];
+    const seen = new Set<string>();
+    return parsed.suggestedQuestions
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((item) => item.length >= 3 && item.length <= 70)
+      .filter((item) => !isBadInitialStarter(item))
+      .filter((item) => {
+        const key = item.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+async function generateInitialSuggestedQuestions(input: {
+  storeName: string;
+  greeting: string;
+  defaults: string[];
+  market?: "default" | "lk";
+  pageUrl?: string;
+  catalogHints?: CatalogSearchHints;
+  config: CoreConfig;
+}): Promise<string[]> {
+  const { storeName, greeting, defaults, market = "default", pageUrl, catalogHints, config } = input;
+  const fallback = fallbackInitialSuggestedQuestions({ defaults, market, pageUrl, catalogHints });
+  const llm = createLLMProvider(config);
+  if (!llm) return fallback;
+  try {
+    const response = await llm.chat({
+      model: config.llmModel,
+      temperature: 0.2,
+      maxOutputTokens: 180,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You generate initial ecommerce chat starter chips. Return ONLY compact JSON. " +
+            "Create exactly 3 short customer messages that invite high-intent shopping behavior. " +
+            "Prefer catalog-aware starters over generic support questions. Use the shopper's market/language style when obvious. " +
+            "Never return budget-only or price-band starters like 'Show premium options', 'under LKR ...', or 'mid range'. " +
+            "Never return generic question chips like 'What are you looking for?'. " +
+            "Each item must be clickable as a user message, under 70 characters, and must not mention unavailable products. " +
+            "Schema: {\"suggestedQuestions\":[\"...\"]}.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            storeName,
+            greeting,
+            market,
+            pageTerms: pageContext(pageUrl),
+            catalogHints: {
+              categories: catalogHints?.categories?.slice(0, 12) ?? [],
+              materials: catalogHints?.materials?.slice(0, 10) ?? [],
+              occasions: catalogHints?.occasions?.slice(0, 10) ?? [],
+              useCases: catalogHints?.useCases?.slice(0, 10) ?? [],
+            },
+            configuredFallbacks: defaults.slice(0, 5),
+          }),
+        },
+      ],
+    });
+    const generated = parseSuggestedQuestions(response.content);
+    return [...generated, ...fallback].slice(0, 3);
+  } catch {
+    return fallback;
+  }
+}
+
+export async function getWidgetConfig(tenantId: string, config: CoreConfig, options?: { pageUrl?: string }) {
   await assertWidgetConfigRateLimit(tenantId, config);
   const profile = await resolveTenantProfile(tenantId, config);
   const db = getDocClient(config);
@@ -31,13 +181,27 @@ export async function getWidgetConfig(tenantId: string, config: CoreConfig) {
   const tenantConfig = configRes.Item;
   const prefix = (profile.widgetApiKeyPrefix as string) ?? "pk_live_";
   const status = profile.status as string;
+  const storeName = String(profile.storeName ?? "CommerceChat");
+  const greeting = tenantConfig.prompts?.greeting ?? "Hi! How can I help you shop today?";
+  const market = marketFromTimezone(profile.timezone as string | undefined);
+  const defaults = ((tenantConfig.widgetConfig?.suggestedQuestions as string[] | undefined) ?? defaultSuggestedQuestions(market)).filter(Boolean);
+  const catalogHints = await listCatalogSearchHints(tenantId, config).catch(() => undefined);
+  const suggestedQuestions = await generateInitialSuggestedQuestions({
+    storeName,
+    greeting,
+    defaults,
+    market,
+    pageUrl: options?.pageUrl,
+    catalogHints,
+    config,
+  });
 
   return ok({
-    storeName: profile.storeName,
-    greeting: tenantConfig.prompts?.greeting ?? "Hi! How can I help you shop today?",
+    storeName,
+    greeting,
     primaryColor: tenantConfig.widgetConfig?.primaryColor ?? "#4F46E5",
     position: tenantConfig.widgetConfig?.position ?? "bottom-right",
-    suggestedQuestions: tenantConfig.widgetConfig?.suggestedQuestions ?? [],
+    suggestedQuestions,
     enabled:
       tenantIsOperational(status) && tenantConfig.widgetConfig?.widgetEnabled !== false,
     embedCode: buildWidgetEmbedPlaceholder(prefix, config),

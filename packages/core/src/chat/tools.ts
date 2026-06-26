@@ -31,6 +31,11 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
         category: { type: "string" },
         maxPrice: { type: "number" },
         minPrice: { type: "number" },
+        excludeSkus: {
+          type: "array",
+          items: { type: "string" },
+          description: "Product SKUs to exclude when asking for more options",
+        },
         limit: { type: "integer", default: 5 },
       },
       required: ["query"],
@@ -119,10 +124,15 @@ export function toolsForIntent(
   message?: string,
   funnelStage?: FunnelStage,
   subIntent?: ChatSubIntent,
-  options?: { gateProductSearch?: boolean }
+  options?: { gateProductSearch?: boolean; allowedTools?: string[] }
 ): ToolDefinition[] {
   if (options?.gateProductSearch) {
     return [];
+  }
+  if (options && "allowedTools" in options) {
+    return [
+      ...new Set((options.allowedTools ?? []).map((name) => name.trim()).filter((name) => Boolean(TOOL_DEFINITIONS[name]))),
+    ].map((name) => TOOL_DEFINITIONS[name]!);
   }
   const names: string[] = [];
   const wantsProducts = messageMentionsProducts(message ?? "");
@@ -176,7 +186,14 @@ async function mergeProductSearchResults(
   config: CoreConfig,
   storeCurrency: string,
   query: string,
-  options?: { category?: string; requiredTerms?: string[]; maxPrice?: number; minPrice?: number; limit?: number }
+  options?: {
+    category?: string;
+    requiredTerms?: string[];
+    maxPrice?: number;
+    minPrice?: number;
+    limit?: number;
+    excludeSkus?: string[];
+  }
 ): Promise<ProductRecord[]> {
   const bySku = new Map<string, ProductRecord>();
   const vectorScores = new Map<string, number>();
@@ -261,6 +278,7 @@ export interface ToolExecutionContext {
   qualification?: QualificationState;
   catalogHints?: CatalogSearchHints;
   pageUrl?: string;
+  excludeSkus?: string[];
 }
 
 const BROAD_FOCUSED_TERMS = new Set([
@@ -314,6 +332,10 @@ export async function executeTool(
       const maxPrice = (args.maxPrice as number | undefined) ?? ctx.qualification?.budget?.max;
       const minPrice = (args.minPrice as number | undefined) ?? ctx.qualification?.budget?.min;
       const requiredTerms = focusedPreferenceTerms(ctx.qualification, ctx.catalogHints);
+      const explicitExcludeSkus = Array.isArray(args.excludeSkus)
+        ? args.excludeSkus.map((sku) => String(sku).trim()).filter(Boolean)
+        : [];
+      const excludeSkus = [...new Set([...(ctx.excludeSkus ?? []), ...explicitExcludeSkus])];
       const searchQuery = buildProductSearchQuery({
         message: query,
         qualification: {
@@ -335,6 +357,7 @@ export async function executeTool(
           requiredTerms,
           maxPrice,
           minPrice,
+          excludeSkus,
           limit: recallLimit,
         }),
       ]);
@@ -345,7 +368,7 @@ export async function executeTool(
         ctx.config,
         storeCurrency,
         searchQuery,
-        { category: categoryFilter, requiredTerms, maxPrice, minPrice, limit }
+        { category: categoryFilter, requiredTerms, maxPrice, minPrice, excludeSkus, limit }
       );
       const vectorScores = new Map(
         vectorHits.map((hit) => [String(hit.chunk.metadata.sku ?? hit.chunk.id), hit.score])
