@@ -59,6 +59,9 @@ import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usa
 import { assertTenantOperational } from "../tenant/status";
 import { notifyAgentInboundMessage, getHandlingMode } from "./agent-notify";
 import { marketFromTimezone } from "./locale";
+import { buildAgentTurnState } from "./agent-state";
+import { applyAgentPolicy, filterToolsByAgentPolicy, validateSuggestedActions } from "./agent-policy";
+import { validateResponseQuality } from "./response-quality";
 
 const MAX_TOOL_ROUNDS = 3;
 const PRICE_TIER_CONSTRAINTS = /^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i;
@@ -430,18 +433,6 @@ function stripProductToolResults(
   return toolResults.filter((t) => !PRODUCT_SURFACE_TOOLS.has(t.tool));
 }
 
-function recentlySurfacedProductSkus(history: StoredMessage[]): string[] {
-  const skus: string[] = [];
-  for (const item of history.slice(-6)) {
-    const rawSkus = item.metadata?.surfacedProductSkus;
-    if (!Array.isArray(rawSkus)) continue;
-    for (const sku of rawSkus) {
-      if (typeof sku === "string" && sku.trim()) skus.push(sku.trim());
-    }
-  }
-  return [...new Set(skus)].slice(-20);
-}
-
 function summarizeRetrievedChunks(ragChunks: ScoredChunk[]): ChatResult["retrievedChunks"] {
   return ragChunks.map((hit) => ({
     sourceType: hit.chunk.metadata.source_type,
@@ -453,6 +444,63 @@ function summarizeRetrievedChunks(ragChunks: ScoredChunk[]): ChatResult["retriev
     score: Number(hit.score.toFixed(4)),
     textPreview: hit.chunk.text.replace(/\s+/g, " ").trim().slice(0, 240),
   }));
+}
+
+function summarizeToolObservations(toolResults: Array<{ tool: string; success: boolean; result: unknown }>): Array<Record<string, unknown>> {
+  return toolResults
+    .map((item) => {
+      const result = item.result as { observation?: unknown };
+      return result?.observation && typeof result.observation === "object"
+        ? { tool: item.tool, success: item.success, ...(result.observation as Record<string, unknown>) }
+        : undefined;
+    })
+    .filter((item): item is { tool: string; success: boolean } & Record<string, unknown> => Boolean(item));
+}
+
+function messageContainsTerm(message: string, term: string): boolean {
+  const cleaned = term.trim();
+  if (cleaned.length < 3) return false;
+  return new RegExp(`(^|\\W)${cleaned.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\W|$)`, "i").test(message);
+}
+
+function latestCatalogRefinementTerms(message: string, catalogHints?: CatalogSearchHints): string[] {
+  const terms = new Map<string, string>();
+  const add = (term: string) => {
+    const cleaned = term.trim();
+    if (cleaned.length >= 3) terms.set(cleaned.toLowerCase(), cleaned);
+  };
+  for (const [alias, values] of Object.entries(catalogHints?.aliases ?? {})) {
+    if (!messageContainsTerm(message, alias)) continue;
+    for (const value of values) add(value);
+  }
+  for (const term of [
+    ...(catalogHints?.materials ?? []),
+    ...(catalogHints?.categories ?? []),
+    ...(catalogHints?.tags ?? []),
+    ...(catalogHints?.useCases ?? []),
+    ...(catalogHints?.styles ?? []),
+    ...(catalogHints?.occasions ?? []),
+  ]) {
+    if (messageContainsTerm(message, term)) add(term);
+  }
+  return [...terms.values()].slice(0, 4);
+}
+
+function shouldApplyLatestCatalogRefinement(message: string, plan: ReturnType<typeof trustedSalesPlan>): boolean {
+  return (
+    plan?.userMove === "show_more" ||
+    plan?.contextPolicy === "show_more" ||
+    plan?.resultPolicy === "exclude_seen" ||
+    /\b(like this|looks? like|similar to|anything else|what else|show more|more options)\b/i.test(message)
+  );
+}
+
+function mergeSearchQueryTerms(query: string | undefined, terms: string[]): string | undefined {
+  const parts = [...(query ? [query] : []), ...terms].map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) return query;
+  const seen = new Map<string, string>();
+  for (const part of parts) seen.set(part.toLowerCase(), part);
+  return [...seen.values()].join(" ");
 }
 
 export async function runChatOrchestrator(
@@ -572,7 +620,14 @@ export async function runChatOrchestrator(
         catalogHints,
         conversation.qualification ?? fallbackFunnel.qualification
       );
-  const plannedSearchQuery = plannerSearchQuery(trustedPlan);
+  let plannedSearchQuery = plannerSearchQuery(trustedPlan);
+  const catalogRefinementTerms =
+    trustedPlan && shouldApplyLatestCatalogRefinement(text, trustedPlan)
+      ? latestCatalogRefinementTerms(text, catalogHints)
+      : [];
+  if (catalogRefinementTerms.length) {
+    plannedSearchQuery = mergeSearchQueryTerms(plannedSearchQuery, catalogRefinementTerms);
+  }
   const plannedPatch = salesPlanToQualificationPatch(trustedPlan, {
     latestMessage: text,
     catalogAliases: catalogHints?.aliases,
@@ -589,7 +644,7 @@ export async function runChatOrchestrator(
   const qualificationBase = shouldResetContext ? undefined : conversation.qualification ?? fallbackFunnel.qualification;
   const qualification = mergeQualification(
     mergeQualification(mergeQualification(qualificationBase, deterministicPatch), priceTierPatch),
-    plannedPatch
+    mergeQualification(plannedPatch, catalogRefinementTerms.length ? { constraints: catalogRefinementTerms } : {})
   );
   let forcedSearchFromSelection = false;
   if (!trustedPlan && shouldForceSearchForExplicitSelection(text, qualification)) {
@@ -597,6 +652,23 @@ export async function runChatOrchestrator(
     planAction = "search_products";
     forcedSearchFromSelection = true;
   }
+  const agentState = buildAgentTurnState({
+    latestMessage: text,
+    intent,
+    subIntent,
+    funnelStage: funnel.stage,
+    qualification,
+    planner: trustedPlan,
+    history,
+    resetContext: shouldResetContext,
+  });
+  const policy = applyAgentPolicy({
+    state: agentState,
+    gateProductSearch,
+    planAction,
+  });
+  gateProductSearch = policy.gateProductSearch;
+  planAction = policy.planAction;
   const funnelOrQualChanged =
     funnel.changed ||
     JSON.stringify(qualification) !== JSON.stringify(conversation.qualification ?? {}) ||
@@ -743,7 +815,11 @@ export async function runChatOrchestrator(
         market,
         catalogHints,
       });
-  const plannerQuestion = trustedPlan?.nextQuestion?.trim() || plannerFallbackQuestion(trustedPlan);
+  const policyFlags = [...policy.flags];
+  const plannerQuestion =
+    trustedPlan?.nextQuestion?.trim() ||
+    (policyFlags.includes("recipient_answer_requires_budget") ? "What budget should I stay within?" : undefined) ||
+    plannerFallbackQuestion(trustedPlan);
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,
     timezone,
@@ -754,11 +830,14 @@ export async function runChatOrchestrator(
     pageUrl,
   });
 
-  const tools = toolsForIntent(intent, text, funnel.stage, subIntent, {
+  const initialTools = toolsForIntent(intent, text, funnel.stage, subIntent, {
     gateProductSearch,
     ...(trustedPlan ? { allowedTools: trustedPlan.toolPolicy?.allowedTools ?? [] } : {}),
   });
-  const excludeSkus = trustedPlan?.userMove === "show_more" ? recentlySurfacedProductSkus(history) : [];
+  const toolPolicy = filterToolsByAgentPolicy(initialTools, agentState);
+  const tools = toolPolicy.tools;
+  policyFlags.push(...toolPolicy.flags);
+  const excludeSkus = policy.excludeSkus;
   const toolCtx = {
     auth,
     config,
@@ -1025,8 +1104,43 @@ export async function runChatOrchestrator(
       suggestedActions = engagement.suggestedActions;
     }
   }
+  const actionValidation = validateSuggestedActions({
+    actions: suggestedActions,
+    state: agentState,
+    currentProductSkus: finalProducts.map((product) => product.sku).filter(Boolean),
+  });
+  suggestedActions = actionValidation.actions;
+  policyFlags.push(...actionValidation.flags);
   replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
   replyContent = compactReplyText(replyContent, { channel: input.channel });
+  const responseQuality = validateResponseQuality({
+    reply: replyContent,
+    state: agentState,
+    fallbackReply: finalProducts.length
+      ? "I found a few options that are in stock and easy to choose from."
+      : "I can help narrow this down. What kind of item should I look for?",
+  });
+  replyContent = responseQuality.reply;
+  const finalProductSkus = finalProducts.map((product) => product.sku).filter(Boolean);
+  const recentProductSet = new Set(agentState.memory.recentProductSkus.map((sku) => sku.toUpperCase()));
+  const repeatedSurfacedSkus = finalProductSkus.filter((sku) => recentProductSet.has(sku.toUpperCase()));
+  const toolObservations = summarizeToolObservations(finalToolResults);
+  const agentTrace = {
+    userMove: agentState.userMove,
+    replyLanguage: agentState.replyLanguage,
+    resetContext: agentState.resetContext,
+    gateProductSearch,
+    planAction,
+    policyFlags,
+    responseQualityFlags: responseQuality.flags,
+    toolObservations,
+    excludeSkus,
+    surfacedProductSkus: finalProductSkus,
+    repeatedSurfacedSkus,
+    repeatedSurfacedSkuCount: repeatedSurfacedSkus.length,
+    suggestedActionLabels: suggestedActions.map((action) => action.label).filter(Boolean),
+    suggestedActionMessages: suggestedActions.map((action) => action.message).filter(Boolean),
+  };
 
   await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
     intent,
@@ -1036,7 +1150,10 @@ export async function runChatOrchestrator(
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     toolCalls: finalToolResults.map((t) => t.tool),
-    surfacedProductSkus: finalProducts.map((product) => product.sku).filter(Boolean),
+    surfacedProductSkus: finalProductSkus,
+    suggestedActionLabels: agentTrace.suggestedActionLabels,
+    suggestedActionMessages: agentTrace.suggestedActionMessages,
+    agentTrace,
   });
 
   await incrementUsage(auth.tenantId, config, {
@@ -1061,5 +1178,6 @@ export async function runChatOrchestrator(
     handlingMode: "bot",
     suggestedActions,
     salesPlan: publicSalesPlan(planner.plan),
+    agentTrace,
   };
 }

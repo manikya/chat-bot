@@ -56,6 +56,7 @@ async function chat(message, sessionId) {
     tools: (data.toolResults ?? []).map((t) => t.tool).join(", "),
     retrievedChunks: data.retrievedChunks ?? [],
     salesPlan: data.salesPlan ?? null,
+    agentTrace: data.agentTrace ?? null,
   };
 }
 
@@ -82,6 +83,12 @@ async function main() {
       }
       if (out && outputs.length > 1) {
         out.previousProductSkus = outputs.at(-2)?.productSkus ?? [];
+        out.allPreviousProductSkus = outputs.slice(0, -1).flatMap((item) => item.productSkus ?? []);
+        out.previousReplies = outputs.slice(0, -1).map((item) => item.reply).filter(Boolean);
+        out.previousSuggestedActionMessages = outputs.slice(0, -1).flatMap((item) => item.suggestedActionMessages ?? []);
+      }
+      if (out) {
+        out.conversationOutputs = outputs;
       }
       const evaluation = evaluateCase(out, c.expect ?? {}, criteria);
       const failures = evaluation.failures;

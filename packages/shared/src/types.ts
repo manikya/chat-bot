@@ -179,6 +179,7 @@ export interface ChatResult {
   subIntent?: ChatSubIntent;
   suggestedActions?: WidgetAction[];
   salesPlan?: Record<string, unknown> | null;
+  agentTrace?: Record<string, unknown> | null;
   usage?: { inputTokens: number; outputTokens: number };
   /** Set when inbound was stored but the bot did not auto-reply (human handling). */
   handledBy?: "bot" | "human";

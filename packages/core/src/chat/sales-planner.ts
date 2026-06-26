@@ -79,6 +79,9 @@ export interface ChatPlan {
   funnelStage?: FunnelStage;
   action?: ChatPlanAction;
   gateProductSearch?: boolean;
+  contextPolicy?: "continue" | "reset" | "show_more" | "narrow" | "recover";
+  resultPolicy?: "exact" | "diversify" | "exclude_seen" | "relax_constraints" | "ask_clarification";
+  responsePolicy?: "answer" | "ask_one_question" | "show_cards" | "recover" | "handoff";
   searchQuery?: string;
   ragQuery?: string;
   toolPolicy?: {
@@ -366,6 +369,9 @@ export function publicSalesPlan(plan: SalesPlan | null) {
     funnelStage: plan.funnelStage,
     action: plan.action,
     gateProductSearch: Boolean(plan.gateProductSearch),
+    contextPolicy: plan.contextPolicy,
+    resultPolicy: plan.resultPolicy,
+    responsePolicy: plan.responsePolicy,
     searchQuery: cleanText(plan.searchQuery),
     ragQuery: cleanText(plan.ragQuery),
     allowedTools: plan.toolPolicy?.allowedTools?.slice(0, 8),
@@ -538,12 +544,14 @@ export async function runSalesPlanner(input: {
             "Choose attributeRequest from height, size, dimensions, color, material, stock, price, availability, none. Use none unless the latestMessage asks for a product attribute. " +
             "Choose intent from faq, product, checkout, greeting, unknown. Choose subIntent from product_browse, product_compare, product_detail, faq_policy, faq_objection, cart_review, checkout_ready, order_status. " +
             "Choose funnelStage from discover, compare, objection, cart, checkout. " +
+            "Choose contextPolicy from continue, reset, show_more, narrow, recover. Choose resultPolicy from exact, diversify, exclude_seen, relax_constraints, ask_clarification. Choose responsePolicy from answer, ask_one_question, show_cards, recover, handoff. " +
             "Do not assume recipient from occasions like Father's Day or Mother's Day. " +
             "For broad shopping requests, prefer ask_question until one useful missing slot is clear; for concrete product phrases, search_products is allowed even without budget. " +
             "If latestMessage is a budget answer such as 'around 5000', '5000', 'under 7000', 'mid range', or a catalog price-band message and existingQualification has shopping context, set userMove:'budget_answer', action:'search_products', gateProductSearch:false, keep the existing shopping context, and set budget. Treat 'around/about/near N' as budget.max=N unless the user says above/from/over. " +
+            "If latestMessage answers who the gift is for, such as 'for a lady', 'gift is for my wife', or 'for a client', set userMove:'recipient_answer', keep existing shopping context, and do not immediately broaden into unrelated products. If budget is missing, set action:'ask_question', gateProductSearch:true, missingSlot:'budget', and ask for budget. If budget is known but style/tone is missing, ask one style/tone question. " +
             "If latestMessage is a short suggested-action reply such as 'Gift', 'Anniversary', 'Decorative', 'Show me Gift', or 'Show mid range options ...' and existingQualification has shopping context, set userMove:'chip_selection' and choose search_products when enough context exists. " +
-            "If latestMessage asks for more results such as 'what else do you have', 'anything else', 'show more', or 'more options', set userMove:'show_more', action:'search_products', gateProductSearch:false, keep existing shopping context, and search for additional products instead of repeating the same products. " +
-            "If latestMessage clearly starts a different product request, set userMove:'new_request', resetContext:true, and build searchQuery only from the new request. " +
+            "If latestMessage asks for more results such as 'what else do you have', 'anything else', 'show more', or 'more options', set userMove:'show_more', contextPolicy:'show_more', resultPolicy:'exclude_seen', action:'search_products', gateProductSearch:false, keep existing shopping context, and search for additional products instead of repeating the same products. If it says 'like this X' or 'looks like X', make X the active productType/searchQuery. " +
+            "If latestMessage clearly starts a different product request, set userMove:'new_request', contextPolicy:'reset', resetContext:true, and build searchQuery only from the new request. " +
             "Be sales-skilled and engaging: suggestedActions should be useful next-click choices that move the shopper toward a purchase, not repeated generic chips. " +
             "Every suggestedActions item must include type:'message', a concise label, and the exact message the widget should send. " +
             "For greeting/hello-only messages, answer warmly and make suggestedActions concrete shopping starters such as catalog categories, best sellers, gift ideas, or product types; never use a vague question chip like 'What are you looking for?'. " +
@@ -562,7 +570,7 @@ export async function runSalesPlanner(input: {
             "missingSlot is the single most important missing sales slot. resetContext is true only when the shopper clearly changed topic. " +
             "toolPolicy.allowedTools must include only tools needed for the chosen action. Never allow add_to_cart or create_checkout_link unless the shopper explicitly asks. " +
             "recoveryActions are suggested buttons when exact results fail; include premium_alternative when appropriate. " +
-            "Schema: {confidence,languageStyle,replyLanguage,userMove,intent,subIntent,funnelStage,action,gateProductSearch,searchQuery,ragQuery,toolPolicy,missingSlot,resetContext,productType,material,occasion,recipient,useCase,style,quantity,budget,attributeRequest,availabilityQuestion,nextQuestion,replyTone,suggestedActions,recoveryActions,reasonCodes}. " +
+            "Schema: {confidence,languageStyle,replyLanguage,userMove,intent,subIntent,funnelStage,action,gateProductSearch,contextPolicy,resultPolicy,responsePolicy,searchQuery,ragQuery,toolPolicy,missingSlot,resetContext,productType,material,occasion,recipient,useCase,style,quantity,budget,attributeRequest,availabilityQuestion,nextQuestion,replyTone,suggestedActions,recoveryActions,reasonCodes}. " +
             "Use null/omit unknown fields. nextQuestion should ask the single most useful missing sales question in the user's language.",
         },
         {

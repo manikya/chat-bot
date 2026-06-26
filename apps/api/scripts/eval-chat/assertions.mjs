@@ -16,6 +16,20 @@ function questionCount(text) {
   return (String(text || "").match(/\?/g) ?? []).length;
 }
 
+function questions(text) {
+  return String(text || "").match(/[^.!?]*\?/g)?.map((q) => q.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()).filter(Boolean) ?? [];
+}
+
+function duplicates(values) {
+  const seen = new Set();
+  const dupes = new Set();
+  for (const value of values.map((item) => String(item || "").toLowerCase()).filter(Boolean)) {
+    if (seen.has(value)) dupes.add(value);
+    seen.add(value);
+  }
+  return [...dupes];
+}
+
 const CHECKS = [
   {
     id: "nonEmptyReply",
@@ -147,6 +161,25 @@ const CHECKS = [
     },
   },
   {
+    id: "noRepeatedProductSkusAcrossConversation",
+    dimension: "commerce",
+    applies: (expect) => expect.noRepeatedProductSkusAcrossConversation,
+    run: (out) => {
+      const previous = new Set(out.allPreviousProductSkus ?? []);
+      const repeated = (out.productSkus ?? []).filter((sku) => previous.has(sku));
+      return repeated.length ? `repeated product SKU across conversation ${repeated.join(", ")}` : null;
+    },
+  },
+  {
+    id: "noDuplicateProductSkus",
+    dimension: "commerce",
+    applies: (expect) => expect.noDuplicateProductSkus,
+    run: (out) => {
+      const repeated = duplicates(out.productSkus ?? []);
+      return repeated.length ? `duplicate product SKU in response ${repeated.join(", ")}` : null;
+    },
+  },
+  {
     id: "productNameIncludesAny",
     dimension: "commerce",
     applies: (expect) => expect.productNameIncludesAny,
@@ -218,6 +251,41 @@ const CHECKS = [
         .toLowerCase();
       const present = expect.suggestedActionExcludes.filter((term) => text.includes(String(term).toLowerCase()));
       return present.length ? `suggested actions should not include ${present.join(", ")}` : null;
+    },
+  },
+  {
+    id: "noDuplicateSuggestedActions",
+    dimension: "engagement",
+    applies: (expect) => expect.noDuplicateSuggestedActions,
+    run: (out) => {
+      const repeated = duplicates([...(out.suggestedActionLabels ?? []), ...(out.suggestedActionMessages ?? [])]);
+      return repeated.length ? `duplicate suggested actions ${repeated.join(", ")}` : null;
+    },
+  },
+  {
+    id: "noRepeatedQuestionsAcrossConversation",
+    dimension: "engagement",
+    applies: (expect) => expect.noRepeatedQuestionsAcrossConversation,
+    run: (out) => {
+      const prior = new Set((out.previousReplies ?? []).flatMap(questions));
+      const repeated = questions(out.reply).filter((question) => prior.has(question));
+      return repeated.length ? `repeated assistant question ${repeated.join(", ")}` : null;
+    },
+  },
+  {
+    id: "replyNoArtifacts",
+    dimension: "response",
+    applies: (expect) => expect.replyNoArtifacts,
+    run: (out) => {
+      const reply = String(out.reply || "");
+      const artifacts = [
+        /\bundefined\b/i,
+        /\bnull\b/i,
+        /```/,
+        /\btool_call/i,
+        /\b(?:it's|it is)\s+priced\.?$/i,
+      ];
+      return artifacts.some((pattern) => pattern.test(reply)) ? "reply contains generated artifact or unfinished prose" : null;
     },
   },
   {
@@ -340,6 +408,36 @@ const CHECKS = [
       Boolean(out.salesPlan?.gateProductSearch) === Boolean(expect.salesPlanGateProductSearch)
         ? null
         : `salesPlan gate expected ${expect.salesPlanGateProductSearch}, got ${out.salesPlan?.gateProductSearch ?? "?"}`,
+  },
+  {
+    id: "agentTracePolicyIncludes",
+    dimension: "reliability",
+    applies: (expect) => expect.agentTracePolicyIncludes,
+    run: (out, expect) => {
+      const flags = new Set(out.agentTrace?.policyFlags ?? []);
+      const missing = expect.agentTracePolicyIncludes.filter((flag) => !flags.has(flag));
+      return missing.length ? `agentTrace policyFlags missing ${missing.join(", ")}` : null;
+    },
+  },
+  {
+    id: "agentTraceMaxRepeatedSkus",
+    dimension: "commerce",
+    applies: (expect) => expect.agentTraceMaxRepeatedSkus != null,
+    run: (out, expect) => {
+      const count = Number(out.agentTrace?.repeatedSurfacedSkuCount ?? 0);
+      return count <= expect.agentTraceMaxRepeatedSkus
+        ? null
+        : `agentTrace repeatedSurfacedSkuCount expected <= ${expect.agentTraceMaxRepeatedSkus}, got ${count}`;
+    },
+  },
+  {
+    id: "agentTraceHasObservation",
+    dimension: "reliability",
+    applies: (expect) => expect.agentTraceHasObservation,
+    run: (out) => {
+      const observations = out.agentTrace?.toolObservations ?? [];
+      return Array.isArray(observations) && observations.length ? null : "agentTrace missing tool observations";
+    },
   },
 ];
 

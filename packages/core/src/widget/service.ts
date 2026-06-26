@@ -335,6 +335,8 @@ export function toWidgetChatResponse(
     suggestedQuestions,
     productCards: buildProductCards(result.toolResults as ToolRow[] | undefined),
     retrievedChunks: result.retrievedChunks,
+    salesPlan: result.salesPlan,
+    agentTrace: result.agentTrace,
   };
 }
 

@@ -57,6 +57,12 @@ export async function getConversationAnalytics(
   const subIntents: Record<string, number> = {};
   const funnelStages: Record<string, number> = {};
   const productSearches: Record<string, number> = {};
+  const agentReliability: Record<string, number> = {
+    repeatedProductTurns: 0,
+    lowQualityReplies: 0,
+    policyInterventions: 0,
+    weakProductResults: 0,
+  };
 
   let conversationsTotal = 0;
   let conversationsActive = 0;
@@ -109,6 +115,7 @@ export async function getConversationAnalytics(
       messagesByChannel[channel] = (messagesByChannel[channel] ?? 0) + 1;
 
       const metadata = (item.metadata as Record<string, unknown> | undefined) ?? {};
+      const agentTrace = (metadata.agentTrace as Record<string, unknown> | undefined) ?? {};
       const intent = metadata.intent as string | undefined;
       if (intent) {
         intents[intent] = (intents[intent] ?? 0) + 1;
@@ -132,6 +139,20 @@ export async function getConversationAnalytics(
       }
       if (toolCalls?.includes("create_checkout_link")) {
         checkoutLinks += 1;
+      }
+
+      if (Number(agentTrace.repeatedSurfacedSkuCount ?? 0) > 0) {
+        agentReliability.repeatedProductTurns += 1;
+      }
+      if (Array.isArray(agentTrace.responseQualityFlags) && agentTrace.responseQualityFlags.length > 0) {
+        agentReliability.lowQualityReplies += 1;
+      }
+      if (Array.isArray(agentTrace.policyFlags) && agentTrace.policyFlags.length > 0) {
+        agentReliability.policyInterventions += 1;
+      }
+      const observations = Array.isArray(agentTrace.toolObservations) ? agentTrace.toolObservations : [];
+      if (observations.some((observation) => Boolean((observation as Record<string, unknown>).weakResults))) {
+        agentReliability.weakProductResults += 1;
       }
     }
 
@@ -196,5 +217,6 @@ export async function getConversationAnalytics(
       withCart: cartsStarted,
       checkoutLinks,
     },
+    agentReliability,
   });
 }

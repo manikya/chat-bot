@@ -167,6 +167,33 @@ function budgetFitScore(record: ProductRecord, options?: { maxPrice?: number; mi
   return score;
 }
 
+function normalizedWords(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .filter((word) => word.length >= 3 && !STOP_WORDS.has(word))
+  );
+}
+
+function productDiversitySignature(record: ProductRecord): Set<string> {
+  return new Set([
+    ...normalizedWords(record.name),
+    ...productCategoryList(record).map((category) => `cat:${category.toLowerCase()}`),
+    ...splitProductRelationship(record.material).map((term) => `mat:${term.toLowerCase()}`),
+  ]);
+}
+
+function similarity(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let overlap = 0;
+  for (const item of a) {
+    if (b.has(item)) overlap++;
+  }
+  return overlap / Math.min(a.size, b.size);
+}
+
 /** Higher = better match on name, categories, tags, description. */
 export function scoreProductRelevance(record: ProductRecord, terms: string[]): number {
   if (!terms.length) return 0;
@@ -275,5 +302,26 @@ export function rankProductsByRelevance(
       return b.record.price - a.record.price;
     });
 
-  return scored.slice(0, limit).map((s) => s.record);
+  const selected: typeof scored = [];
+  const remaining = [...scored];
+  while (selected.length < limit && remaining.length) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (let index = 0; index < remaining.length; index++) {
+      const candidate = remaining[index]!;
+      const candidateSig = productDiversitySignature(candidate.record);
+      const maxSimilarity = selected.reduce(
+        (max, item) => Math.max(max, similarity(candidateSig, productDiversitySignature(item.record))),
+        0
+      );
+      const adjustedScore = candidate.score - Math.round(maxSimilarity * 4);
+      if (adjustedScore > bestScore) {
+        bestScore = adjustedScore;
+        bestIndex = index;
+      }
+    }
+    selected.push(remaining.splice(bestIndex, 1)[0]!);
+  }
+
+  return selected.map((s) => s.record);
 }

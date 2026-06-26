@@ -348,7 +348,88 @@
       "salesPlanIntent": "product",
       "salesPlanUserMove": "show_more",
       "noRepeatedProductSkusFromPreviousTurn": true,
+      "noRepeatedProductSkusAcrossConversation": true,
+      "noDuplicateProductSkus": true,
+      "noDuplicateSuggestedActions": true,
+      "replyNoArtifacts": true,
+      "agentTracePolicyIncludes": ["exclude_recent_products"],
+      "agentTraceMaxRepeatedSkus": 0,
+      "agentTraceHasObservation": true,
       "minProductCards": 1,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "show-more-twice-keeps-changing-results",
+    "messages": [
+      "What unique gifts do you have for birthdays?",
+      "what else do you have",
+      "show more options"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanUserMove": "show_more",
+      "noRepeatedProductSkusAcrossConversation": true,
+      "noDuplicateProductSkus": true,
+      "replyNoArtifacts": true,
+      "agentTraceMaxRepeatedSkus": 0,
+      "agentTraceHasObservation": true,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "repeated-discovery-answers-do-not-loop",
+    "messages": [
+      "I need a gift",
+      "for a client",
+      "for a client"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "noRepeatedQuestionsAcrossConversation": true,
+      "noDuplicateSuggestedActions": true,
+      "replyNoArtifacts": true,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "similar-punkalasa-keeps-specific-context",
+    "messages": [
+      "brass gift items",
+      "anything else look like this brass punkalasa"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanIntent": "product",
+      "noRepeatedProductSkusFromPreviousTurn": true,
+      "productNameIncludesAny": ["punkalasa", "kalasa"],
+      "agentTracePolicyIncludes": ["exclude_recent_products"],
+      "agentTraceMaxRepeatedSkus": 0,
+      "replyNoArtifacts": true,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "recipient-answer-asks-budget-before-broadening",
+    "messages": [
+      "brass gift items",
+      "anything else look like this brass punkalasa",
+      "gift is for a lady"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "maxProductCards": 0,
+      "replyIncludes": ["budget"],
+      "agentTracePolicyIncludes": ["recipient_answer_requires_budget"],
+      "noRepeatedQuestionsAcrossConversation": true,
+      "noDuplicateSuggestedActions": true,
+      "replyNoArtifacts": true,
       "maxQuestions": 1
     }
   }

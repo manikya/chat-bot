@@ -20,6 +20,17 @@ import { addToCart, getOrCreateCart, loadCart, recordCartCheckout } from "./cart
 import { messageMentionsProducts } from "./intent";
 import { buildProductSearchQuery } from "./product-query";
 
+export interface ProductToolObservation {
+  kind: "product_search" | "related_products";
+  resultCount: number;
+  exactMatchStrength: "none" | "weak" | "strong";
+  categoryDiversity: number;
+  priceCoverage?: { min?: number; max?: number };
+  excludedSkusApplied: number;
+  weakResults: boolean;
+  emptyReason?: "no_match" | "filtered_by_price" | "filtered_by_stock" | "excluded_recent";
+}
+
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   search_products: {
     name: "search_products",
@@ -112,6 +123,11 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
       properties: {
         sku: { type: "string" },
         category: { type: "string" },
+        excludeSkus: {
+          type: "array",
+          items: { type: "string" },
+          description: "Product SKUs to exclude from related results",
+        },
         limit: { type: "integer", default: 5 },
       },
       required: [],
@@ -268,6 +284,51 @@ function productDto(
   };
 }
 
+function productObservation(input: {
+  kind: ProductToolObservation["kind"];
+  products: ProductRecord[];
+  query?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  excludeSkus?: string[];
+}): ProductToolObservation {
+  const categories = new Set(
+    input.products
+      .flatMap((product) => product.categories?.length ? product.categories : product.category ? [product.category] : [])
+      .map((category) => category.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const prices = input.products.map((product) => product.price).filter((price) => Number.isFinite(price) && price > 0);
+  const queryTerms = (input.query ?? "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((term) => term.length >= 3);
+  const exactMatches = input.products.filter((product) => {
+    const haystack = [product.name, product.category, ...(product.categories ?? [])].join(" ").toLowerCase();
+    return queryTerms.length > 0 && queryTerms.some((term) => haystack.includes(term));
+  }).length;
+  const exactMatchStrength =
+    input.products.length === 0 ? "none" : exactMatches >= Math.max(1, Math.ceil(input.products.length / 2)) ? "strong" : "weak";
+  const emptyReason =
+    input.products.length > 0
+      ? undefined
+      : input.excludeSkus?.length
+      ? "excluded_recent"
+      : input.minPrice != null || input.maxPrice != null
+      ? "filtered_by_price"
+      : "no_match";
+  return {
+    kind: input.kind,
+    resultCount: input.products.length,
+    exactMatchStrength,
+    categoryDiversity: categories.size,
+    priceCoverage: prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : undefined,
+    excludedSkusApplied: input.excludeSkus?.length ?? 0,
+    weakResults: input.products.length === 0 || exactMatchStrength === "weak",
+    emptyReason,
+  };
+}
+
 export interface ToolExecutionContext {
   auth: AuthContext;
   config: CoreConfig;
@@ -387,6 +448,14 @@ export async function executeTool(
             })
           ),
           totalFound: ranked.length,
+          observation: productObservation({
+            kind: "product_search",
+            products: ranked,
+            query: searchQuery,
+            minPrice,
+            maxPrice,
+            excludeSkus,
+          }),
         },
       };
     }
@@ -415,9 +484,14 @@ export async function executeTool(
     }
     case "get_related_products": {
       const limit = Number(args.limit ?? 5);
+      const excludeSkus = [
+        ...(ctx.excludeSkus ?? []),
+        ...(Array.isArray(args.excludeSkus) ? args.excludeSkus.map((sku) => String(sku).trim()).filter(Boolean) : []),
+      ];
       const related = await getRelatedProducts(ctx.auth.tenantId, ctx.config, {
         sku: args.sku ? String(args.sku) : undefined,
         category: args.category ? String(args.category) : undefined,
+        excludeSkus,
         limit,
       });
       return {
@@ -425,6 +499,12 @@ export async function executeTool(
         result: {
           products: related.map((p) => productDto(p)),
           totalFound: related.length,
+          observation: productObservation({
+            kind: "related_products",
+            products: related,
+            query: [args.sku, args.category].filter(Boolean).join(" "),
+            excludeSkus,
+          }),
         },
       };
     }
