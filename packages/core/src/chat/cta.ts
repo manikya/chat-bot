@@ -115,12 +115,25 @@ function hasFocusedQualification(qualification?: QualificationState): boolean {
   return Boolean(
     qualification?.recipient ||
       qualification?.category ||
-      qualification?.constraints?.some((constraint) => !/^(decor|decoration|gift|gifting|home decor|event|personal use)$/i.test(constraint.trim()))
+      qualification?.constraints?.some((constraint) => !isBroadAnchorTerm(constraint))
   );
 }
 
 function normalizeTerm(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  let output = "";
+  let previousWasSpace = true;
+  for (const char of value.toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isWordChar = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    if (isWordChar) {
+      output += char;
+      previousWasSpace = false;
+    } else if (!previousWasSpace) {
+      output += " ";
+      previousWasSpace = true;
+    }
+  }
+  return output.trim();
 }
 
 function uniqueTerms(values: Array<string | undefined>): string[] {
@@ -139,7 +152,7 @@ function uniqueTerms(values: Array<string | undefined>): string[] {
 function focusedConstraintTerms(qualification?: QualificationState): string[] {
   return uniqueTerms(
     (qualification?.constraints ?? []).filter(
-      (constraint) => !/^(decor|decoration|gift|gifting|home decor|event|personal use|budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(constraint.trim())
+      (constraint) => !isBroadAnchorTerm(constraint) && !isBudgetTierTerm(constraint)
     )
   );
 }
@@ -152,7 +165,15 @@ function budgetPhrase(qualification?: QualificationState, market: "default" | "l
 }
 
 function isBroadAnchorTerm(value?: string): boolean {
-  return /^(decor|decoration|decorative|gift|gifting|home decor|event|personal use)$/i.test(value?.trim() ?? "");
+  return ["decor", "decoration", "decorative", "gift", "gifting", "home decor", "event", "personal use"].includes(
+    normalizeTerm(value ?? "")
+  );
+}
+
+function isBudgetTierTerm(value?: string): boolean {
+  return ["budget", "budget friendly", "mid range", "premium", "premium picks", "luxury"].includes(
+    normalizeTerm(value ?? "")
+  );
 }
 
 function phraseFromTerms(terms: Array<string | undefined>): string {
@@ -165,6 +186,58 @@ function appendContextPhrase(base: string, context?: string): string {
   const normalizedContext = normalizeTerm(context);
   if (!base || !normalizedContext || normalizedBase.includes(normalizedContext)) return base;
   return phraseFromTerms([base, context]);
+}
+
+function productSearchMeta(toolResults: Array<{ tool: string; success: boolean; result: unknown }>): {
+  query?: string;
+  visibleCount: number;
+  totalFound: number;
+  hiddenCount: number;
+} {
+  const search = toolResults.find((item) => item.tool === "search_products" && item.success);
+  const result = search?.result as
+    | {
+        query?: string;
+        products?: unknown[];
+        totalFound?: number;
+        observation?: { hiddenResultCount?: number; visibleCount?: number; resultCount?: number };
+      }
+    | undefined;
+  const visibleCount = result?.observation?.visibleCount ?? result?.products?.length ?? 0;
+  const totalFound = result?.totalFound ?? result?.observation?.resultCount ?? visibleCount;
+  return {
+    query: result?.query,
+    visibleCount,
+    totalFound,
+    hiddenCount: result?.observation?.hiddenResultCount ?? Math.max(0, totalFound - visibleCount),
+  };
+}
+
+function currentSearchPhrase(qualification?: QualificationState, query?: string): string {
+  const focused = phraseFromTerms([
+    ...(qualification?.constraints ?? []).filter((constraint) => !isBudgetTierTerm(constraint)),
+    qualification?.category,
+  ]);
+  return focused || query?.trim() || "options";
+}
+
+function moreDiscoveryActions(input: {
+  toolResults: Array<{ tool: string; success: boolean; result: unknown }>;
+  qualification?: QualificationState;
+}): WidgetAction[] {
+  const meta = productSearchMeta(input.toolResults);
+  if (meta.hiddenCount <= 0) return [];
+  const phrase = currentSearchPhrase(input.qualification, meta.query);
+  const actions: WidgetAction[] = [
+    messageAction(`Show more ${phrase}`.slice(0, 48), `Show more ${phrase}`),
+    messageAction("More like these", "Show more options like these"),
+  ];
+  if (input.qualification?.budget?.max != null || input.qualification?.budget?.min != null) {
+    actions.push(messageAction("Different price range", "Show a different price range"));
+  } else {
+    actions.push(messageAction("Narrow by budget", "Help me narrow by budget"));
+  }
+  return actions.slice(0, 3);
 }
 
 function recoveryActions(input: {
@@ -233,10 +306,12 @@ export function buildSuggestedCtas(input: {
   const hasCards = inStockProducts.length > 0;
   const emptyProductSearch = productSearchWasEmpty(toolResults);
   const cartCount = cart?.items.length ?? 0;
+  const moreActions = moreDiscoveryActions({ toolResults, qualification });
 
   if (gateProductSearch) {
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
-    return [...hintActions, ...budgetActions(catalogHints, products, qualification)].slice(0, 3);
+    const priceActions = budgetActions(catalogHints, products, qualification);
+    return [...priceActions, ...hintActions].slice(0, 3);
   }
 
   if (subIntent === "checkout_ready" || funnelStage === "checkout") {
@@ -270,7 +345,7 @@ export function buildSuggestedCtas(input: {
   }
 
   if (channel === "web" && hasCards) {
-    return [];
+    return moreActions;
   }
 
   if (subIntent === "faq_objection" || funnelStage === "objection") {
@@ -295,7 +370,7 @@ export function buildSuggestedCtas(input: {
   }
 
   if (funnelStage === "discover" || subIntent === "product_browse") {
-    if (inStockProducts.length) return productActions(inStockProducts, 2);
+    if (inStockProducts.length) return moreActions.length ? moreActions : productActions(inStockProducts, 2);
     if (products.length) {
       return [
         {

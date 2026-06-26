@@ -20,20 +20,40 @@ export function hasStaleCartContext(conversation: ConversationState, cart: CartS
   return Boolean(cart?.items.length) && elapsedSinceConversation(conversation) >= STALE_CART_MS;
 }
 
+function normalize(message: string): string {
+  let output = "";
+  let previousWasSpace = true;
+  for (const char of message.toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isWordChar = (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+    if (isWordChar) {
+      output += char;
+      previousWasSpace = false;
+    } else if (!previousWasSpace) {
+      output += " ";
+      previousWasSpace = true;
+    }
+  }
+  return output.trim();
+}
+
+function includesAnyPhrase(message: string, phrases: string[]): boolean {
+  const normalized = ` ${normalize(message)} `;
+  return phrases.some((phrase) => normalized.includes(` ${normalize(phrase)} `));
+}
+
 export function isCartAbandonmentReply(message: string): boolean {
-  return /\b(no|nope|cancel|clear|remove|don't need|dont need|not now|not anymore|changed my mind)\b/i.test(
-    message
-  );
+  return includesAnyPhrase(message, ["no", "nope", "cancel", "clear", "remove", "dont need", "don t need", "not now", "not anymore", "changed my mind"]);
 }
 
 export function isCartContinuationReply(message: string): boolean {
-  return /\b(yes|yeah|yep|still|continue|checkout|buy|interested|keep|want it|need it)\b/i.test(message);
+  return includesAnyPhrase(message, ["yes", "yeah", "yep", "still", "continue", "checkout", "buy", "interested", "keep", "want it", "need it"]);
 }
 
 export function shouldPauseForStaleCart(message: string, conversation: ConversationState, cart: CartState | null) {
   if (!hasStaleCartContext(conversation, cart)) return false;
   if (isCartAbandonmentReply(message) || isCartContinuationReply(message)) return true;
-  return /\b(hi|hello|hey|good morning|good afternoon|good evening)\b/i.test(message.trim());
+  return includesAnyPhrase(message, ["hi", "hello", "hey", "good morning", "good afternoon", "good evening"]);
 }
 
 function cartSummary(cart: CartState): string {

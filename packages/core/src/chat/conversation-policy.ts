@@ -17,36 +17,51 @@ export interface ConversationPolicy {
 }
 
 function normalizeHint(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  let output = "";
+  let previousWasSpace = true;
+  for (const char of value.toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isWordChar = (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+    if (isWordChar) {
+      output += char;
+      previousWasSpace = false;
+    } else if (!previousWasSpace) {
+      output += " ";
+      previousWasSpace = true;
+    }
+  }
+  return output.trim();
 }
 
 function messageMentionsHint(message: string, hint: string): boolean {
   const normalizedMessage = normalizeHint(message);
   const normalizedHint = normalizeHint(hint);
   if (!normalizedHint) return false;
-  return new RegExp(`(^|\\s)${normalizedHint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`).test(
-    normalizedMessage
-  );
+  return ` ${normalizedMessage} `.includes(` ${normalizedHint} `);
+}
+
+function messageMentionsAny(message: string, terms: string[]): boolean {
+  return terms.some((term) => messageMentionsHint(message, term));
 }
 
 function mentionsGift(message: string, qualification?: QualificationState): boolean {
-  const lower = message.toLowerCase();
   if (qualification?.category === "gift") return true;
-  return /\b(gift|gifts|father'?s day|mother'?s day|birthday|anniversary|wedding|housewarming)\b/i.test(lower);
+  return messageMentionsAny(message, ["gift", "gifts", "father s day", "mother s day", "birthday", "anniversary", "wedding", "housewarming"]);
 }
 
 function mentionsEvent(message: string, qualification?: QualificationState): boolean {
-  const lower = message.toLowerCase();
+  const eventTerms = ["corporate", "cooperate", "event", "giveaway", "giveaways", "decor", "award", "awards", "appreciation"];
   return (
-    qualification?.constraints?.some((c) => /corporate|cooperate|event|giveaway|decor|award/i.test(c)) ??
+    qualification?.constraints?.some((c) => messageMentionsAny(c, eventTerms)) ??
     false
-  ) || qualification?.category === "event" || /\b(corporate|cooperate|event|giveaways?|decor|awards?)\b/i.test(lower);
+  ) || qualification?.category === "event" || messageMentionsAny(message, eventTerms);
 }
 
 function hasSpecificEventUseCase(qualification?: QualificationState): boolean {
+  const eventUseCaseTerms = ["giveaway", "giveaways", "decor", "award", "awards", "appreciation"];
   return Boolean(
-    qualification?.constraints?.some((c) => /giveaway|decor|award|appreciation/i.test(c)) ||
-      (qualification?.category && /giveaway|decor|award|appreciation/i.test(qualification.category))
+    qualification?.constraints?.some((c) => messageMentionsAny(c, eventUseCaseTerms)) ||
+      (qualification?.category && messageMentionsAny(qualification.category, eventUseCaseTerms))
   );
 }
 
@@ -82,7 +97,7 @@ function uniquePhraseParts(parts: Array<string | undefined>): string[] {
 }
 
 function isPriceTierPhrase(value: string): boolean {
-  return /^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(value.trim());
+  return ["budget", "budget friendly", "mid range", "premium", "premium picks", "luxury"].includes(normalizeHint(value));
 }
 
 function priceBandsForQualification(catalogHints?: CatalogSearchHints, qualification?: QualificationState) {
@@ -110,10 +125,10 @@ function budgetActions(catalogHints?: CatalogSearchHints, qualification?: Qualif
 
 function recipientActions(message: string, catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
   const matchedOccasion = catalogHints?.occasions?.find((occasion) => messageMentionsHint(message, occasion));
-  const messageHasOccasion = /\b(father'?s day|mother'?s day|birthday|anniversary|wedding|housewarming)\b/i.test(message);
-  const fallbackRecipients = /\bfather'?s day\b/i.test(message)
+  const messageHasOccasion = messageMentionsAny(message, ["father s day", "mother s day", "birthday", "anniversary", "wedding", "housewarming"]);
+  const fallbackRecipients = messageMentionsHint(message, "father s day")
     ? ["dad", "husband", "grandpa"]
-    : /\bmother'?s day\b/i.test(message)
+    : messageMentionsHint(message, "mother s day")
       ? ["mom", "wife", "grandma"]
       : [];
   const recipients = matchedOccasion
@@ -135,13 +150,13 @@ function recipientActions(message: string, catalogHints?: CatalogSearchHints): W
 
 function recipientQuestion(message: string, budget?: string): string {
   const prefix = budget ? `Got it, ${budget}.` : "Sure, I can help with that.";
-  if (/\bfather'?s day\b/i.test(message)) {
+  if (messageMentionsHint(message, "father s day")) {
     return `${prefix} Is this for dad, husband, grandpa, or someone else?`;
   }
-  if (/\bmother'?s day\b/i.test(message)) {
+  if (messageMentionsHint(message, "mother s day")) {
     return `${prefix} Is this for mom, wife, grandma, or someone else?`;
   }
-  if (/\b(birthday|anniversary|wedding|housewarming)\b/i.test(message)) {
+  if (messageMentionsAny(message, ["birthday", "anniversary", "wedding", "housewarming"])) {
     return `${prefix} Who is the gift for?`;
   }
   return budget ? `Got it, ${budget}. Who is it for?` : "Sure, I can help with that. Who is it for?";
@@ -170,7 +185,7 @@ function eventUseCaseActions(catalogHints?: CatalogSearchHints): WidgetAction[] 
     ...(catalogHints?.useCases ?? []),
     ...(catalogHints?.occasions ?? []),
     ...(catalogHints?.tags ?? []),
-  ].filter((value) => /event|giveaway|decor|award|appreciation|corporate|cooperate/i.test(value));
+  ].filter((value) => messageMentionsAny(value, ["event", "giveaway", "decor", "award", "appreciation", "corporate", "cooperate"]));
   const actions = hintActions(candidates, "It's for", 3);
   return actions.length ? actions : undefined;
 }

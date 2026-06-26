@@ -52,6 +52,7 @@
       "replyIncludes": ["festive", "everyday"],
       "replyExcludes": ["who is this for", "who is it for"],
       "minSuggestedActions": 2,
+      "maxSuggestedActions": 2,
       "suggestedActionIncludes": ["festive", "everyday"],
       "maxProductPrice": 3590,
       "noOutOfStockProducts": true,
@@ -155,6 +156,19 @@
       "minSuggestedActions": 1,
       "replyIncludes": ["dad", "budget"],
       "maxReplyWords": 35,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "birthday-gifts-budget-question-has-multiple-budget-actions",
+    "message": "do you have birthday gifts",
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "maxProductCards": 0,
+      "replyIncludes": ["budget"],
+      "minSuggestedActions": 3,
+      "suggestedActionIncludes": ["budget", "mid range", "premium"],
       "maxQuestions": 1
     }
   },
@@ -303,6 +317,47 @@
     }
   },
   {
+    "id": "client-brass-gift-best-products-then-valampuri-close",
+    "messages": [
+      "brass gift for a client",
+      "can you tell me what are the best products",
+      "Show mid range options from LKR 6,000 to LKR 18,000",
+      "i want valmpuri box"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanCloseIntent": ["product_interest", "add_to_cart", "checkout_ready"],
+      "salesPlanCloseTargetIncludes": ["valampuri", "valmpuri"],
+      "productNameIncludesAny": ["Valampuri"],
+      "replyIncludes": ["in stock"],
+      "replyExcludes": ["What is your budget", "budget friendly", "mid range", "premium picks"],
+      "noRepeatedQuestionsAcrossConversation": true,
+      "replyNoArtifacts": true,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "compact-results-offer-more-discovery",
+    "messages": [
+      "brass gift for a client",
+      "Show mid range options from LKR 6,000 to LKR 18,000"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "minProductCards": 1,
+      "maxProductCards": 3,
+      "minSuggestedActions": 1,
+      "suggestedActionIncludes": ["more"],
+      "noDuplicateSuggestedActions": true,
+      "replyNoArtifacts": true,
+      "maxQuestions": 1
+    }
+  },
+  {
     "id": "approx-budget-searches-mothers-day-gift",
     "messages": [
       "do you have mothers day gifts",
@@ -429,6 +484,27 @@
       "agentTracePolicyIncludes": ["recipient_answer_requires_budget"],
       "noRepeatedQuestionsAcrossConversation": true,
       "noDuplicateSuggestedActions": true,
+      "replyNoArtifacts": true,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "purchase-intent-for-shown-ribbon-flowers-does-not-downsell",
+    "messages": [
+      "i m looking for a gift for mom",
+      "Show premium options above LKR 7,000",
+      "can i get the ribbon flowers"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanCloseIntent": ["product_interest", "add_to_cart", "checkout_ready"],
+      "salesPlanCloseTargetIncludes": ["ribbon"],
+      "productNameIncludesAny": ["Ribbon Flower"],
+      "replyIncludes": ["in stock"],
+      "replyExcludes": ["below LKR 7,000", "consider them", "budget friendly", "mid range"],
+      "minProductPrice": 7000,
       "replyNoArtifacts": true,
       "maxQuestions": 1
     }

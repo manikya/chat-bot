@@ -28,8 +28,13 @@ function removeRepeatedQuestions(reply: string, recentQuestions: string[]): { re
 
 function hasLanguageMismatch(reply: string, replyLanguage?: AgentTurnState["replyLanguage"]): boolean {
   if (!replyLanguage || replyLanguage === "unknown" || replyLanguage === "mixed") return false;
-  const hasSinhala = /[\u0D80-\u0DFF]/u.test(reply);
-  const hasTamil = /[\u0B80-\u0BFF]/u.test(reply);
+  let hasSinhala = false;
+  let hasTamil = false;
+  for (const char of reply) {
+    const code = char.charCodeAt(0);
+    hasSinhala ||= code >= 0x0d80 && code <= 0x0dff;
+    hasTamil ||= code >= 0x0b80 && code <= 0x0bff;
+  }
   if (replyLanguage === "english") return hasSinhala || hasTamil;
   if (replyLanguage === "sinhala") return hasTamil;
   if (replyLanguage === "tamil") return hasSinhala;

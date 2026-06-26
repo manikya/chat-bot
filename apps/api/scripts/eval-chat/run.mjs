@@ -111,7 +111,7 @@ async function main() {
           `  plan trusted=${out.salesPlan.trusted ?? "?"} confidence=${out.salesPlan.confidence ?? "?"} ` +
             `intent=${out.salesPlan.intent ?? "?"} sub=${out.salesPlan.subIntent ?? "?"} stage=${out.salesPlan.funnelStage ?? "?"} ` +
             `action=${out.salesPlan.action ?? "?"} gate=${out.salesPlan.gateProductSearch ?? "?"} ` +
-            `move=${out.salesPlan.userMove ?? "?"} lang=${out.salesPlan.languageStyle ?? "?"} query=${out.salesPlan.searchQuery ?? "-"} slot=${out.salesPlan.missingSlot ?? "-"}`
+            `move=${out.salesPlan.userMove ?? "?"} close=${out.salesPlan.closeIntent ?? "?"} lang=${out.salesPlan.languageStyle ?? "?"} query=${out.salesPlan.searchQuery ?? "-"} slot=${out.salesPlan.missingSlot ?? "-"}`
         );
       }
       console.log(`  → ${preview}${String(out.reply).length > 140 ? "…" : ""}`);

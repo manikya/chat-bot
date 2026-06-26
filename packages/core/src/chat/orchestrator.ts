@@ -1,6 +1,6 @@
 import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type ChatSubIntent, type FunnelStage, type TenantConfig, type WidgetAction } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
-import { listCatalogSearchHints, type CatalogPriceBand, type CatalogSearchHints } from "../catalog/products";
+import { listCatalogSearchHints, type CatalogSearchHints } from "../catalog/products";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { retrieveKnowledge } from "../ingest/retrieve";
@@ -17,9 +17,9 @@ import {
   type StoredMessage,
   updateConversationFunnel,
 } from "./conversation";
-import { detectIntent, detectSubIntent, isGreetingOnlyMessage, messageMentionsProducts, ragSourceTypesForIntent } from "./intent";
+import { ragSourceTypesForIntent } from "./intent";
 import { resolveFunnelContext } from "./funnel";
-import { extractQualificationFromMessage, mergeQualification } from "./qualification";
+import { mergeQualification } from "./qualification";
 import { boostObjectionFaqChunks } from "./rag-boost";
 import { tenantHasPageVoiceVectors } from "../page-voice/service";
 import { buildSystemPrompt } from "./prompts";
@@ -33,8 +33,7 @@ import {
   sanitizeReplyText,
 } from "./product-reply";
 import { appendCtaPromptLine, applyEngagementQuestion, buildSuggestedCtas } from "./cta";
-import { buildProductResultsIntro, planConversationMove } from "./conversation-policy";
-import { discoverQualifyPrompt, shouldGateProductSearch } from "./discover-gate";
+import { buildProductResultsIntro } from "./conversation-policy";
 import { buildProductSearchQuery } from "./product-query";
 import {
   plannerFallbackQuestion,
@@ -46,6 +45,7 @@ import {
   salesPlanToQualificationPatch,
   trustedSalesPlan,
   type ChatAttributeRequest,
+  type ChatCloseIntent,
   type ChatPlanAction,
 } from "./sales-planner";
 import {
@@ -59,13 +59,11 @@ import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usa
 import { assertTenantOperational } from "../tenant/status";
 import { notifyAgentInboundMessage, getHandlingMode } from "./agent-notify";
 import { marketFromTimezone } from "./locale";
-import { buildAgentTurnState } from "./agent-state";
+import { buildAgentMemory, buildAgentTurnState } from "./agent-state";
 import { applyAgentPolicy, filterToolsByAgentPolicy, validateSuggestedActions } from "./agent-policy";
 import { validateResponseQuality } from "./response-quality";
 
 const MAX_TOOL_ROUNDS = 3;
-const PRICE_TIER_CONSTRAINTS = /^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i;
-const STYLE_ONLY_CONSTRAINTS = /^(practical|sentimental|decorative|minimal|modern|traditional|classic)$/i;
 
 export interface OrchestratorInput {
   channel: string;
@@ -110,10 +108,10 @@ async function retrieveForIntent(
   query: string,
   intent: ChatIntent,
   config: CoreConfig,
-  message?: string,
+  _message?: string,
   options?: { subIntent?: ChatSubIntent; objectionsRaised?: string[] }
 ): Promise<ScoredChunk[]> {
-  let sourceTypes = ragSourceTypesForIntent(intent, message, options?.subIntent);
+  let sourceTypes = ragSourceTypesForIntent(intent, undefined, options?.subIntent);
   const conversationEnabled = await tenantHasPageVoiceVectors(auth.tenantId, config);
   if (!conversationEnabled) {
     sourceTypes = sourceTypes.filter((t) => t !== "conversation");
@@ -181,11 +179,10 @@ function generateFallbackReply(
 
 function shouldRunProductSearch(
   intent: ChatIntent,
-  message: string,
   gateProductSearch: boolean
 ): boolean {
-  if (gateProductSearch || isGreetingOnlyMessage(message) || intent === "greeting") return false;
-  return intent === "product" || intent === "checkout" || messageMentionsProducts(message);
+  if (gateProductSearch || intent === "greeting") return false;
+  return intent === "product" || intent === "checkout";
 }
 
 function plannedIntent(planIntent: unknown, fallback: ChatIntent): ChatIntent {
@@ -221,110 +218,6 @@ function actionRunsProductSearch(action?: ChatPlanAction): boolean {
   return action === "search_products";
 }
 
-function hasFocusedSearchPreference(qualification?: { constraints?: string[]; category?: string; recipient?: string; budget?: unknown }): boolean {
-  if (qualification?.recipient || qualification?.budget) return true;
-  return Boolean(
-    qualification?.constraints?.some(
-      (constraint) =>
-        !/^(gift|gifts|gifting|anniversary|birthday|wedding|housewarming|event|personal use|decor|decoration|decorative|budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(
-          constraint.trim()
-        )
-    )
-  );
-}
-
-function hasShoppingContextBeyondBudget(qualification?: { constraints?: string[]; category?: string; recipient?: string }): boolean {
-  if (qualification?.recipient || qualification?.category) return true;
-  return Boolean(
-    qualification?.constraints?.some(
-      (constraint) => !/^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(constraint.trim())
-    )
-  );
-}
-
-function normalizedText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function messageLooksLikeBudgetSelection(message: string): boolean {
-  return (
-    Boolean(priceTierFromMessage(message)) ||
-    /\b(?:around|about|roughly|approximately|approx\.?|near|close\s+to|under|below|less than|max|upto|up to|within|over|above|at least|from)?\s*(?:rs\.?|lkr|usd|\$|€|£)?\s*\d[\d,]*(?:\.\d+)?\s*(?:k|lkr|rs)?\b/i.test(
-      message
-    )
-  );
-}
-
-function priceTierFromMessage(message: string): "budget" | "mid" | "premium" | undefined {
-  const normalized = normalizedText(message);
-  if (/\b(mid range|midrange|middle|medium)\b/.test(normalized)) return "mid";
-  if (/\b(premium|luxury|high end|higher value)\b/.test(normalized)) return "premium";
-  if (/\b(budget friendly|budget|cheap|affordable|low price)\b/.test(normalized)) return "budget";
-  return undefined;
-}
-
-function contextualPriceBandsForQualification(
-  catalogHints: CatalogSearchHints | undefined,
-  qualification: { category?: string; constraints?: string[] }
-): CatalogPriceBand[] {
-  const terms = [qualification.category, ...(qualification.constraints ?? [])]
-    .map((term) => term?.trim())
-    .filter((term): term is string => Boolean(term));
-  const lookup = (bandsByTerm: Record<string, CatalogPriceBand[]> | undefined, term: string) => {
-    const exact = bandsByTerm?.[term];
-    if (exact?.length) return exact;
-    const lower = term.toLowerCase();
-    const matched = Object.entries(bandsByTerm ?? {}).find(([key]) => key.toLowerCase() === lower)?.[1];
-    return matched?.length ? matched : undefined;
-  };
-  for (const term of terms) {
-    const materialBands = lookup(catalogHints?.priceBandsByMaterial, term);
-    if (materialBands?.length) return materialBands;
-    const categoryBands = lookup(catalogHints?.priceBandsByCategory, term);
-    if (categoryBands?.length) return categoryBands;
-  }
-  return catalogHints?.priceBands ?? [];
-}
-
-function priceBandQualificationPatch(
-  message: string,
-  catalogHints: CatalogSearchHints | undefined,
-  qualification: { category?: string; constraints?: string[] }
-): { budget?: { min?: number; max?: number }; constraints?: string[] } {
-  const tier = priceTierFromMessage(message);
-  if (!tier) return {};
-  const bands = contextualPriceBandsForQualification(catalogHints, qualification);
-  const band = bands.find((candidate) => {
-    const label = normalizedText(`${candidate.label} ${candidate.message}`);
-    if (tier === "mid") return label.includes("mid range") || (candidate.min != null && candidate.max != null);
-    if (tier === "premium") return label.includes("premium") || (candidate.min != null && candidate.max == null);
-    return label.includes("budget") || (candidate.max != null && candidate.min == null);
-  });
-  if (!band) return {};
-  return {
-    budget: {
-      ...(band.min != null ? { min: band.min } : {}),
-      ...(band.max != null ? { max: band.max } : {}),
-    },
-    constraints: [tier === "mid" ? "Mid range" : tier === "premium" ? "Premium picks" : "Budget friendly"],
-  };
-}
-
-function shouldForceSearchForExplicitSelection(
-  message: string,
-  qualification: { constraints?: string[]; category?: string; recipient?: string; budget?: unknown },
-  action?: ChatPlanAction
-): boolean {
-  if (action === "search_products") return false;
-  const trimmed = message.trim();
-  const explicitShow = /\b(show\s+me|show\s+us|see|view)\b/i.test(trimmed);
-  const shortChipReply = /^[\p{L}\p{N}\s'-]{2,40}$/u.test(trimmed) && trimmed.split(/\s+/).length <= 4;
-  const budgetSelection = messageLooksLikeBudgetSelection(trimmed);
-  if (budgetSelection) return hasShoppingContextBeyondBudget(qualification);
-  if (!explicitShow && !shortChipReply) return false;
-  return hasFocusedSearchPreference(qualification);
-}
-
 function appendPlannerQuestion(reply: string, question?: string): string {
   const trimmedQuestion = question?.trim();
   if (!trimmedQuestion) return reply;
@@ -332,23 +225,6 @@ function appendPlannerQuestion(reply: string, question?: string): string {
   const normalizedQuestion = trimmedQuestion.toLowerCase();
   if (normalizedReply.includes(normalizedQuestion)) return reply;
   return `${reply} ${trimmedQuestion}`;
-}
-
-function fallbackAttributeRequest(message: string): ChatAttributeRequest | undefined {
-  if (/\b(heights?|how\s+tall)\b/i.test(message)) return "height";
-  if (/\b(sizes?|how\s+(big|large))\b/i.test(message)) return "size";
-  if (/\b(dimensions?|measurements?|how\s+wide)\b/i.test(message)) return "dimensions";
-  if (/\b(colors?|colours?)\b/i.test(message)) return "color";
-  if (/\bmaterials?\b/i.test(message)) return "material";
-  if (/\b(stock|available)\b/i.test(message)) return "stock";
-  if (/\b(price|cost|how much)\b/i.test(message)) return "price";
-  return undefined;
-}
-
-function isProductAttributeQuestion(message: string): boolean {
-  return /\b(heights?|sizes?|dimensions?|measurements?|how\s+(big|tall|wide|large)|colors?|colours?|materials?|stock|available)\b/i.test(
-    message
-  );
 }
 
 function sizeSnippetFromProduct(product: { name?: string; description?: string }): string | undefined {
@@ -362,11 +238,10 @@ function sizeSnippetFromProduct(product: { name?: string; description?: string }
 }
 
 function buildProductAttributeReply(
-  message: string,
   products: Array<{ name?: string; description?: string }>,
   attributeRequest?: ChatAttributeRequest
 ): string | undefined {
-  const attribute = attributeRequest && attributeRequest !== "none" ? attributeRequest : fallbackAttributeRequest(message);
+  const attribute = attributeRequest && attributeRequest !== "none" ? attributeRequest : undefined;
   if (!attribute) return undefined;
   const heightRows = products
     .map((product) => {
@@ -381,48 +256,6 @@ function buildProductAttributeReply(
     return `The available sizes I can see are: ${heightRows.join("; ")}.`;
   }
   return `Here are the details I can see: ${heightRows.join("; ")}.`;
-}
-
-function shouldResetShoppingContextForMessage(input: {
-  message: string;
-  deterministicPatch: ReturnType<typeof extractQualificationFromMessage>;
-  plannedSearchQuery?: string;
-  hasExistingQualification: boolean;
-}): boolean {
-  if (!input.hasExistingQualification) return false;
-  if (!/\b(show\s+me|show\s+us|do\s+you\s+have|looking\s+for|i\s+need|need|i\s+want|want)\b/i.test(input.message)) {
-    return false;
-  }
-  const meaningfulConstraints = (input.deterministicPatch.constraints ?? []).filter(
-    (constraint) => !PRICE_TIER_CONSTRAINTS.test(constraint.trim()) && !STYLE_ONLY_CONSTRAINTS.test(constraint.trim())
-  );
-  if (meaningfulConstraints.length) return true;
-  const query = input.plannedSearchQuery?.trim();
-  return Boolean(query && query.split(/\s+/).length >= 2 && !/\b(premium|budget|affordable|cheap|mid range)\b/i.test(query));
-}
-
-function isCatalogOverviewQuestion(message: string): boolean {
-  const normalized = message.toLowerCase().replace(/\btyoe\b/g, "type");
-  return /\b(what\s+(type|types|kind|kinds)\s+of\s+(products|items)|what\s+(products|items)\s+do\s+you\s+have|what\s+do\s+you\s+(sell|have)|categories|product\s+categories)\b/i.test(
-    normalized
-  );
-}
-
-function buildCatalogOverview(input: {
-  categories?: string[];
-}): { reply: string; actions: WidgetAction[] } {
-  const categories = (input.categories ?? [])
-    .filter((category) => !/uncategorized|general/i.test(category))
-    .slice(0, 6);
-  const sample = categories.length ? categories.join(", ") : "gifts, home decor, and special occasion items";
-  return {
-    reply: `We have ${sample}. Who are you shopping for, and what budget should I stay within?`,
-    actions: categories.slice(0, 3).map((category) => ({
-      type: "message" as const,
-      label: category,
-      message: `Show me ${category}`,
-    })),
-  };
 }
 
 const PRODUCT_SURFACE_TOOLS = new Set(["search_products", "compare_products", "get_related_products"]);
@@ -486,12 +319,11 @@ function latestCatalogRefinementTerms(message: string, catalogHints?: CatalogSea
   return [...terms.values()].slice(0, 4);
 }
 
-function shouldApplyLatestCatalogRefinement(message: string, plan: ReturnType<typeof trustedSalesPlan>): boolean {
+function shouldApplyLatestCatalogRefinement(plan: ReturnType<typeof trustedSalesPlan>): boolean {
   return (
     plan?.userMove === "show_more" ||
     plan?.contextPolicy === "show_more" ||
-    plan?.resultPolicy === "exclude_seen" ||
-    /\b(like this|looks? like|similar to|anything else|what else|show more|more options)\b/i.test(message)
+    plan?.resultPolicy === "exclude_seen"
   );
 }
 
@@ -501,6 +333,103 @@ function mergeSearchQueryTerms(query: string | undefined, terms: string[]): stri
   const seen = new Map<string, string>();
   for (const part of parts) seen.set(part.toLowerCase(), part);
   return [...seen.values()].join(" ");
+}
+
+function mergeWidgetActions(primary: WidgetAction[], fallback: WidgetAction[], limit = 3): WidgetAction[] {
+  const seen = new Set<string>();
+  const merged: WidgetAction[] = [];
+  for (const action of [...primary, ...fallback]) {
+    const key = [action.type, action.label, action.message, action.sku, action.action]
+      .filter(Boolean)
+      .join("|")
+      .toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(action);
+    if (merged.length >= limit) break;
+  }
+  return merged;
+}
+
+function asksBudgetQuestion(_reply: string, plan: ReturnType<typeof trustedSalesPlan>): boolean {
+  return plan?.missingSlot === "budget";
+}
+
+function purchaseConfirmationReply(productCount: number): string {
+  return productCount > 1
+    ? "Yes, these options are in stock. Choose the option you like and I can help you add it to cart."
+    : "Yes, this option is in stock. You can add it to cart from the product card below.";
+}
+
+function normalizedTokens(value?: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  for (const char of (value ?? "").toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isWordChar = (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+    if (isWordChar) {
+      current += char;
+    } else if (current) {
+      tokens.push(current);
+      current = "";
+    }
+  }
+  if (current) tokens.push(current);
+  return tokens;
+}
+
+function editDistanceWithin(left: string, right: string, maxDistance: number): boolean {
+  if (Math.abs(left.length - right.length) > maxDistance) return false;
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    let best = current[0]!;
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      const value = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + cost);
+      current[j] = value;
+      best = Math.min(best, value);
+    }
+    if (best > maxDistance) return false;
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[right.length]! <= maxDistance;
+}
+
+function tokenMatches(messageToken: string, productToken: string): boolean {
+  if (messageToken === productToken) return true;
+  if (messageToken.length < 5 || productToken.length < 5) return false;
+  return editDistanceWithin(messageToken, productToken, productToken.length >= 9 ? 2 : 1);
+}
+
+function recentProductInterestOverride(
+  message: string,
+  history: StoredMessage[]
+): { closeIntent: ChatCloseIntent; closeTarget: { sku?: string; name?: string; confidence?: number } } | undefined {
+  const messageTokens = normalizedTokens(message);
+  const interestWords = new Set(["want", "need", "get", "buy", "take", "order", "like", "interested"]);
+  if (!messageTokens.some((token) => interestWords.has(token))) return undefined;
+  const weakProductWords = new Set(["brass", "wooden", "wood", "base", "display", "box", "with", "and", "the", "this", "that", "gift"]);
+  const meaningfulMessageTokens = messageTokens.filter((token) => token.length >= 3 && !interestWords.has(token) && !weakProductWords.has(token));
+  if (!meaningfulMessageTokens.length) return undefined;
+
+  let best: { sku?: string; name?: string; score: number } | undefined;
+  for (const product of buildAgentMemory(history).recentProducts) {
+    const productTokens = normalizedTokens(product.name).filter((token) => token.length >= 3 && !weakProductWords.has(token));
+    if (!productTokens.length) continue;
+    const matches = productTokens.filter((productToken) =>
+      meaningfulMessageTokens.some((messageToken) => tokenMatches(messageToken, productToken))
+    );
+    const hasStrongNameMatch = matches.some((token) => token.length >= 5);
+    const score = matches.length / Math.max(1, Math.min(productTokens.length, meaningfulMessageTokens.length));
+    if (!hasStrongNameMatch && matches.length < 2) continue;
+    if (!best || score > best.score) best = { sku: product.sku, name: product.name, score };
+  }
+  if (!best || best.score < 0.3) return undefined;
+  return {
+    closeIntent: "product_interest",
+    closeTarget: { sku: best.sku, name: best.name, confidence: Math.min(0.95, Math.max(0.7, best.score)) },
+  };
 }
 
 export async function runChatOrchestrator(
@@ -548,33 +477,24 @@ export async function runChatOrchestrator(
 
   const history = await loadMessageHistory(auth.tenantId, conversation.conversationId, config);
   const isFirstMessage = history.length === 0;
-  const fallbackIntent = detectIntent(text, isFirstMessage);
+  const fallbackIntent: ChatIntent = isFirstMessage ? "unknown" : "product";
   let cart = await loadCart(auth.tenantId, conversation.conversationId, config);
   const fallbackFunnel = resolveFunnelContext(conversation, {
     message: text,
     intent: fallbackIntent,
     cartItemCount: cart?.items.length ?? 0,
   });
-  const fallbackSubIntent = detectSubIntent(text, fallbackIntent, fallbackFunnel.stage);
+  const fallbackSubIntent: ChatSubIntent = "product_browse";
   const market = marketFromTimezone(timezone);
   const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
   const llm = createLLMProvider(config);
   const catalogHints = await listCatalogSearchHints(auth.tenantId, config);
-  const fallbackGateProductSearch = shouldGateProductSearch({
-    funnelStage: fallbackFunnel.stage,
-    subIntent: fallbackSubIntent,
-    qualification: conversation.qualification ?? fallbackFunnel.qualification,
-    message: text,
-    market,
-  });
+  const fallbackGateProductSearch = false;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const planner = await runSalesPlanner({
     llm,
-    model:
-      tenantConfig.llmConfig.models[
-        fallbackIntent === "faq" ? "faq" : fallbackIntent === "checkout" ? "checkout" : "product"
-      ] ?? config.llmModel,
+    model: tenantConfig.llmConfig.models.product ?? config.llmModel,
     message: text,
     history,
     qualification: conversation.qualification ?? fallbackFunnel.qualification,
@@ -590,7 +510,26 @@ export async function runChatOrchestrator(
   });
   totalInputTokens += planner.usage.inputTokens;
   totalOutputTokens += planner.usage.outputTokens;
-  const trustedPlan = trustedSalesPlan(planner.plan);
+  let trustedPlan = trustedSalesPlan(planner.plan);
+  const productInterestOverride = recentProductInterestOverride(text, history);
+  if (trustedPlan && productInterestOverride && (!trustedPlan.closeIntent || trustedPlan.closeIntent === "none")) {
+    trustedPlan = {
+      ...trustedPlan,
+      closeIntent: productInterestOverride.closeIntent,
+      closeTarget: productInterestOverride.closeTarget,
+      userMove: "cart_reply",
+      intent: "product",
+      subIntent: "product_detail",
+      funnelStage: "compare",
+      action: "search_products",
+      gateProductSearch: false,
+      missingSlot: "none",
+      nextQuestion: undefined,
+      suggestedActions: [],
+      toolPolicy: { allowedTools: ["search_products", "get_product_details"] },
+      reasonCodes: [...(trustedPlan.reasonCodes ?? []), "recent_product_interest_override"],
+    };
+  }
   const intent = trustedPlan ? plannedIntent(trustedPlan.intent, fallbackIntent) : fallbackIntent;
   const subIntent = trustedPlan ? plannedSubIntent(trustedPlan.subIntent, fallbackSubIntent) : fallbackSubIntent;
   const plannedStage = trustedPlan ? plannedFunnelStage(trustedPlan.funnelStage, fallbackFunnel.stage) : fallbackFunnel.stage;
@@ -601,28 +540,10 @@ export async function runChatOrchestrator(
     stage: plannedStage,
     changed: plannedStage !== fallbackFunnel.previousStage,
   };
-  const extractionOptions = {
-      catalogCategories: catalogHints?.categories,
-      catalogTags: catalogHints?.tags,
-      catalogMaterials: catalogHints?.materials,
-      catalogOccasions: catalogHints?.occasions,
-      catalogUseCases: catalogHints?.useCases,
-      catalogStyles: catalogHints?.styles,
-      catalogAliases: catalogHints?.aliases,
-  };
-  const deterministicPatch = trustedPlan
-    ? ({} as ReturnType<typeof extractQualificationFromMessage>)
-    : extractQualificationFromMessage(text, market, extractionOptions);
-  const priceTierPatch = trustedPlan
-    ? {}
-    : priceBandQualificationPatch(
-        text,
-        catalogHints,
-        conversation.qualification ?? fallbackFunnel.qualification
-      );
+  const deterministicPatch = {};
   let plannedSearchQuery = plannerSearchQuery(trustedPlan);
   const catalogRefinementTerms =
-    trustedPlan && shouldApplyLatestCatalogRefinement(text, trustedPlan)
+    trustedPlan && shouldApplyLatestCatalogRefinement(trustedPlan)
       ? latestCatalogRefinementTerms(text, catalogHints)
       : [];
   if (catalogRefinementTerms.length) {
@@ -633,25 +554,13 @@ export async function runChatOrchestrator(
     catalogAliases: catalogHints?.aliases,
     catalogHints,
   });
-  const shouldResetContext = trustedPlan
-    ? Boolean(trustedPlan.resetContext)
-    : shouldResetShoppingContextForMessage({
-        message: text,
-        deterministicPatch,
-        plannedSearchQuery,
-        hasExistingQualification: Boolean(conversation.qualification ?? fallbackFunnel.qualification),
-      });
+  const shouldResetContext = Boolean(trustedPlan?.resetContext);
   const qualificationBase = shouldResetContext ? undefined : conversation.qualification ?? fallbackFunnel.qualification;
   const qualification = mergeQualification(
-    mergeQualification(mergeQualification(qualificationBase, deterministicPatch), priceTierPatch),
+    mergeQualification(qualificationBase, deterministicPatch),
     mergeQualification(plannedPatch, catalogRefinementTerms.length ? { constraints: catalogRefinementTerms } : {})
   );
-  let forcedSearchFromSelection = false;
-  if (!trustedPlan && shouldForceSearchForExplicitSelection(text, qualification)) {
-    gateProductSearch = false;
-    planAction = "search_products";
-    forcedSearchFromSelection = true;
-  }
+  const forcedSearchFromSelection = trustedPlan?.userMove === "chip_selection" && trustedPlan.action === "search_products";
   const agentState = buildAgentTurnState({
     latestMessage: text,
     intent,
@@ -669,6 +578,11 @@ export async function runChatOrchestrator(
   });
   gateProductSearch = policy.gateProductSearch;
   planAction = policy.planAction;
+  const closeIntent = trustedPlan?.closeIntent ?? "none";
+  const closeTarget = closeIntent !== "none" ? trustedPlan?.closeTarget : undefined;
+  if (closeTarget?.name || closeTarget?.sku) {
+    plannedSearchQuery = closeTarget.name ?? closeTarget.sku;
+  }
   const funnelOrQualChanged =
     funnel.changed ||
     JSON.stringify(qualification) !== JSON.stringify(conversation.qualification ?? {}) ||
@@ -749,47 +663,11 @@ export async function runChatOrchestrator(
     }
   }
 
-  if (!trustedPlan && isCatalogOverviewQuestion(text)) {
-    const overview = buildCatalogOverview({
-      categories: catalogHints?.categories,
-    });
-    const replyContent = compactReplyText(overview.reply, { channel: input.channel, maxWords: 35 });
-    if (conversation.funnelStage !== "discover") {
-      await updateConversationFunnel(
-        auth.tenantId,
-        conversation,
-        "discover",
-        config,
-        qualification,
-        intent,
-        subIntent
-      );
-      conversation.funnelStage = "discover";
-    }
-    await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
-      intent,
-      subIntent,
-      funnelStage: "discover",
-      catalogOverview: true,
-    });
-    await incrementUsage(auth.tenantId, config, { inputTokens: 0, outputTokens: 0 });
-    return {
-      conversationId: conversation.conversationId,
-      reply: { type: "text", content: replyContent },
-      toolResults: [],
-      intent,
-      subIntent,
-      funnelStage: "discover",
-      usage: { inputTokens: 0, outputTokens: 0 },
-      handledBy: "bot",
-      handlingMode: "bot",
-      suggestedActions: overview.actions,
-    };
-  }
-
+  const searchQualification = closeIntent !== "none" ? { ...qualification, budget: undefined } : qualification;
+  const searchBudget = searchQualification.budget;
   const productAwareQuery = buildProductSearchQuery({
     message: plannedSearchQuery ?? text,
-    qualification,
+    qualification: searchQualification,
     pageUrl,
   });
   const directPlannerProductSearch = Boolean(trustedPlan && actionRunsProductSearch(planAction) && !gateProductSearch);
@@ -803,19 +681,11 @@ export async function runChatOrchestrator(
         objectionsRaised: qualification.objectionsRaised,
       });
   const currency = tenantConfig.commerceConnector?.currency ?? (market === "lk" ? "LKR" : "USD");
-  const conversationPolicy = trustedPlan
-    ? { reply: undefined, suggestedActions: [] as WidgetAction[] }
-    : planConversationMove({
-        message: text,
-        intent,
-        subIntent,
-        funnelStage: funnel.stage,
-        qualification,
-        gateProductSearch,
-        market,
-        catalogHints,
-      });
+  const conversationPolicy = { reply: undefined, suggestedActions: [] as WidgetAction[] };
   const policyFlags = [...policy.flags];
+  if (productInterestOverride && trustedPlan?.reasonCodes?.includes("recent_product_interest_override")) {
+    policyFlags.push("recent_product_interest_override");
+  }
   const plannerQuestion =
     trustedPlan?.nextQuestion?.trim() ||
     (policyFlags.includes("recipient_answer_requires_budget") ? "What budget should I stay within?" : undefined) ||
@@ -860,7 +730,7 @@ export async function runChatOrchestrator(
   const toolResults: Array<{ tool: string; success: boolean; result: unknown }> = [];
   let replyContent = "";
   const planAsksQuestion = planAction === "ask_question";
-  const planRunsSearch = trustedPlan ? actionRunsProductSearch(planAction) : shouldRunProductSearch(intent, text, gateProductSearch);
+  const planRunsSearch = trustedPlan ? actionRunsProductSearch(planAction) : shouldRunProductSearch(intent, gateProductSearch);
 
   if (planAsksQuestion && plannerQuestion) {
     replyContent = plannerQuestion;
@@ -873,15 +743,15 @@ export async function runChatOrchestrator(
         query: plannedSearchQuery ?? text,
         limit: 3,
         category: qualification.category,
-        maxPrice: qualification.budget?.max,
-        minPrice: qualification.budget?.min,
+        maxPrice: searchBudget?.max,
+        minPrice: searchBudget?.min,
       }),
       toolCtx
     );
     toolResults.push({ tool: "search_products", success, result });
   }
 
-  if (!replyContent && !directPlannerProductSearch && llm && !(gateProductSearch && conversationPolicy.reply)) {
+  if (!replyContent && !directPlannerProductSearch && llm) {
     const model =
       tenantConfig.llmConfig.models[intent === "faq" ? "faq" : intent === "checkout" ? "checkout" : "product"] ??
       config.llmModel;
@@ -933,18 +803,11 @@ export async function runChatOrchestrator(
       replyContent = tenantConfig.prompts.greeting;
     }
 
-    if (!trustedPlan && gateProductSearch && replyContent && replyContent.split(/\s+/).length > 100) {
-      replyContent = discoverQualifyPrompt(text, market, catalogHints);
-    }
   }
 
   if (!replyContent) {
     if (plannerQuestion && (gateProductSearch || planAsksQuestion)) {
       replyContent = plannerQuestion;
-    } else if (conversationPolicy.reply) {
-      replyContent = conversationPolicy.reply;
-    } else if (!trustedPlan && gateProductSearch) {
-      replyContent = discoverQualifyPrompt(text, market, catalogHints);
     } else if (planRunsSearch) {
       const { result, success } = await executeTool(
         "search_products",
@@ -952,8 +815,8 @@ export async function runChatOrchestrator(
           query: plannedSearchQuery ?? text,
           limit: 3,
           category: qualification.category,
-          maxPrice: qualification.budget?.max,
-          minPrice: qualification.budget?.min,
+          maxPrice: searchBudget?.max,
+          minPrice: searchBudget?.min,
         }),
         toolCtx
       );
@@ -982,8 +845,8 @@ export async function runChatOrchestrator(
         query: plannedSearchQuery ?? text,
         limit: 3,
         category: qualification.category,
-        maxPrice: qualification.budget?.max,
-        minPrice: qualification.budget?.min,
+        maxPrice: searchBudget?.max,
+        minPrice: searchBudget?.min,
       }),
       toolCtx
     );
@@ -999,8 +862,8 @@ export async function runChatOrchestrator(
       query: text,
       category: qualification.category,
       constraints: qualification.constraints,
-      maxPrice: qualification.budget?.max,
-      minPrice: qualification.budget?.min,
+      maxPrice: searchBudget?.max,
+      minPrice: searchBudget?.min,
       currency,
       channel: input.channel,
     });
@@ -1010,12 +873,14 @@ export async function runChatOrchestrator(
     channel: input.channel,
     maxWords: gateProductSearch ? 35 : undefined,
   });
-  const surfaceProducts = !gateProductSearch && intent !== "greeting" && (Boolean(trustedPlan) || !isGreetingOnlyMessage(text));
+  const surfaceProducts = !gateProductSearch && intent !== "greeting" && Boolean(trustedPlan);
   const finalToolResults = surfaceProducts ? toolResults : stripProductToolResults(toolResults);
   const finalProducts = extractProductHitsFromTools(finalToolResults);
-  const attributeReply = buildProductAttributeReply(text, finalProducts, trustedPlan?.attributeRequest);
+  const attributeReply = buildProductAttributeReply(finalProducts, trustedPlan?.attributeRequest);
   if (attributeReply) {
     replyContent = attributeReply;
+  } else if (closeIntent !== "none" && finalProducts.length) {
+    replyContent = purchaseConfirmationReply(finalProducts.length);
   } else if (input.channel === "web" && finalProducts.length) {
     replyContent = plannerProductResultsIntro({
       plan: trustedPlan,
@@ -1064,27 +929,36 @@ export async function runChatOrchestrator(
   }
 
   const emptyProductSearch = productSearchWasEmpty(finalToolResults);
-  const plannedActions = forcedSearchFromSelection || emptyProductSearch ? [] : plannerSuggestedActions(trustedPlan);
+  const closeIntentWithProducts = closeIntent !== "none" && finalProducts.length > 0;
+  const plannedActions = forcedSearchFromSelection || emptyProductSearch || closeIntentWithProducts ? [] : plannerSuggestedActions(trustedPlan);
+  const shouldSupplementBudgetActions = gateProductSearch && asksBudgetQuestion(replyContent, trustedPlan);
+  const fallbackSuggestedActions = buildSuggestedCtas({
+    funnelStage: finalFunnel.stage,
+    subIntent,
+    toolResults: finalToolResults,
+    cart: refreshedCart,
+    channel: input.channel,
+    gateProductSearch,
+    market,
+    catalogHints,
+    pageUrl,
+    qualification,
+    salesPlan: emptyProductSearch ? null : trustedPlan,
+  });
   let suggestedActions =
     plannedActions.length
-      ? plannedActions
-      : trustedPlan && !emptyProductSearch
-      ? []
+      ? shouldSupplementBudgetActions
+        ? mergeWidgetActions(plannedActions, fallbackSuggestedActions, 3)
+        : !gateProductSearch && fallbackSuggestedActions.length
+        ? mergeWidgetActions(plannedActions, fallbackSuggestedActions, 3)
+        : plannedActions
+      : trustedPlan && !emptyProductSearch && !gateProductSearch && !closeIntentWithProducts
+      ? fallbackSuggestedActions
       : gateProductSearch && conversationPolicy.suggestedActions?.length
-      ? conversationPolicy.suggestedActions
-      : buildSuggestedCtas({
-          funnelStage: finalFunnel.stage,
-          subIntent,
-          toolResults: finalToolResults,
-          cart: refreshedCart,
-          channel: input.channel,
-          gateProductSearch,
-          market,
-          catalogHints,
-          pageUrl,
-          qualification,
-          salesPlan: emptyProductSearch ? null : trustedPlan,
-        });
+      ? shouldSupplementBudgetActions
+        ? mergeWidgetActions(conversationPolicy.suggestedActions, fallbackSuggestedActions, 3)
+        : conversationPolicy.suggestedActions
+      : fallbackSuggestedActions;
   if (trustedPlan && !planAsksQuestion && !forcedSearchFromSelection && finalProducts.length) {
     replyContent = appendPlannerQuestion(replyContent, trustedPlan.nextQuestion);
   }
@@ -1122,12 +996,15 @@ export async function runChatOrchestrator(
   });
   replyContent = responseQuality.reply;
   const finalProductSkus = finalProducts.map((product) => product.sku).filter(Boolean);
+  const finalProductNames = finalProducts.map((product) => product.name).filter(Boolean);
   const recentProductSet = new Set(agentState.memory.recentProductSkus.map((sku) => sku.toUpperCase()));
   const repeatedSurfacedSkus = finalProductSkus.filter((sku) => recentProductSet.has(sku.toUpperCase()));
   const toolObservations = summarizeToolObservations(finalToolResults);
   const agentTrace = {
     userMove: agentState.userMove,
     replyLanguage: agentState.replyLanguage,
+    closeIntent,
+    closeTarget,
     resetContext: agentState.resetContext,
     gateProductSearch,
     planAction,
@@ -1136,6 +1013,7 @@ export async function runChatOrchestrator(
     toolObservations,
     excludeSkus,
     surfacedProductSkus: finalProductSkus,
+    surfacedProductNames: finalProductNames,
     repeatedSurfacedSkus,
     repeatedSurfacedSkuCount: repeatedSurfacedSkus.length,
     suggestedActionLabels: suggestedActions.map((action) => action.label).filter(Boolean),
@@ -1151,6 +1029,7 @@ export async function runChatOrchestrator(
     outputTokens: totalOutputTokens,
     toolCalls: finalToolResults.map((t) => t.tool),
     surfacedProductSkus: finalProductSkus,
+    surfacedProductNames: finalProductNames,
     suggestedActionLabels: agentTrace.suggestedActionLabels,
     suggestedActionMessages: agentTrace.suggestedActionMessages,
     agentTrace,

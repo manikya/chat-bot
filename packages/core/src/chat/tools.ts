@@ -17,12 +17,13 @@ import { retrieveKnowledge } from "../ingest/retrieve";
 import type { ScoredChunk } from "../ingest/types";
 import type { ToolDefinition } from "../llm/types";
 import { addToCart, getOrCreateCart, loadCart, recordCartCheckout } from "./cart";
-import { messageMentionsProducts } from "./intent";
 import { buildProductSearchQuery } from "./product-query";
 
 export interface ProductToolObservation {
   kind: "product_search" | "related_products";
   resultCount: number;
+  visibleCount?: number;
+  hiddenResultCount?: number;
   exactMatchStrength: "none" | "weak" | "strong";
   categoryDiversity: number;
   priceCoverage?: { min?: number; max?: number };
@@ -137,7 +138,7 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
 
 export function toolsForIntent(
   intent: ChatIntent,
-  message?: string,
+  _message?: string,
   funnelStage?: FunnelStage,
   subIntent?: ChatSubIntent,
   options?: { gateProductSearch?: boolean; allowedTools?: string[] }
@@ -151,7 +152,6 @@ export function toolsForIntent(
     ].map((name) => TOOL_DEFINITIONS[name]!);
   }
   const names: string[] = [];
-  const wantsProducts = messageMentionsProducts(message ?? "");
   const inCartFlow = funnelStage === "cart" || funnelStage === "checkout";
 
   if (subIntent === "order_status") {
@@ -165,7 +165,6 @@ export function toolsForIntent(
   }
   if (subIntent === "faq_objection") {
     names.push("get_order_status");
-    if (wantsProducts) names.push("search_products", "get_product_details");
     return [...new Set(names)].map((n) => TOOL_DEFINITIONS[n]!);
   }
   if (
@@ -185,12 +184,6 @@ export function toolsForIntent(
   }
   if (intent === "faq") {
     names.push("get_order_status");
-    if (wantsProducts) {
-      names.push("search_products", "get_product_details");
-    }
-  }
-  if ((intent === "greeting" || intent === "unknown") && wantsProducts) {
-    names.push("search_products", "get_product_details");
   }
   return [...new Set(names)].map((n) => TOOL_DEFINITIONS[n]!);
 }
@@ -287,6 +280,7 @@ function productDto(
 function productObservation(input: {
   kind: ProductToolObservation["kind"];
   products: ProductRecord[];
+  totalFound?: number;
   query?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -319,7 +313,9 @@ function productObservation(input: {
       : "no_match";
   return {
     kind: input.kind,
-    resultCount: input.products.length,
+    resultCount: input.totalFound ?? input.products.length,
+    visibleCount: input.products.length,
+    hiddenResultCount: Math.max(0, (input.totalFound ?? input.products.length) - input.products.length),
     exactMatchStrength,
     categoryDiversity: categories.size,
     priceCoverage: prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : undefined,
@@ -429,8 +425,9 @@ export async function executeTool(
         ctx.config,
         storeCurrency,
         searchQuery,
-        { category: categoryFilter, requiredTerms, maxPrice, minPrice, excludeSkus, limit }
+        { category: categoryFilter, requiredTerms, maxPrice, minPrice, excludeSkus, limit: recallLimit }
       );
+      const visibleProducts = ranked.slice(0, limit);
       const vectorScores = new Map(
         vectorHits.map((hit) => [String(hit.chunk.metadata.sku ?? hit.chunk.id), hit.score])
       );
@@ -438,7 +435,7 @@ export async function executeTool(
         success: true,
         result: {
           query: searchQuery,
-          products: ranked.map((p) =>
+          products: visibleProducts.map((p) =>
             productDto(p, {
               query: searchQuery,
               category: categoryFilter,
@@ -450,7 +447,8 @@ export async function executeTool(
           totalFound: ranked.length,
           observation: productObservation({
             kind: "product_search",
-            products: ranked,
+            products: visibleProducts,
+            totalFound: ranked.length,
             query: searchQuery,
             minPrice,
             maxPrice,

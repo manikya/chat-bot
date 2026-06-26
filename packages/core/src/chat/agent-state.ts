@@ -4,6 +4,7 @@ import type { SalesPlan } from "./sales-planner";
 
 export interface AgentMemory {
   recentProductSkus: string[];
+  recentProducts: Array<{ sku: string; name?: string }>;
   recentAssistantQuestions: string[];
   recentSuggestedActionLabels: string[];
   recentSuggestedActionMessages: string[];
@@ -47,11 +48,20 @@ function extractQuestions(content: string): string[] {
 
 export function buildAgentMemory(history: StoredMessage[]): AgentMemory {
   const recent = history.slice(-8);
+  const productMap = new Map<string, { sku: string; name?: string }>();
+  for (const item of recent) {
+    const skus = metadataStringList(item.metadata?.surfacedProductSkus);
+    const names = metadataStringList(item.metadata?.surfacedProductNames);
+    skus.forEach((sku, index) => {
+      productMap.set(sku.toUpperCase(), { sku, name: names[index] });
+    });
+  }
   return {
     recentProductSkus: unique(
       recent.flatMap((item) => metadataStringList(item.metadata?.surfacedProductSkus)),
       30
     ),
+    recentProducts: [...productMap.values()].slice(-12),
     recentAssistantQuestions: unique(
       recent
         .filter((item) => item.role === "assistant")

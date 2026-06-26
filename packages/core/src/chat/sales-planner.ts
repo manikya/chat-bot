@@ -57,6 +57,9 @@ const ATTRIBUTE_REQUESTS = [
 ] as const;
 export type ChatAttributeRequest = (typeof ATTRIBUTE_REQUESTS)[number];
 
+const CLOSE_INTENTS = ["none", "product_interest", "add_to_cart", "checkout_ready"] as const;
+export type ChatCloseIntent = (typeof CLOSE_INTENTS)[number];
+
 const TOOL_NAMES = [
   "search_products",
   "get_product_details",
@@ -79,6 +82,8 @@ export interface ChatPlan {
   funnelStage?: FunnelStage;
   action?: ChatPlanAction;
   gateProductSearch?: boolean;
+  closeIntent?: ChatCloseIntent;
+  closeTarget?: { sku?: string; name?: string; confidence?: number };
   contextPolicy?: "continue" | "reset" | "show_more" | "narrow" | "recover";
   resultPolicy?: "exact" | "diversify" | "exclude_seen" | "relax_constraints" | "ask_clarification";
   responsePolicy?: "answer" | "ask_one_question" | "show_cards" | "recover" | "handoff";
@@ -142,6 +147,10 @@ function isChatAttributeRequest(value: unknown): value is ChatAttributeRequest {
   return typeof value === "string" && ATTRIBUTE_REQUESTS.includes(value as ChatAttributeRequest);
 }
 
+function isChatCloseIntent(value: unknown): value is ChatCloseIntent {
+  return typeof value === "string" && CLOSE_INTENTS.includes(value as ChatCloseIntent);
+}
+
 function isPlannedToolName(value: unknown): value is PlannedToolName {
   return typeof value === "string" && TOOL_NAMES.includes(value as PlannedToolName);
 }
@@ -197,21 +206,74 @@ function cleanText(value?: string): string | undefined {
   return text && text.length <= 80 ? text : undefined;
 }
 
+function isAsciiLetterOrDigit(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isSinhalaChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return code >= 0x0d80 && code <= 0x0dff;
+}
+
+function isTamilChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return code >= 0x0b80 && code <= 0x0bff;
+}
+
+function normalizeWordText(value: string): string {
+  let output = "";
+  let previousWasSpace = true;
+  for (const char of value.toLowerCase()) {
+    if (isAsciiLetterOrDigit(char) || isSinhalaChar(char) || isTamilChar(char)) {
+      output += char;
+      previousWasSpace = false;
+    } else if (!previousWasSpace) {
+      output += " ";
+      previousWasSpace = true;
+    }
+  }
+  return output.trim();
+}
+
+function normalizedWords(value: string): string[] {
+  return normalizeWordText(value).split(" ").filter(Boolean);
+}
+
+function normalizedIncludesPhrase(message: string, phrase: string): boolean {
+  const words = normalizedWords(message);
+  const phraseWords = normalizedWords(phrase);
+  if (!words.length || !phraseWords.length || phraseWords.length > words.length) return false;
+  for (let index = 0; index <= words.length - phraseWords.length; index += 1) {
+    if (phraseWords.every((word, offset) => words[index + offset] === word)) return true;
+  }
+  return false;
+}
+
 function normalizeGroundingText(value: string): string {
-  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+  return normalizeWordText(value);
 }
 
 function isUnknownSlotValue(value: string): boolean {
-  return /^(?:unknown|unsure|not sure|no idea|dont know|don't know|anything|any|none)$/i.test(value.trim());
+  const normalized = normalizeWordText(value);
+  return ["unknown", "unsure", "not sure", "no idea", "dont know", "don t know", "anything", "any", "none"].includes(normalized);
 }
 
 function languageStyleForLatestMessage(message: string, fallback?: SalesPlan["languageStyle"]): SalesPlan["languageStyle"] {
-  if (/[\u0D80-\u0DFF]/u.test(message)) return "sinhala";
-  if (/[\u0B80-\u0BFF]/u.test(message)) return "tamil";
-  if (/\b(oya|eka|mokak|kohomada|thiyenawada|tiyenawada|thiyenawa|pennanna|karanna|puluwanda)\b/i.test(message)) {
-    return "singlish";
+  let hasSinhala = false;
+  let hasTamil = false;
+  let hasAsciiLetter = false;
+  for (const char of message) {
+    hasSinhala ||= isSinhalaChar(char);
+    hasTamil ||= isTamilChar(char);
+    const code = char.charCodeAt(0);
+    hasAsciiLetter ||= (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
   }
-  if (/[a-z]/i.test(message)) return "english";
+  if (hasSinhala) return "sinhala";
+  if (hasTamil) return "tamil";
+  const singlishTerms = ["oya", "eka", "mokak", "kohomada", "thiyenawada", "tiyenawada", "thiyenawa", "pennanna", "karanna", "puluwanda"];
+  if (singlishTerms.some((term) => normalizedIncludesPhrase(message, term))) return "singlish";
+  if (hasAsciiLetter) return "english";
   return fallback ?? "unknown";
 }
 
@@ -223,9 +285,7 @@ function messageContainsSlotValue(message: string, value: string): boolean {
   const normalizedMessage = normalizeGroundingText(message);
   const normalizedValue = normalizeGroundingText(value);
   if (!normalizedMessage || !normalizedValue) return false;
-  return new RegExp(`(^|\\s)${normalizedValue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`, "i").test(
-    normalizedMessage
-  );
+  return normalizedIncludesPhrase(normalizedMessage, normalizedValue);
 }
 
 function slotValueMatchesAlias(
@@ -254,12 +314,38 @@ function slotValueGroundedInLatestMessage(
 
 function budgetGroundedInLatestMessage(latestMessage?: string): boolean {
   if (!latestMessage) return true;
-  return /\b(?:rs\.?|lkr|usd|\$|€|£)?\s*\d[\d,]*(?:\.\d+)?\s*(?:k|lkr|rs)?\b/i.test(latestMessage) ||
-    /\b(under|below|less than|max|upto|up to|within|over|above|at least|from|budget|premium|mid range|budget[-\s]?friendly|affordable|cheap|luxury)\b/i.test(latestMessage);
+  const hasDigit = [...latestMessage].some((char) => {
+    const code = char.charCodeAt(0);
+    return code >= 48 && code <= 57;
+  });
+  const budgetTerms = [
+    "rs",
+    "lkr",
+    "usd",
+    "under",
+    "below",
+    "less than",
+    "max",
+    "upto",
+    "up to",
+    "within",
+    "over",
+    "above",
+    "at least",
+    "from",
+    "budget",
+    "premium",
+    "mid range",
+    "budget friendly",
+    "affordable",
+    "cheap",
+    "luxury",
+  ];
+  return hasDigit || budgetTerms.some((term) => normalizedIncludesPhrase(latestMessage, term));
 }
 
 function normalizeActionText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return normalizeWordText(value);
 }
 
 function allCatalogPriceBands(catalogHints?: CatalogSearchHints): CatalogPriceBand[] {
@@ -322,6 +408,7 @@ export function normalizeChatPlan(
   const action = isPlanAction(plan.action) ? plan.action : actionFromPlan(intent, subIntent, funnelStage, Boolean(plan.gateProductSearch ?? fallback.gateProductSearch));
   const userMove = isChatUserMove(plan.userMove) ? plan.userMove : undefined;
   const attributeRequest = isChatAttributeRequest(plan.attributeRequest) ? plan.attributeRequest : undefined;
+  const closeIntent = isChatCloseIntent(plan.closeIntent) ? plan.closeIntent : "none";
   const allowedTools = (plan.toolPolicy?.allowedTools?.length ? plan.toolPolicy.allowedTools : defaultToolsForAction(action))
     .filter(isPlannedToolName)
     .filter((tool, index, tools) => tools.indexOf(tool) === index);
@@ -330,6 +417,14 @@ export function normalizeChatPlan(
     confidence,
     userMove,
     attributeRequest,
+    closeIntent,
+    closeTarget: {
+      sku: cleanText(plan.closeTarget?.sku),
+      name: cleanText(plan.closeTarget?.name),
+      confidence: Number.isFinite(Number(plan.closeTarget?.confidence))
+        ? Math.max(0, Math.min(1, Number(plan.closeTarget?.confidence)))
+        : undefined,
+    },
     intent,
     subIntent,
     funnelStage,
@@ -369,6 +464,16 @@ export function publicSalesPlan(plan: SalesPlan | null) {
     funnelStage: plan.funnelStage,
     action: plan.action,
     gateProductSearch: Boolean(plan.gateProductSearch),
+    closeIntent: isChatCloseIntent(plan.closeIntent) ? plan.closeIntent : "none",
+    closeTarget: plan.closeTarget
+      ? {
+          sku: cleanText(plan.closeTarget.sku),
+          name: cleanText(plan.closeTarget.name),
+          confidence: Number.isFinite(Number(plan.closeTarget.confidence))
+            ? Math.max(0, Math.min(1, Number(plan.closeTarget.confidence)))
+            : undefined,
+        }
+      : undefined,
     contextPolicy: plan.contextPolicy,
     resultPolicy: plan.resultPolicy,
     responsePolicy: plan.responsePolicy,
@@ -500,10 +605,13 @@ export function salesPlanToQualificationPatch(
     for (const constraint of constraints) seen.set(constraint.toLowerCase(), constraint);
     patch.constraints = [...seen.values()];
   }
-  if ((plan.intent === "gift" || plan.intent === "product") && /\b(gifts?|birthday|anniversary|wedding|housewarming|father'?s day|mother'?s day)\b/i.test(options?.latestMessage ?? "")) {
+  const latestMessage = options?.latestMessage ?? "";
+  const giftTerms = ["gift", "gifts", "birthday", "anniversary", "wedding", "housewarming", "father s day", "mothers day", "mother s day"];
+  const eventTerms = ["corporate", "cooperate", "event", "giveaway", "giveaways", "award", "awards", "appreciation"];
+  if ((plan.intent === "gift" || plan.intent === "product") && giftTerms.some((term) => normalizedIncludesPhrase(latestMessage, term))) {
     patch.category = "gift";
   }
-  if ((plan.intent === "event" || plan.intent === "product") && /\b(corporate|cooperate|event|giveaways?|awards?|appreciation)\b/i.test(options?.latestMessage ?? "")) {
+  if ((plan.intent === "event" || plan.intent === "product") && eventTerms.some((term) => normalizedIncludesPhrase(latestMessage, term))) {
     patch.category = "event";
   }
   return patch;
@@ -542,6 +650,7 @@ export async function runSalesPlanner(input: {
             "Choose exactly one action from ask_question, answer, search_products, compare_products, get_product_details, cart_action, handoff_suggested. " +
             "Choose userMove from new_request, budget_answer, recipient_answer, style_answer, use_case_answer, chip_selection, show_more, product_question, cart_reply, faq_question, greeting, unknown. " +
             "Choose attributeRequest from height, size, dimensions, color, material, stock, price, availability, none. Use none unless the latestMessage asks for a product attribute. " +
+            "Choose closeIntent from none, product_interest, add_to_cart, checkout_ready. Use closeTarget with sku/name/confidence when the shopper refers to a recently shown product. " +
             "Choose intent from faq, product, checkout, greeting, unknown. Choose subIntent from product_browse, product_compare, product_detail, faq_policy, faq_objection, cart_review, checkout_ready, order_status. " +
             "Choose funnelStage from discover, compare, objection, cart, checkout. " +
             "Choose contextPolicy from continue, reset, show_more, narrow, recover. Choose resultPolicy from exact, diversify, exclude_seen, relax_constraints, ask_clarification. Choose responsePolicy from answer, ask_one_question, show_cards, recover, handoff. " +
@@ -549,11 +658,14 @@ export async function runSalesPlanner(input: {
             "For broad shopping requests, prefer ask_question until one useful missing slot is clear; for concrete product phrases, search_products is allowed even without budget. " +
             "If latestMessage is a budget answer such as 'around 5000', '5000', 'under 7000', 'mid range', or a catalog price-band message and existingQualification has shopping context, set userMove:'budget_answer', action:'search_products', gateProductSearch:false, keep the existing shopping context, and set budget. Treat 'around/about/near N' as budget.max=N unless the user says above/from/over. " +
             "If latestMessage answers who the gift is for, such as 'for a lady', 'gift is for my wife', or 'for a client', set userMove:'recipient_answer', keep existing shopping context, and do not immediately broaden into unrelated products. If budget is missing, set action:'ask_question', gateProductSearch:true, missingSlot:'budget', and ask for budget. If budget is known but style/tone is missing, ask one style/tone question. " +
+            "If latestMessage asks for best/top products after you already asked a budget question and existingQualification has shopping context, treat it as progress: set action:'search_products', gateProductSearch:false, keep the current context, and do not repeat the same budget question. " +
+            "If latestMessage says the shopper wants, likes, is interested in, wants to get/buy/order, or names a recently shown product, such as 'can I get the ribbon flowers' or 'i want valmpuri box', treat it as close intent even with typos/transliteration: set closeIntent:'product_interest' or 'add_to_cart', closeTarget to the matching recent product, userMove:'cart_reply', intent:'product' or 'checkout', subIntent:'product_detail' or 'checkout_ready', action:'search_products' unless a SKU is explicit, gateProductSearch:false, and confirm the matching product. Do not suggest lower-value alternatives, ask for budget, or budget relaxation when the shopper is ready to buy a shown item. " +
             "If latestMessage is a short suggested-action reply such as 'Gift', 'Anniversary', 'Decorative', 'Show me Gift', or 'Show mid range options ...' and existingQualification has shopping context, set userMove:'chip_selection' and choose search_products when enough context exists. " +
             "If latestMessage asks for more results such as 'what else do you have', 'anything else', 'show more', or 'more options', set userMove:'show_more', contextPolicy:'show_more', resultPolicy:'exclude_seen', action:'search_products', gateProductSearch:false, keep existing shopping context, and search for additional products instead of repeating the same products. If it says 'like this X' or 'looks like X', make X the active productType/searchQuery. " +
             "If latestMessage clearly starts a different product request, set userMove:'new_request', contextPolicy:'reset', resetContext:true, and build searchQuery only from the new request. " +
             "Be sales-skilled and engaging: suggestedActions should be useful next-click choices that move the shopper toward a purchase, not repeated generic chips. " +
             "Every suggestedActions item must include type:'message', a concise label, and the exact message the widget should send. " +
+            "Match suggestedActions to the question. For yes/no questions, return exactly two useful choices such as Yes and No. For budget questions, prefer the catalog price-band choices. Do not pad every question to three choices. " +
             "For greeting/hello-only messages, answer warmly and make suggestedActions concrete shopping starters such as catalog categories, best sellers, gift ideas, or product types; never use a vague question chip like 'What are you looking for?'. " +
             "For budget bands, use the catalogHints priceBands message text exactly, e.g. 'Show mid range options from ... to ...'. " +
             "When action is search_products, nextQuestion may be a short post-results sales question only if it helps narrow or close the sale; otherwise omit it. " +
@@ -570,7 +682,7 @@ export async function runSalesPlanner(input: {
             "missingSlot is the single most important missing sales slot. resetContext is true only when the shopper clearly changed topic. " +
             "toolPolicy.allowedTools must include only tools needed for the chosen action. Never allow add_to_cart or create_checkout_link unless the shopper explicitly asks. " +
             "recoveryActions are suggested buttons when exact results fail; include premium_alternative when appropriate. " +
-            "Schema: {confidence,languageStyle,replyLanguage,userMove,intent,subIntent,funnelStage,action,gateProductSearch,contextPolicy,resultPolicy,responsePolicy,searchQuery,ragQuery,toolPolicy,missingSlot,resetContext,productType,material,occasion,recipient,useCase,style,quantity,budget,attributeRequest,availabilityQuestion,nextQuestion,replyTone,suggestedActions,recoveryActions,reasonCodes}. " +
+            "Schema: {confidence,languageStyle,replyLanguage,userMove,intent,subIntent,funnelStage,action,gateProductSearch,closeIntent,closeTarget,contextPolicy,resultPolicy,responsePolicy,searchQuery,ragQuery,toolPolicy,missingSlot,resetContext,productType,material,occasion,recipient,useCase,style,quantity,budget,attributeRequest,availabilityQuestion,nextQuestion,replyTone,suggestedActions,recoveryActions,reasonCodes}. " +
             "Use null/omit unknown fields. nextQuestion should ask the single most useful missing sales question in the user's language.",
         },
         {
@@ -582,6 +694,9 @@ export async function runSalesPlanner(input: {
               content: item.content.slice(0, 300),
               surfacedProductSkus: Array.isArray(item.metadata?.surfacedProductSkus)
                 ? item.metadata.surfacedProductSkus
+                : undefined,
+              surfacedProductNames: Array.isArray(item.metadata?.surfacedProductNames)
+                ? item.metadata.surfacedProductNames
                 : undefined,
             })),
             existingQualification: qualification ?? null,

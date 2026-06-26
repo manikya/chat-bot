@@ -1,6 +1,5 @@
 import type { ChatIntent, FunnelStage, QualificationState } from "@commercechat/shared";
-import { messageMentionsProducts } from "./intent";
-import { LK_CHECKOUT_KEYWORDS, LK_OBJECTION_KEYWORDS } from "./locale";
+import { LK_OBJECTION_KEYWORDS } from "./locale";
 
 const FUNNEL_STAGES: FunnelStage[] = ["discover", "compare", "objection", "cart", "checkout"];
 
@@ -25,19 +24,41 @@ export interface FunnelContext {
   qualification: QualificationState;
 }
 
-const COMPARE_PATTERNS = [
-  /\bwhich (one|is better|should i)\b/i,
-  /\bcompare\b/i,
-  /\bvs\.?\b/i,
-  /\bdifference between\b/i,
-  /\bor\b.+\bor\b/i,
-];
+function normalizeText(value: string): string {
+  let output = "";
+  let previousWasSpace = true;
+  for (const char of value.toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isWordChar = (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+    if (isWordChar) {
+      output += char;
+      previousWasSpace = false;
+    } else if (!previousWasSpace) {
+      output += " ";
+      previousWasSpace = true;
+    }
+  }
+  return output.trim();
+}
+
+function containsPhrase(message: string, phrase: string): boolean {
+  return ` ${normalizeText(message)} `.includes(` ${normalizeText(phrase)} `);
+}
+
+function skuLikeWordCount(message: string): number {
+  return normalizeText(message)
+    .split(" ")
+    .filter((word) => word.length >= 3 && [...word].some((char) => {
+      const code = char.charCodeAt(0);
+      return code >= 48 && code <= 57;
+    }))
+    .length;
+}
 
 export function messageSignalsCompare(message: string): boolean {
-  const trimmed = message.trim();
-  if (COMPARE_PATTERNS.some((p) => p.test(trimmed))) return true;
-  const skuLike = trimmed.match(/\b[A-Z0-9][A-Z0-9_-]{2,}\b/g);
-  return (skuLike?.length ?? 0) >= 2;
+  if (["which one", "is better", "should i", "compare", "vs", "difference between"].some((phrase) => containsPhrase(message, phrase))) return true;
+  const normalized = normalizeText(message);
+  return containsPhrase(normalized, "or") && normalized.indexOf(" or ") !== normalized.lastIndexOf(" or ") || skuLikeWordCount(message) >= 2;
 }
 
 export function messageSignalsObjection(message: string): boolean {
@@ -47,17 +68,9 @@ export function messageSignalsObjection(message: string): boolean {
 
 export function resolveNextFunnelStage(input: FunnelResolveInput): FunnelStage {
   const current = normalizeFunnelStage(input.currentStage);
-  const { message, intent, cartItemCount } = input;
-  const lower = message.toLowerCase();
-  const wantsProducts = intent === "product" || messageMentionsProducts(message);
-  const wantsCheckout =
-    intent === "checkout" || LK_CHECKOUT_KEYWORDS.some((k) => lower.includes(k));
-  const isObjection = messageSignalsObjection(message);
-  const isCompare = messageSignalsCompare(message);
-
-  if (isObjection && (intent === "faq" || intent === "product" || intent === "checkout")) {
-    return "objection";
-  }
+  const { intent, cartItemCount } = input;
+  const wantsProducts = intent === "product";
+  const wantsCheckout = intent === "checkout";
 
   if (cartItemCount > 0) {
     if (wantsCheckout) return "checkout";
@@ -67,7 +80,7 @@ export function resolveNextFunnelStage(input: FunnelResolveInput): FunnelStage {
 
   if (wantsCheckout) return "checkout";
 
-  if (isCompare || (wantsProducts && current === "compare")) return "compare";
+  if (wantsProducts && current === "compare") return "compare";
 
   if (wantsProducts) {
     if (current === "objection") return "discover";

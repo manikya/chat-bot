@@ -230,6 +230,15 @@ const CHECKS = [
         : `suggestedActions expected >= ${expect.minSuggestedActions}, got ${out.suggestedActions ?? 0}`,
   },
   {
+    id: "maxSuggestedActions",
+    dimension: "engagement",
+    applies: (expect) => expect.maxSuggestedActions != null,
+    run: (out, expect) =>
+      Number(out.suggestedActions || 0) <= expect.maxSuggestedActions
+        ? null
+        : `suggestedActions expected <= ${expect.maxSuggestedActions}, got ${out.suggestedActions ?? 0}`,
+  },
+  {
     id: "suggestedActionIncludes",
     dimension: "engagement",
     applies: (expect) => expect.suggestedActionIncludes,
@@ -408,6 +417,27 @@ const CHECKS = [
       Boolean(out.salesPlan?.gateProductSearch) === Boolean(expect.salesPlanGateProductSearch)
         ? null
         : `salesPlan gate expected ${expect.salesPlanGateProductSearch}, got ${out.salesPlan?.gateProductSearch ?? "?"}`,
+  },
+  {
+    id: "salesPlanCloseIntent",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanCloseIntent,
+    run: (out, expect) => {
+      const allowed = Array.isArray(expect.salesPlanCloseIntent) ? expect.salesPlanCloseIntent : [expect.salesPlanCloseIntent];
+      return allowed.includes(out.salesPlan?.closeIntent)
+        ? null
+        : `salesPlan closeIntent expected one of ${allowed.join("|")}, got ${out.salesPlan?.closeIntent ?? "?"}`;
+    },
+  },
+  {
+    id: "salesPlanCloseTargetIncludes",
+    dimension: "routing",
+    applies: (expect) => expect.salesPlanCloseTargetIncludes,
+    run: (out, expect) => {
+      const target = [out.salesPlan?.closeTarget?.name, out.salesPlan?.closeTarget?.sku].filter(Boolean).join(" ").toLowerCase();
+      const missing = expect.salesPlanCloseTargetIncludes.filter((term) => !target.includes(String(term).toLowerCase()));
+      return missing.length ? `salesPlan closeTarget missing ${missing.join(", ")}` : null;
+    },
   },
   {
     id: "agentTracePolicyIncludes",

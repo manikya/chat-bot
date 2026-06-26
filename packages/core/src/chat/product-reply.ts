@@ -172,7 +172,7 @@ export function buildNoProductResultsReply(input: {
   };
   addPart(input.category);
   for (const constraint of input.constraints ?? []) {
-    if (/^(budget|budget friendly|mid range|premium|premium picks|luxury)$/i.test(constraint)) continue;
+    if (["budget", "budget friendly", "mid range", "premium", "premium picks", "luxury"].includes(constraint.trim().toLowerCase())) continue;
     addPart(constraint);
   }
   if (input.maxPrice != null) parts.push(`under ${formatMoney(input.maxPrice, input.currency)}`);

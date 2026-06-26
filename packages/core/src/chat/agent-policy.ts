@@ -11,23 +11,33 @@ export interface AgentPolicyResult {
 }
 
 function normalized(value?: string): string {
-  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const parts: string[] = [];
+  let current = "";
+  for (const char of (value ?? "").toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isAsciiLetterOrDigit = (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
+    if (isAsciiLetterOrDigit) {
+      current += char;
+    } else if (current) {
+      parts.push(current);
+      current = "";
+    }
+  }
+  if (current) parts.push(current);
+  return parts.join(" ");
 }
 
-function explicitCartOrCheckoutRequest(message: string): boolean {
-  return /\b(add to cart|cart|checkout|check out|buy now|purchase|order now|place order)\b/i.test(message);
+function closeIntentAllowsCartTools(state: AgentTurnState): boolean {
+  return state.planner?.closeIntent === "add_to_cart" || state.planner?.closeIntent === "checkout_ready";
 }
 
-function asksForMore(message: string): boolean {
-  return /\b(what else|anything else|show more|more options|other options|else do you have|more like this)\b/i.test(message);
+function hasCloseIntent(state: AgentTurnState): boolean {
+  return Boolean(state.planner?.closeIntent && state.planner.closeIntent !== "none");
 }
 
 function recipientAnswerWithoutBudget(state: AgentTurnState): boolean {
-  const looksLikeRecipientAnswer =
-    /\b(?:gift\s+is\s+for|it'?s\s+for|for\s+(?:a\s+|an\s+|my\s+)?[a-z][a-z\s]{2,30})\b/i.test(state.latestMessage) &&
-    !/\b(show|search|options|premium|budget|mid range|under|above|more|else|similar)\b/i.test(state.latestMessage);
   return (
-    (state.userMove === "recipient_answer" || looksLikeRecipientAnswer) &&
+    state.userMove === "recipient_answer" &&
     state.intent === "product" &&
     !state.qualification.budget?.min &&
     !state.qualification.budget?.max
@@ -52,8 +62,7 @@ export function applyAgentPolicy(input: {
   if (
     input.state.userMove === "show_more" ||
     input.state.planner?.contextPolicy === "show_more" ||
-    input.state.planner?.resultPolicy === "exclude_seen" ||
-    asksForMore(input.state.latestMessage)
+    input.state.planner?.resultPolicy === "exclude_seen"
   ) {
     gateProductSearch = false;
     planAction = "search_products";
@@ -61,7 +70,14 @@ export function applyAgentPolicy(input: {
     if (excludeSkus.length) flags.push("exclude_recent_products");
   }
 
-  if (planAction === "cart_action" && !explicitCartOrCheckoutRequest(input.state.latestMessage)) {
+  if (hasCloseIntent(input.state) && input.state.intent === "product") {
+    gateProductSearch = false;
+    planAction = "search_products";
+    excludeSkus = [];
+    flags.push("purchase_intent_product_confirmation");
+  }
+
+  if (planAction === "cart_action" && !closeIntentAllowsCartTools(input.state)) {
     planAction = input.state.intent === "product" ? "search_products" : "answer";
     flags.push("blocked_unrequested_cart_action");
   }
@@ -82,7 +98,7 @@ export function applyAgentPolicy(input: {
 
 export function filterToolsByAgentPolicy(tools: ToolDefinition[], state: AgentTurnState): { tools: ToolDefinition[]; flags: string[] } {
   const flags: string[] = [];
-  if (explicitCartOrCheckoutRequest(state.latestMessage)) return { tools, flags };
+  if (closeIntentAllowsCartTools(state)) return { tools, flags };
 
   const filtered = tools.filter((tool) => !["add_to_cart", "create_checkout_link"].includes(tool.name));
   if (filtered.length !== tools.length) flags.push("removed_unrequested_cart_tools");
@@ -96,8 +112,14 @@ function actionKey(action: WidgetAction): string {
 function looksLikeLanguageMismatch(action: WidgetAction, replyLanguage?: AgentTurnState["replyLanguage"]): boolean {
   if (!replyLanguage || replyLanguage === "unknown" || replyLanguage === "mixed") return false;
   const text = `${action.label} ${action.message ?? ""}`;
-  const hasSinhala = /[\u0D80-\u0DFF]/u.test(text);
-  const hasTamil = /[\u0B80-\u0BFF]/u.test(text);
+  const hasSinhala = [...text].some((char) => {
+    const code = char.charCodeAt(0);
+    return code >= 0x0d80 && code <= 0x0dff;
+  });
+  const hasTamil = [...text].some((char) => {
+    const code = char.charCodeAt(0);
+    return code >= 0x0b80 && code <= 0x0bff;
+  });
   if (replyLanguage === "english") return hasSinhala || hasTamil;
   if (replyLanguage === "sinhala") return hasTamil;
   if (replyLanguage === "tamil") return hasSinhala;

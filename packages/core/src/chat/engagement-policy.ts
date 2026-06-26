@@ -9,19 +9,59 @@ export interface EngagementMove {
 }
 
 function normalize(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  let output = "";
+  let previousWasSpace = true;
+  for (const char of value.toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isWordChar = (code >= 48 && code <= 57) || (code >= 97 && code <= 122);
+    if (isWordChar) {
+      output += char;
+      previousWasSpace = false;
+    } else if (!previousWasSpace) {
+      output += " ";
+      previousWasSpace = true;
+    }
+  }
+  return output.trim();
+}
+
+function words(value: string): string[] {
+  return normalize(value).split(" ").filter(Boolean);
+}
+
+function includesPhrase(value: string, phrase: string): boolean {
+  const sourceWords = words(value);
+  const phraseWords = words(phrase);
+  if (!sourceWords.length || !phraseWords.length || phraseWords.length > sourceWords.length) return false;
+  for (let index = 0; index <= sourceWords.length - phraseWords.length; index += 1) {
+    if (phraseWords.every((word, offset) => sourceWords[index + offset] === word)) return true;
+  }
+  return false;
+}
+
+function includesAnyPhrase(value: string, phrases: string[]): boolean {
+  return phrases.some((phrase) => includesPhrase(value, phrase));
 }
 
 function asList(value?: string | string[]): string[] {
   if (Array.isArray(value)) return value.flatMap((item) => asList(item));
-  return String(value ?? "")
-    .split(/[,|;]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const items: string[] = [];
+  let current = "";
+  for (const char of String(value ?? "")) {
+    if (char === "," || char === "|" || char === ";") {
+      if (current.trim()) items.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) items.push(current.trim());
+  return items;
 }
 
 function askedRecently(history: StoredMessage[] | undefined, question: string): boolean {
-  const wanted = normalize(question).replace(/\b(what|which|who|do|you|is|it|for|the|a|an)\b/g, "").trim();
+  const stopWords = new Set(["what", "which", "who", "do", "you", "is", "it", "for", "the", "a", "an"]);
+  const wanted = words(question).filter((word) => !stopWords.has(word)).join(" ");
   if (!wanted) return false;
   return (history ?? [])
     .filter((message) => message.role === "assistant")
@@ -37,26 +77,24 @@ function hasBudget(qualification?: QualificationState): boolean {
 }
 
 function isGiftLike(qualification?: QualificationState): boolean {
+  const terms = [qualification?.category, ...(qualification?.constraints ?? [])].join(" ");
   return Boolean(
     qualification?.category === "gift" ||
-      qualification?.constraints?.some((constraint) =>
-        /\bgifts?\b|birthday|anniversary|wedding|housewarming|father'?s day|mother'?s day/i.test(constraint)
-      )
+      includesAnyPhrase(terms, ["gift", "gifts", "birthday", "anniversary", "wedding", "housewarming", "father s day", "mother s day"])
   );
 }
 
 function isEventLike(qualification?: QualificationState): boolean {
+  const terms = [qualification?.category, ...(qualification?.constraints ?? [])].join(" ");
   return Boolean(
     qualification?.category === "event" ||
-      qualification?.constraints?.some((constraint) =>
-        /corporate|cooperate|event|giveaway|decor|award|appreciation/i.test(constraint)
-      )
+      includesAnyPhrase(terms, ["corporate", "cooperate", "event", "giveaway", "giveaways", "decor", "award", "awards", "appreciation"])
   );
 }
 
 function isHomeDecorLike(qualification?: QualificationState): boolean {
   const text = [qualification?.category, ...(qualification?.constraints ?? [])].join(" ");
-  return /\b(home|decor|decoration|ornament|ceramic|table|festive)\b/i.test(text);
+  return includesAnyPhrase(text, ["home", "decor", "decoration", "ornament", "ceramic", "table", "festive"]);
 }
 
 function productTerms(products: SearchProductHit[], keys: Array<keyof SearchProductHit>, catalogTerms?: string[]): string[] {
@@ -145,7 +183,7 @@ function resultMatchesQualification(products: SearchProductHit[], qualification?
   const terms = [qualification?.category, ...(qualification?.constraints ?? [])]
     .map((term) => term?.trim())
     .filter((term): term is string => Boolean(term && term.length >= 3))
-    .filter((term) => !/gift|personal use/i.test(term));
+    .filter((term) => !includesAnyPhrase(term, ["gift", "personal use"]));
   if (!terms.length) return true;
   return products.some((product) => {
     const text = productText(product);
@@ -155,7 +193,9 @@ function resultMatchesQualification(products: SearchProductHit[], qualification?
 
 function festiveResultShare(products: SearchProductHit[]): number {
   if (!products.length) return 0;
-  const festive = products.filter((product) => /christmas|festive|santa|angel|ornament|holiday/i.test(productText(product))).length;
+  const festive = products.filter((product) =>
+    includesAnyPhrase(productText(product), ["christmas", "festive", "santa", "angel", "ornament", "holiday"])
+  ).length;
   return festive / products.length;
 }
 
@@ -212,7 +252,7 @@ function resultRefinementMove(input: {
 
   if (
     isHomeDecorLike(qualification) &&
-    !qualification?.constraints?.some((constraint) => /christmas|festive|holiday/i.test(constraint)) &&
+    !qualification?.constraints?.some((constraint) => includesAnyPhrase(constraint, ["christmas", "festive", "holiday"])) &&
     festiveResultShare(products) >= 0.8
   ) {
     return {
@@ -247,7 +287,7 @@ function resultRefinementMove(input: {
   }
 
   if (isGiftLike(qualification)) {
-    if (!qualification?.constraints?.some((constraint) => /practical|sentimental|decorative/i.test(constraint))) {
+    if (!qualification?.constraints?.some((constraint) => includesAnyPhrase(constraint, ["practical", "sentimental", "decorative"]))) {
       return {
         question: "Should it feel practical, sentimental, or decorative?",
         suggestedActions: occasionToneActions(),
@@ -333,13 +373,13 @@ function preProductMove(qualification?: QualificationState, catalogHints?: Catal
       suggestedActions: recipientActions(catalogHints),
     };
   }
-  if (isGiftLike(qualification) && qualification?.recipient && !qualification?.constraints?.some((constraint) => /practical|sentimental|decorative/i.test(constraint))) {
+  if (isGiftLike(qualification) && qualification?.recipient && !qualification?.constraints?.some((constraint) => includesAnyPhrase(constraint, ["practical", "sentimental", "decorative"]))) {
     return {
       question: "Should it feel practical, sentimental, or decorative?",
       suggestedActions: occasionToneActions(),
     };
   }
-  if (isEventLike(qualification) && !qualification?.constraints?.some((constraint) => /giveaway|decor|award|appreciation/i.test(constraint))) {
+  if (isEventLike(qualification) && !qualification?.constraints?.some((constraint) => includesAnyPhrase(constraint, ["giveaway", "decor", "award", "appreciation"]))) {
     return {
       question: "What is this for at the event?",
       suggestedActions: messageActions([
