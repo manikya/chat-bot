@@ -332,7 +332,8 @@
       "salesPlanCloseTargetIncludes": ["valampuri", "valmpuri"],
       "productNameIncludesAny": ["Valampuri"],
       "replyIncludes": ["in stock"],
-      "replyExcludes": ["What is your budget", "budget friendly", "mid range", "premium picks"],
+      "replyExcludes": ["What is your budget", "budget friendly", "mid range", "premium picks", "Ready to checkout", "checkout link"],
+      "suggestedActionExcludes": ["checkout"],
       "noRepeatedQuestionsAcrossConversation": true,
       "replyNoArtifacts": true,
       "maxQuestions": 1
@@ -352,6 +353,7 @@
       "maxProductCards": 3,
       "minSuggestedActions": 1,
       "suggestedActionIncludes": ["more"],
+      "suggestedActionExcludes": ["Brass Brass", "Items පිත්තල Gift", "under 50", "Show unique gifts", "Explore more options"],
       "noDuplicateSuggestedActions": true,
       "replyNoArtifacts": true,
       "maxQuestions": 1
@@ -411,6 +413,28 @@
       "agentTraceMaxRepeatedSkus": 0,
       "agentTraceHasObservation": true,
       "minProductCards": 1,
+      "maxQuestions": 1
+    }
+  },
+  {
+    "id": "premium-anniversary-show-more-widens-before-no-results",
+    "messages": [
+      "Explore your anniversary gift ideas",
+      "Show premium options above LKR 7,000",
+      "Show more anniversary gift ideas"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "salesPlanUserMove": "show_more",
+      "minProductCards": 1,
+      "noRepeatedProductSkusAcrossConversation": true,
+      "noDuplicateProductSkus": true,
+      "replyExcludes": ["I couldn't find", "No exact", "without Anniversary"],
+      "suggestedActionExcludes": ["anniversary gift ideas gift", "any material"],
+      "replyNoArtifacts": true,
+      "agentTraceHasObservation": true,
       "maxQuestions": 1
     }
   },
@@ -503,7 +527,8 @@
       "salesPlanCloseTargetIncludes": ["ribbon"],
       "productNameIncludesAny": ["Ribbon Flower"],
       "replyIncludes": ["in stock"],
-      "replyExcludes": ["below LKR 7,000", "consider them", "budget friendly", "mid range"],
+      "replyExcludes": ["below LKR 7,000", "consider them", "budget friendly", "mid range", "Ready to checkout", "checkout link"],
+      "suggestedActionExcludes": ["checkout"],
       "minProductPrice": 7000,
       "replyNoArtifacts": true,
       "maxQuestions": 1

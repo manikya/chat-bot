@@ -436,7 +436,8 @@
         el.innerHTML = formatBotText(m.text);
       }
       messagesEl.appendChild(el);
-      if (m.actions && m.actions.length) {
+      function appendMessageActions() {
+        if (!m.actions || !m.actions.length) return;
         var actions = document.createElement("div");
         actions.className = "cc-msg-actions";
         m.actions.forEach(function (a) {
@@ -453,6 +454,9 @@
       }
       if (m.cards && m.cards.length) {
         messagesEl.appendChild(renderProductCards(m.cards));
+        appendMessageActions();
+      } else {
+        appendMessageActions();
       }
     });
     if (state.loading) {

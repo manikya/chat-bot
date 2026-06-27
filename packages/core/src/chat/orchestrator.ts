@@ -900,7 +900,7 @@ export async function runChatOrchestrator(
   const refreshedCart = await loadCart(auth.tenantId, conversation.conversationId, config);
   let finalFunnel = {
     ...funnel,
-    stage: trustedPlan ? funnel.stage : resolveFunnelContext(conversation, {
+    stage: closeIntent === "product_interest" ? "compare" : trustedPlan ? funnel.stage : resolveFunnelContext(conversation, {
       message: text,
       intent,
       cartItemCount: refreshedCart?.items.length ?? 0,
@@ -944,9 +944,13 @@ export async function runChatOrchestrator(
     pageUrl,
     qualification,
     salesPlan: emptyProductSearch ? null : trustedPlan,
+    closeIntent,
   });
+  const hasProductDiscoveryActions = Boolean(finalProducts.length && !gateProductSearch && fallbackSuggestedActions.length);
   let suggestedActions =
-    plannedActions.length
+    hasProductDiscoveryActions
+      ? fallbackSuggestedActions
+      : plannedActions.length
       ? shouldSupplementBudgetActions
         ? mergeWidgetActions(plannedActions, fallbackSuggestedActions, 3)
         : !gateProductSearch && fallbackSuggestedActions.length

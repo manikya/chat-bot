@@ -152,7 +152,7 @@ function uniqueTerms(values: Array<string | undefined>): string[] {
 function focusedConstraintTerms(qualification?: QualificationState): string[] {
   return uniqueTerms(
     (qualification?.constraints ?? []).filter(
-      (constraint) => !isBroadAnchorTerm(constraint) && !isBudgetTierTerm(constraint)
+      (constraint) => !isBroadAnchorTerm(constraint) && !isBudgetTierTerm(constraint) && !isBudgetPhraseTerm(constraint)
     )
   );
 }
@@ -176,8 +176,39 @@ function isBudgetTierTerm(value?: string): boolean {
   );
 }
 
+function hasDigit(value?: string): boolean {
+  return [...(value ?? "")].some((char) => {
+    const code = char.charCodeAt(0);
+    return code >= 48 && code <= 57;
+  });
+}
+
+function isBudgetPhraseTerm(value?: string): boolean {
+  const normalized = normalizeTerm(value ?? "");
+  if (!normalized) return false;
+  if (hasDigit(normalized)) return true;
+  return ["under", "above", "from", "to", "less", "than", "within", "lkr", "rs", "usd", "price", "range"].some((term) =>
+    ` ${normalized} `.includes(` ${term} `)
+  );
+}
+
 function phraseFromTerms(terms: Array<string | undefined>): string {
   return uniqueTerms(terms).join(" ").trim();
+}
+
+function termTokens(value?: string): Set<string> {
+  return new Set(normalizeTerm(value ?? "").split(" ").filter((token) => token.length >= 3));
+}
+
+function hasHighTokenOverlap(left?: string, right?: string): boolean {
+  const leftTokens = termTokens(left);
+  const rightTokens = termTokens(right);
+  if (!leftTokens.size || !rightTokens.size) return false;
+  let overlap = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) overlap += 1;
+  }
+  return overlap / Math.min(leftTokens.size, rightTokens.size) >= 0.6;
 }
 
 function appendContextPhrase(base: string, context?: string): string {
@@ -214,11 +245,41 @@ function productSearchMeta(toolResults: Array<{ tool: string; success: boolean; 
 }
 
 function currentSearchPhrase(qualification?: QualificationState, query?: string): string {
-  const focused = phraseFromTerms([
-    ...(qualification?.constraints ?? []).filter((constraint) => !isBudgetTierTerm(constraint)),
-    qualification?.category,
-  ]);
-  return focused || query?.trim() || "options";
+  const selected: string[] = [];
+  const add = (value?: string) => {
+    const label = value?.trim();
+    const key = normalizeTerm(label ?? "");
+    if (!label || !key || isBudgetTierTerm(label) || isBudgetPhraseTerm(label)) return;
+    if (["gift", "gifts", "gifting", "brass items", "items", "item", "options"].includes(key)) return;
+    if (selected.some((existing) => hasHighTokenOverlap(existing, label))) return;
+    selected.push(label);
+  };
+  for (const constraint of qualification?.constraints ?? []) add(constraint);
+  add(qualification?.category);
+  const focused = phraseFromTerms(selected);
+  if (focused) return focused;
+  const queryTerms = (query ?? "")
+    .split(/\s+/)
+    .filter((term) => {
+      const key = normalizeTerm(term);
+      return key && !["gift", "gifts", "for", "under", "above", "from", "to", "lkr", "rs", "usd"].includes(key) && !hasDigit(key);
+    })
+    .slice(0, 4)
+    .join(" ")
+    .trim();
+  return queryTerms || "options";
+}
+
+function compactActionLabel(value: string, maxLength = 54): string {
+  if (value.length <= maxLength) return value;
+  const words = value.split(/\s+/);
+  let next = "";
+  for (const word of words) {
+    const candidate = next ? `${next} ${word}` : word;
+    if (candidate.length > maxLength) break;
+    next = candidate;
+  }
+  return next || value.slice(0, maxLength).trim();
 }
 
 function moreDiscoveryActions(input: {
@@ -229,7 +290,7 @@ function moreDiscoveryActions(input: {
   if (meta.hiddenCount <= 0) return [];
   const phrase = currentSearchPhrase(input.qualification, meta.query);
   const actions: WidgetAction[] = [
-    messageAction(`Show more ${phrase}`.slice(0, 48), `Show more ${phrase}`),
+    messageAction(compactActionLabel(`Show more ${phrase}`), `Show more ${phrase}`),
     messageAction("More like these", "Show more options like these"),
   ];
   if (input.qualification?.budget?.max != null || input.qualification?.budget?.min != null) {
@@ -260,18 +321,18 @@ function recoveryActions(input: {
   };
 
   if (latest && anchorPhrase) {
-    add(`All ${anchorPhrase}`, `Show ${anchorPhrase}${budget ? ` ${budget}` : ""} without ${latest}`);
+    add(compactActionLabel(`All ${anchorPhrase}`), `Show ${anchorPhrase}${budget ? ` ${budget}` : ""} without ${latest}`);
   }
   if (qualification?.budget?.max != null && premiumPhrase) {
-    add(`Premium ${premiumPhrase}`, `Show premium ${premiumPhrase} above ${formatMoney(qualification.budget.max, market === "lk" ? "LKR" : "USD")}`);
+    add(compactActionLabel(`Premium ${premiumPhrase}`), `Show premium ${premiumPhrase} above ${formatMoney(qualification.budget.max, market === "lk" ? "LKR" : "USD")}`);
   }
   if (qualification?.budget?.min != null && (anchorPhrase || focused[0])) {
     const phrase = anchorPhrase || focused[0]!;
     add(
-      `Lower-priced ${phrase}`,
+      compactActionLabel(`Lower-priced ${phrase}`),
       `Show ${phrase} under ${formatMoney(qualification.budget.min, market === "lk" ? "LKR" : "USD")}`
     );
-    add(`All ${phrase}`, `Show all ${phrase}`);
+    add(compactActionLabel(`All ${phrase}`), `Show all ${phrase}`);
   }
   if (latest) {
     const materialTerms = new Set((catalogHints?.materials ?? []).map(normalizeTerm));
@@ -298,8 +359,9 @@ export function buildSuggestedCtas(input: {
   pageUrl?: string;
   qualification?: QualificationState;
   salesPlan?: SalesPlan | null;
+  closeIntent?: SalesPlan["closeIntent"];
 }): WidgetAction[] {
-  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market, catalogHints, pageUrl, qualification, salesPlan } =
+  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market, catalogHints, pageUrl, qualification, salesPlan, closeIntent } =
     input;
   const products = extractProductHitsFromTools(toolResults);
   const inStockProducts = products.filter((p) => p.inStock !== false);
@@ -312,6 +374,10 @@ export function buildSuggestedCtas(input: {
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
     const priceActions = budgetActions(catalogHints, products, qualification);
     return [...priceActions, ...hintActions].slice(0, 3);
+  }
+
+  if (closeIntent === "product_interest") {
+    return [];
   }
 
   if (subIntent === "checkout_ready" || funnelStage === "checkout") {

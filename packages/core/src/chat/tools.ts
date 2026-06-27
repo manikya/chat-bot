@@ -24,6 +24,8 @@ export interface ProductToolObservation {
   resultCount: number;
   visibleCount?: number;
   hiddenResultCount?: number;
+  widened?: boolean;
+  widenStrategy?: string;
   exactMatchStrength: "none" | "weak" | "strong";
   categoryDiversity: number;
   priceCoverage?: { min?: number; max?: number };
@@ -281,6 +283,8 @@ function productObservation(input: {
   kind: ProductToolObservation["kind"];
   products: ProductRecord[];
   totalFound?: number;
+  widened?: boolean;
+  widenStrategy?: string;
   query?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -316,6 +320,8 @@ function productObservation(input: {
     resultCount: input.totalFound ?? input.products.length,
     visibleCount: input.products.length,
     hiddenResultCount: Math.max(0, (input.totalFound ?? input.products.length) - input.products.length),
+    widened: input.widened,
+    widenStrategy: input.widenStrategy,
     exactMatchStrength,
     categoryDiversity: categories.size,
     priceCoverage: prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : undefined,
@@ -368,6 +374,76 @@ function focusedPreferenceTerms(qualification?: QualificationState, catalogHints
   ];
 }
 
+function meaningfulSearchQuery(query: string, qualification?: QualificationState): string {
+  const noise = new Set([
+    "gift",
+    "gifts",
+    "ideas",
+    "idea",
+    "options",
+    "option",
+    "under",
+    "above",
+    "from",
+    "to",
+    "lkr",
+    "rs",
+    "usd",
+  ]);
+  const pieces = query
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter((part) => {
+      const key = part.toLowerCase().replace(/[^a-z0-9]+/g, "");
+      return key.length >= 3 && !noise.has(key) && !/^\d+$/.test(key);
+    });
+  const fallback = [
+    ...(qualification?.constraints ?? []),
+    qualification?.category,
+  ]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part && !noise.has(part.toLowerCase())));
+  return [...new Set([...pieces, ...fallback])].slice(0, 5).join(" ") || query;
+}
+
+async function runProductSearchPass(input: {
+  ctx: ToolExecutionContext;
+  searchQuery: string;
+  recallLimit: number;
+  storeCurrency: string;
+  categoryFilter?: string;
+  requiredTerms?: string[];
+  maxPrice?: number;
+  minPrice?: number;
+  excludeSkus?: string[];
+}): Promise<{ ranked: ProductRecord[]; vectorHits: ScoredChunk[] }> {
+  const { ctx, searchQuery, recallLimit, storeCurrency, categoryFilter, requiredTerms, maxPrice, minPrice, excludeSkus } = input;
+  const [vectorHits, cacheHits] = await Promise.all([
+    retrieveKnowledge(ctx.auth, searchQuery, ctx.config, {
+      topK: recallLimit,
+      sourceType: "catalog",
+    }),
+    searchProductCache(ctx.auth.tenantId, searchQuery, ctx.config, {
+      category: categoryFilter,
+      requiredTerms,
+      maxPrice,
+      minPrice,
+      excludeSkus,
+      limit: recallLimit,
+    }),
+  ]);
+  const ranked = await mergeProductSearchResults(
+    ctx.auth.tenantId,
+    vectorHits,
+    cacheHits,
+    ctx.config,
+    storeCurrency,
+    searchQuery,
+    { category: categoryFilter, requiredTerms, maxPrice, minPrice, excludeSkus, limit: recallLimit }
+  );
+  return { ranked, vectorHits };
+}
+
 export async function executeTool(
   name: string,
   argsJson: string,
@@ -404,29 +480,44 @@ export async function executeTool(
       });
       const recallLimit = Math.max(limit * 3, 12);
       const storeCurrency = await getStoreCurrency(ctx.auth.tenantId, ctx.config);
-      const [vectorHits, cacheHits] = await Promise.all([
-        retrieveKnowledge(ctx.auth, searchQuery, ctx.config, {
-          topK: recallLimit,
-          sourceType: "catalog",
-        }),
-        searchProductCache(ctx.auth.tenantId, searchQuery, ctx.config, {
-          category: categoryFilter,
-          requiredTerms,
+      const wideningPasses = [
+        { strategy: "exact", query: searchQuery, categoryFilter, requiredTerms, excludeSkus },
+        { strategy: "relax_required_terms", query: searchQuery, categoryFilter, requiredTerms: [], excludeSkus },
+        {
+          strategy: "relax_category",
+          query: meaningfulSearchQuery(searchQuery, ctx.qualification),
+          categoryFilter: undefined,
+          requiredTerms: [],
+          excludeSkus,
+        },
+        {
+          strategy: "relax_recent_exclusions",
+          query: meaningfulSearchQuery(searchQuery, ctx.qualification),
+          categoryFilter: undefined,
+          requiredTerms: [],
+          excludeSkus: [],
+        },
+      ];
+      let ranked: ProductRecord[] = [];
+      let vectorHits: ScoredChunk[] = [];
+      let widenStrategy = "exact";
+      for (const pass of wideningPasses) {
+        const result = await runProductSearchPass({
+          ctx,
+          searchQuery: pass.query,
+          recallLimit,
+          storeCurrency,
+          categoryFilter: pass.categoryFilter,
+          requiredTerms: pass.requiredTerms,
           maxPrice,
           minPrice,
-          excludeSkus,
-          limit: recallLimit,
-        }),
-      ]);
-      const ranked = await mergeProductSearchResults(
-        ctx.auth.tenantId,
-        vectorHits,
-        cacheHits,
-        ctx.config,
-        storeCurrency,
-        searchQuery,
-        { category: categoryFilter, requiredTerms, maxPrice, minPrice, excludeSkus, limit: recallLimit }
-      );
+          excludeSkus: pass.excludeSkus,
+        });
+        ranked = result.ranked;
+        vectorHits = result.vectorHits;
+        widenStrategy = pass.strategy;
+        if (ranked.length || pass.strategy === "relax_recent_exclusions") break;
+      }
       const visibleProducts = ranked.slice(0, limit);
       const vectorScores = new Map(
         vectorHits.map((hit) => [String(hit.chunk.metadata.sku ?? hit.chunk.id), hit.score])
@@ -449,6 +540,8 @@ export async function executeTool(
             kind: "product_search",
             products: visibleProducts,
             totalFound: ranked.length,
+            widened: widenStrategy !== "exact",
+            widenStrategy,
             query: searchQuery,
             minPrice,
             maxPrice,
