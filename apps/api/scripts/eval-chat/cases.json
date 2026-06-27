@@ -360,6 +360,24 @@
     }
   },
   {
+    "id": "budget-aircraft-does-not-widen-to-unrelated-products",
+    "messages": [
+      "air planes",
+      "Show budget friendly options under LKR 1,500"
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "intent": "product",
+      "toolsIncludes": ["search_products"],
+      "maxProductCards": 0,
+      "replyExcludes": ["Cat Couple", "Christmas Colored Angel", "Bag Normal"],
+      "suggestedActionIncludes": ["air"],
+      "suggestedActionExcludes": ["Cat", "Christmas", "Bag"],
+      "replyNoArtifacts": true,
+      "maxQuestions": 1
+    }
+  },
+  {
     "id": "approx-budget-searches-mothers-day-gift",
     "messages": [
       "do you have mothers day gifts",

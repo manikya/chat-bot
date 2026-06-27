@@ -258,7 +258,7 @@
       ".cc-product-list{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:5px;margin:-2px 0 8px 0;max-width:96%;-webkit-overflow-scrolling:touch;}" +
       ".cc-product-card{flex:0 0 218px;scroll-snap-align:start;display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;box-shadow:0 6px 16px rgba(15,23,42,.07);}" +
       ".cc-product-media{position:relative;}" +
-      ".cc-product-img{width:100%;height:118px;border-radius:12px;background:#e2e8f0;object-fit:cover;display:block;}" +
+      ".cc-product-img{width:100%;height:118px;border-radius:12px;background:#f8fafc;object-fit:contain;display:block;}" +
       ".cc-product-img-fallback{display:flex;align-items:center;justify-content:center;color:#64748b;font-weight:700;font-size:24px;height:116px;}" +
       ".cc-product-dots{display:flex;justify-content:center;gap:4px;margin-top:4px;}" +
       ".cc-product-dot{width:6px;height:6px;border-radius:50%;background:#cbd5e1;border:none;padding:0;}" +
@@ -446,6 +446,9 @@
           chip.className = "cc-action-chip";
           chip.textContent = a.label || a.sku;
           chip.onclick = function () {
+            if (state.messages[messageIndex]) {
+              state.messages[messageIndex].actions = null;
+            }
             handleWidgetAction(a);
           };
           actions.appendChild(chip);

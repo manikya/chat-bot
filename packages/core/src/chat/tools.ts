@@ -480,9 +480,20 @@ export async function executeTool(
       });
       const recallLimit = Math.max(limit * 3, 12);
       const storeCurrency = await getStoreCurrency(ctx.auth.tenantId, ctx.config);
-      const wideningPasses = [
+      const hasBudgetFilter = maxPrice != null || minPrice != null;
+      const strictWideningPasses = [
         { strategy: "exact", query: searchQuery, categoryFilter, requiredTerms, excludeSkus },
         { strategy: "relax_required_terms", query: searchQuery, categoryFilter, requiredTerms: [], excludeSkus },
+        {
+          strategy: "relax_recent_exclusions",
+          query: searchQuery,
+          categoryFilter,
+          requiredTerms: [],
+          excludeSkus: [],
+        },
+      ];
+      const broadWideningPasses = [
+        ...strictWideningPasses,
         {
           strategy: "relax_category",
           query: meaningfulSearchQuery(searchQuery, ctx.qualification),
@@ -498,6 +509,7 @@ export async function executeTool(
           excludeSkus: [],
         },
       ];
+      const wideningPasses = hasBudgetFilter ? strictWideningPasses : broadWideningPasses;
       let ranked: ProductRecord[] = [];
       let vectorHits: ScoredChunk[] = [];
       let widenStrategy = "exact";

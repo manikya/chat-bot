@@ -307,7 +307,9 @@ function recoveryActions(input: {
   market?: "default" | "lk";
 }): WidgetAction[] {
   const { qualification, catalogHints, market = "default" } = input;
-  const focused = focusedConstraintTerms(qualification);
+  const specificCategory =
+    qualification?.category && !isBroadAnchorTerm(qualification.category) ? qualification.category : undefined;
+  const focused = uniqueTerms([...focusedConstraintTerms(qualification), specificCategory]);
   const latest = focused.at(-1);
   const broadContext = isBroadAnchorTerm(qualification?.category) ? qualification?.category : undefined;
   const anchorPhrase = phraseFromTerms([...focused.filter((term) => term !== latest), broadContext]);
