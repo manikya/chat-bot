@@ -1,4 +1,4 @@
-import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type ChatSubIntent, type FunnelStage, type TenantConfig, type WidgetAction } from "@commercechat/shared";
+import { ApiError, ErrorCodes, type AuthContext, type ChatIntent, type ChatResult, type ChatSubIntent, type FunnelStage, type QualificationState, type TenantConfig, type WidgetAction } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { listCatalogSearchHints, type CatalogSearchHints } from "../catalog/products";
 import { getDocClient } from "../db/client";
@@ -425,10 +425,29 @@ function tokenMatches(messageToken: string, productToken: string): boolean {
   return editDistanceWithin(messageToken, productToken, productToken.length >= 9 ? 2 : 1);
 }
 
+function asksForSimilarOptions(message: string): boolean {
+  return /\b(more\s+like|similar|like\s+this|looks?\s+like|alternatives?|anything\s+else|what\s+else)\b/i.test(message);
+}
+
+function asksSuitabilityFollowUp(message: string): boolean {
+  return /\b(which|what|what\s+one|which\s+one|which\s+is|what\s+is)\b[\s\S]{0,60}\b(suitable|best|better|good|recommend|recommended|ideal)\b/i.test(message) ||
+    /\b(suitable|best|better|good|ideal)\b[\s\S]{0,60}\b(for|as)\b/i.test(message);
+}
+
+function contextTermsFromQualification(qualification?: QualificationState): string[] {
+  return [
+    qualification?.category,
+    ...(qualification?.constraints ?? []),
+  ]
+    .map((term) => term?.trim())
+    .filter((term): term is string => Boolean(term));
+}
+
 function recentProductInterestOverride(
   message: string,
   history: StoredMessage[]
 ): { closeIntent: ChatCloseIntent; closeTarget: { sku?: string; name?: string; confidence?: number } } | undefined {
+  if (asksForSimilarOptions(message)) return undefined;
   const messageTokens = normalizedTokens(message);
   const interestWords = new Set(["want", "need", "get", "buy", "take", "order", "like", "interested"]);
   if (!messageTokens.some((token) => interestWords.has(token))) return undefined;
@@ -595,6 +614,26 @@ export async function runChatOrchestrator(
   if (catalogRefinementTerms.length) {
     plannedSearchQuery = mergeSearchQueryTerms(plannedSearchQuery, catalogRefinementTerms);
   }
+  const suitabilityFollowUp = asksSuitabilityFollowUp(text) && Boolean(conversation.qualification?.constraints?.length || conversation.qualification?.category);
+  if (suitabilityFollowUp) {
+    const contextTerms = contextTermsFromQualification(conversation.qualification);
+    plannedSearchQuery = mergeSearchQueryTerms(plannedSearchQuery ?? text, contextTerms);
+    planAction = "search_products";
+    gateProductSearch = false;
+    if (trustedPlan) {
+      trustedPlan = {
+        ...trustedPlan,
+        action: "search_products",
+        contextPolicy: "continue",
+        resultPolicy: "exact",
+        gateProductSearch: false,
+        resetContext: false,
+        missingSlot: "none",
+        nextQuestion: undefined,
+        reasonCodes: [...(trustedPlan.reasonCodes ?? []), "suitability_followup_preserve_context"],
+      };
+    }
+  }
   const plannedPatch = salesPlanToQualificationPatch(trustedPlan, {
     latestMessage: text,
     catalogAliases: catalogHints?.aliases,
@@ -604,7 +643,11 @@ export async function runChatOrchestrator(
   const qualificationBase = shouldResetContext ? undefined : conversation.qualification ?? fallbackFunnel.qualification;
   const qualification = mergeQualification(
     mergeQualification(qualificationBase, deterministicPatch),
-    mergeQualification(plannedPatch, catalogRefinementTerms.length ? { constraints: catalogRefinementTerms } : {})
+    mergeQualification(plannedPatch, suitabilityFollowUp
+      ? { constraints: contextTermsFromQualification(conversation.qualification) }
+      : catalogRefinementTerms.length
+        ? { constraints: catalogRefinementTerms }
+        : {})
   );
   const forcedSearchFromSelection = trustedPlan?.userMove === "chip_selection" && trustedPlan.action === "search_products";
   const agentState = buildAgentTurnState({
