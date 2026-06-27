@@ -41,6 +41,8 @@ export interface TenantConfig {
   llmConfig: {
     primaryProvider: string;
     models: { faq: string; product: string; checkout: string };
+    /** Optional lower-latency model used only for runtime sales planning. */
+    plannerModel?: string;
     /** Higher-quality model used for offline/admin catalog intelligence generation. */
     catalogIntelligenceModel?: string;
     embeddingModel: string;

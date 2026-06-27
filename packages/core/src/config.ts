@@ -17,6 +17,7 @@ export interface CoreConfig {
   openaiApiKey?: string;
   embeddingModel: string;
   llmModel: string;
+  plannerModel?: string;
   catalogIntelligenceModel?: string;
   ingestMaxPages: number;
   apiPublicUrl: string;
@@ -83,6 +84,7 @@ export function loadConfig(): CoreConfig {
     openaiApiKey: process.env.OPENAI_API_KEY,
     embeddingModel: process.env.EMBEDDING_MODEL ?? "text-embedding-3-small",
     llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
+    plannerModel: process.env.PLANNER_MODEL,
     catalogIntelligenceModel: process.env.CATALOG_INTELLIGENCE_MODEL,
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
     apiPublicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",

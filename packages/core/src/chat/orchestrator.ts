@@ -47,6 +47,7 @@ import {
   type ChatAttributeRequest,
   type ChatCloseIntent,
   type ChatPlanAction,
+  type SalesPlan,
 } from "./sales-planner";
 import {
   handleStaleCartMessage,
@@ -443,6 +444,93 @@ function contextTermsFromQualification(qualification?: QualificationState): stri
     .filter((term): term is string => Boolean(term));
 }
 
+function messageContainsCatalogPhrase(message: string, phrase: string): boolean {
+  const messageWords = normalizedTokens(message);
+  const phraseWords = normalizedTokens(phrase);
+  if (!messageWords.length || !phraseWords.length || phraseWords.length > messageWords.length) return false;
+  for (let index = 0; index <= messageWords.length - phraseWords.length; index += 1) {
+    if (phraseWords.every((word, offset) => messageWords[index + offset] === word)) return true;
+  }
+  return false;
+}
+
+function deterministicConcreteSearchPlan(message: string, catalogHints?: CatalogSearchHints): SalesPlan | null {
+  if (asksForSimilarOptions(message) || asksSuitabilityFollowUp(message)) return null;
+  const tokens = new Set(normalizedTokens(message));
+  const broadWords = new Set(["best", "recommend", "suggest", "suitable", "gift", "gifts", "birthday", "anniversary", "budget", "premium", "cheap"]);
+  const attributeWords = new Set(["height", "heights", "size", "sizes", "dimension", "dimensions", "color", "colors", "price", "stock"]);
+  if ([...tokens].some((token) => broadWords.has(token) || attributeWords.has(token))) return null;
+  const candidates = [
+    ...(catalogHints?.productTypeHints ?? []).map((hint) => hint.term),
+    ...(catalogHints?.categories ?? []),
+    ...(catalogHints?.offeringTypes ?? []),
+  ]
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 4)
+    .sort((a, b) => b.length - a.length);
+  const matched = candidates.find((term) => messageContainsCatalogPhrase(message, term));
+  if (!matched) return null;
+  return {
+    confidence: 0.9,
+    userMove: "new_request",
+    intent: "product",
+    subIntent: "product_browse",
+    funnelStage: "compare",
+    action: "search_products",
+    gateProductSearch: false,
+    contextPolicy: "reset",
+    resultPolicy: "exact",
+    responsePolicy: "show_cards",
+    searchQuery: matched,
+    productType: matched,
+    missingSlot: "none",
+    resetContext: true,
+    closeIntent: "none",
+    toolPolicy: { allowedTools: ["search_products", "get_product_details", "get_related_products"] },
+    reasonCodes: ["deterministic_concrete_product_fast_path"],
+  };
+}
+
+function deterministicCatalogChipPlan(
+  message: string,
+  existingQualification: QualificationState | undefined,
+  catalogHints?: CatalogSearchHints
+): SalesPlan | null {
+  const normalized = message.replace(/^show\s+me\s+/i, "").trim();
+  if (!normalized || normalized.length > 60 || !existingQualification) return null;
+  const candidates = [
+    ...(catalogHints?.offeringTypes ?? []),
+    ...(catalogHints?.occasions ?? []),
+    ...(catalogHints?.useCases ?? []),
+    ...(catalogHints?.audiences ?? []),
+    ...(catalogHints?.decisionFactors ?? []),
+    ...(catalogHints?.categories ?? []),
+    ...(catalogHints?.tags ?? []),
+  ];
+  const matched = candidates.find((term) => term.toLowerCase() === normalized.toLowerCase());
+  if (!matched) return null;
+  const contextTerms = contextTermsFromQualification(existingQualification);
+  return {
+    confidence: 0.9,
+    userMove: "chip_selection",
+    intent: "product",
+    subIntent: "product_browse",
+    funnelStage: "compare",
+    action: "search_products",
+    gateProductSearch: false,
+    contextPolicy: "continue",
+    resultPolicy: "exact",
+    responsePolicy: "show_cards",
+    searchQuery: mergeSearchQueryTerms(matched, contextTerms),
+    productType: matched,
+    missingSlot: "none",
+    resetContext: false,
+    closeIntent: "none",
+    toolPolicy: { allowedTools: ["search_products", "get_product_details", "get_related_products"] },
+    reasonCodes: ["deterministic_catalog_chip_search"],
+  };
+}
+
 function recentProductInterestOverride(
   message: string,
   history: StoredMessage[]
@@ -557,22 +645,31 @@ export async function runChatOrchestrator(
   const fallbackGateProductSearch = false;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
-  const planner = await trace.time("llm_planner", () => runSalesPlanner({
-    llm,
-    model: tenantConfig.llmConfig.models.product ?? config.llmModel,
-    message: text,
-    history,
-    qualification: conversation.qualification ?? fallbackFunnel.qualification,
-    catalogHints,
-    fallback: {
-      intent: fallbackIntent,
-      subIntent: fallbackSubIntent,
-      funnelStage: fallbackFunnel.stage,
-      gateProductSearch: fallbackGateProductSearch,
-    },
-    cartItemCount: cart?.items.length ?? 0,
-    pageUrl,
-  }), { model: tenantConfig.llmConfig.models.product ?? config.llmModel });
+  const deterministicPlan =
+    deterministicCatalogChipPlan(text, conversation.qualification ?? fallbackFunnel.qualification, catalogHints) ??
+    deterministicConcreteSearchPlan(text, catalogHints);
+  if (deterministicPlan) {
+    trace.record("deterministic_planner_fast_path", 0, true, { searchQuery: deterministicPlan.searchQuery });
+  }
+  const plannerModel = tenantConfig.llmConfig.plannerModel ?? config.plannerModel ?? tenantConfig.llmConfig.models.product ?? config.llmModel;
+  const planner = deterministicPlan
+    ? { plan: deterministicPlan, usage: { inputTokens: 0, outputTokens: 0 } }
+    : await trace.time("llm_planner", () => runSalesPlanner({
+      llm,
+      model: plannerModel,
+      message: text,
+      history,
+      qualification: conversation.qualification ?? fallbackFunnel.qualification,
+      catalogHints,
+      fallback: {
+        intent: fallbackIntent,
+        subIntent: fallbackSubIntent,
+        funnelStage: fallbackFunnel.stage,
+        gateProductSearch: fallbackGateProductSearch,
+      },
+      cartItemCount: cart?.items.length ?? 0,
+      pageUrl,
+    }), { model: plannerModel });
   totalInputTokens += planner.usage.inputTokens;
   totalOutputTokens += planner.usage.outputTokens;
   let trustedPlan = trustedSalesPlan(planner.plan);
@@ -911,7 +1008,7 @@ export async function runChatOrchestrator(
   if (!replyContent) {
     if (plannerQuestion && (gateProductSearch || planAsksQuestion)) {
       replyContent = plannerQuestion;
-    } else if (planRunsSearch) {
+    } else if (planRunsSearch && !toolResults.some((t) => t.tool === "search_products" && t.success)) {
       const { result, success } = await trace.time("tool_search_products_fallback", () => executeTool(
         "search_products",
         JSON.stringify({
@@ -1052,6 +1149,7 @@ export async function runChatOrchestrator(
     qualification,
     salesPlan: emptyProductSearch ? null : trustedPlan,
     closeIntent,
+    budgetQuestion: asksBudgetQuestion(replyContent, trustedPlan),
   });
   const hasProductDiscoveryActions = Boolean(finalProducts.length && !gateProductSearch && fallbackSuggestedActions.length);
   let suggestedActions =

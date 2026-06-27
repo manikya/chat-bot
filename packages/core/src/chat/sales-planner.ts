@@ -178,25 +178,26 @@ function defaultToolsForAction(action: ChatPlanAction): PlannedToolName[] {
 function compactHints(catalogHints?: CatalogSearchHints) {
   const compactObject = <T>(value: Record<string, T> | undefined, limit: number): Record<string, T> =>
     Object.fromEntries(Object.entries(value ?? {}).slice(0, limit));
+  const compactAliases = Object.fromEntries(Object.entries(catalogHints?.aliases ?? {}).slice(0, 40));
   return {
-    categories: catalogHints?.categories?.slice(0, 40) ?? [],
-    tags: catalogHints?.tags?.slice(0, 40) ?? [],
-    materials: catalogHints?.materials?.slice(0, 30) ?? [],
-    occasions: catalogHints?.occasions?.slice(0, 30) ?? [],
-    recipients: catalogHints?.recipients?.slice(0, 30) ?? [],
-    useCases: catalogHints?.useCases?.slice(0, 30) ?? [],
-    styles: catalogHints?.styles?.slice(0, 30) ?? [],
-    aliases: catalogHints?.aliases ?? {},
-    priceBandsByCategory: catalogHints?.priceBandsByCategory ?? {},
-    priceBandsByMaterial: catalogHints?.priceBandsByMaterial ?? {},
+    categories: catalogHints?.categories?.slice(0, 20) ?? [],
+    tags: catalogHints?.tags?.slice(0, 20) ?? [],
+    materials: catalogHints?.materials?.slice(0, 15) ?? [],
+    occasions: catalogHints?.occasions?.slice(0, 15) ?? [],
+    recipients: catalogHints?.recipients?.slice(0, 15) ?? [],
+    useCases: catalogHints?.useCases?.slice(0, 15) ?? [],
+    styles: catalogHints?.styles?.slice(0, 15) ?? [],
+    aliases: compactAliases,
+    priceBandsByCategory: compactObject(catalogHints?.priceBandsByCategory, 20),
+    priceBandsByMaterial: compactObject(catalogHints?.priceBandsByMaterial, 15),
     priceBands: catalogHints?.priceBands?.slice(0, 3) ?? [],
     offeringMode: catalogHints?.offeringMode ?? "unknown",
-    offeringTypes: catalogHints?.offeringTypes?.slice(0, 30) ?? [],
-    useCaseProfiles: catalogHints?.useCaseProfiles ?? {},
-    audiences: catalogHints?.audiences?.slice(0, 30) ?? [],
-    decisionFactors: catalogHints?.decisionFactors?.slice(0, 20) ?? [],
-    starterIntents: catalogHints?.starterIntents?.slice(0, 10) ?? [],
-    productTypeHints: catalogHints?.productTypeHints?.slice(0, 25).map((item) => ({
+    offeringTypes: catalogHints?.offeringTypes?.slice(0, 18) ?? [],
+    useCaseProfiles: compactObject(catalogHints?.useCaseProfiles, 8),
+    audiences: catalogHints?.audiences?.slice(0, 15) ?? [],
+    decisionFactors: catalogHints?.decisionFactors?.slice(0, 10) ?? [],
+    starterIntents: catalogHints?.starterIntents?.slice(0, 8) ?? [],
+    productTypeHints: catalogHints?.productTypeHints?.slice(0, 15).map((item) => ({
       term: item.term,
       source: item.source,
       inStockCount: item.inStockCount,
@@ -204,8 +205,8 @@ function compactHints(catalogHints?: CatalogSearchHints) {
         ? { min: item.priceCoverage.min, max: item.priceCoverage.max, currency: item.priceCoverage.currency }
         : undefined,
     })) ?? [],
-    giftProfiles: compactObject(catalogHints?.giftProfiles, 12),
-    attributeSummaries: compactObject(catalogHints?.attributeSummaries, 12),
+    giftProfiles: compactObject(catalogHints?.giftProfiles, 6),
+    attributeSummaries: compactObject(catalogHints?.attributeSummaries, 6),
   };
 }
 
@@ -650,7 +651,7 @@ export async function runSalesPlanner(input: {
     const response = await llm.chat({
       model,
       temperature: 0.1,
-      maxOutputTokens: 500,
+      maxOutputTokens: 320,
       messages: [
         {
           role: "system",
@@ -702,9 +703,9 @@ export async function runSalesPlanner(input: {
           role: "user",
           content: JSON.stringify({
             latestMessage: message,
-            recentHistory: (history ?? []).slice(-6).map((item) => ({
+            recentHistory: (history ?? []).slice(-4).map((item) => ({
               role: item.role,
-              content: item.content.slice(0, 300),
+              content: item.content.slice(0, 180),
               surfacedProductSkus: Array.isArray(item.metadata?.surfacedProductSkus)
                 ? item.metadata.surfacedProductSkus
                 : undefined,

@@ -394,8 +394,9 @@ export function buildSuggestedCtas(input: {
   qualification?: QualificationState;
   salesPlan?: SalesPlan | null;
   closeIntent?: SalesPlan["closeIntent"];
+  budgetQuestion?: boolean;
 }): WidgetAction[] {
-  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market, catalogHints, pageUrl, qualification, salesPlan, closeIntent } =
+  const { funnelStage, subIntent, toolResults, cart, channel, gateProductSearch, market, catalogHints, pageUrl, qualification, salesPlan, closeIntent, budgetQuestion } =
     input;
   const products = extractProductHitsFromTools(toolResults);
   const inStockProducts = products.filter((p) => p.inStock !== false);
@@ -406,8 +407,9 @@ export function buildSuggestedCtas(input: {
   const searchMeta = productSearchMeta(toolResults);
 
   if (gateProductSearch) {
-    const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
     const priceActions = budgetActions(catalogHints, products, qualification);
+    if (budgetQuestion) return priceActions.slice(0, 3);
+    const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
     return [...priceActions, ...hintActions].slice(0, 3);
   }
 
@@ -474,6 +476,7 @@ export function buildSuggestedCtas(input: {
 
   if (subIntent === "product_compare" || funnelStage === "compare") {
     if (inStockProducts.length) return productActions(inStockProducts, 3);
+    if (salesPlan?.subIntent === "product_detail" || salesPlan?.availabilityQuestion || salesPlan?.attributeRequest) return [];
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
     return hintActions.length ? hintActions : [];
   }
@@ -489,6 +492,7 @@ export function buildSuggestedCtas(input: {
         },
       ];
     }
+    if (salesPlan?.subIntent === "product_detail" || salesPlan?.availabilityQuestion || salesPlan?.attributeRequest) return [];
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
     return hintActions.length ? hintActions : [];
   }
