@@ -90,6 +90,7 @@ export async function upsertProductCache(
       })
     );
   }
+  clearCatalogSearchHintsCache(tenantId);
   try {
     const result = await notifyWishlistRemindersForProducts(tenantId, products, config);
     if (result.notified || result.waiting) {
@@ -119,6 +120,7 @@ export async function deleteProductsForSource(
       })
     );
   }
+  if (toDelete.length) clearCatalogSearchHintsCache(tenantId);
   return toDelete.length;
 }
 
@@ -243,6 +245,13 @@ export interface CatalogSearchHints {
   intelligenceQuality?: { score: number; warnings: string[] };
   intelligenceGeneratedAt?: string;
   intelligenceModel?: string;
+}
+
+const CATALOG_HINTS_CACHE_TTL_MS = 5 * 60 * 1000;
+const catalogHintsCache = new Map<string, { expiresAt: number; hints: CatalogSearchHints }>();
+
+function clearCatalogSearchHintsCache(tenantId: string) {
+  catalogHintsCache.delete(tenantId);
 }
 
 function mostCommonCurrency(items: Array<{ currency?: string }>): string {
@@ -664,6 +673,7 @@ export async function regenerateProductAttributes(
   };
   intelligence.quality = qualityScoreOfferingIntelligence(refreshedItems, intelligence);
   await writeStoredOfferingIntelligence(tenantId, config, intelligence);
+  clearCatalogSearchHintsCache(tenantId);
 
   return {
     updated,
@@ -822,6 +832,50 @@ function cleanOfferingTerm(value?: string): string | undefined {
   return label.length > 80 ? label.slice(0, 80).trim() : label;
 }
 
+function cleanAudienceTerm(value?: string): string | undefined {
+  const label = value
+    ?.replace(/["'`]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!label) return undefined;
+  const normalized = label.toLowerCase();
+  if (
+    [
+      "gift",
+      "gifts",
+      "item",
+      "items",
+      "product",
+      "products",
+      "option",
+      "options",
+      "collection",
+      "collections",
+    ].includes(normalized)
+  ) {
+    return undefined;
+  }
+  return label.length > 40 ? label.slice(0, 40).trim() : label.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function audienceTermsFromCatalogLabels(labels: string[]): string[] {
+  const terms: string[] = [];
+  for (const label of labels) {
+    const normalized = label
+      .replace(/[()/_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) continue;
+    const parts = normalized.split(/\bfor\b/i);
+    if (parts.length < 2) continue;
+    for (const part of parts.slice(1)) {
+      const candidate = cleanAudienceTerm(part.replace(/\b(gifts?|items?|products?|options?|collections?)\b/gi, ""));
+      if (candidate) terms.push(candidate);
+    }
+  }
+  return terms;
+}
+
 function catalogText(items: ProductRecord[]): string {
   return items
     .slice(0, 500)
@@ -930,7 +984,10 @@ function buildStarterIntents(input: {
   return mostCommonTerms(starters, 8);
 }
 
-function qualityScoreOfferingIntelligence(items: ProductRecord[], intelligence: Pick<CatalogOfferingIntelligence, "starterIntents" | "offeringTypes" | "decisionFactors">): { score: number; warnings: string[] } {
+function qualityScoreOfferingIntelligence(
+  items: ProductRecord[],
+  intelligence: Pick<CatalogOfferingIntelligence, "starterIntents" | "offeringTypes" | "decisionFactors" | "audiences">
+): { score: number; warnings: string[] } {
   const text = catalogText(items);
   const warnings: string[] = [];
   const unsupportedOfferings = intelligence.offeringTypes.filter((term) => !text.includes(term.toLowerCase())).slice(0, 5);
@@ -939,7 +996,8 @@ function qualityScoreOfferingIntelligence(items: ProductRecord[], intelligence: 
     .filter((starter) => {
       const normalized = starter.toLowerCase();
       return !intelligence.offeringTypes.some((term) => normalized.includes(term.toLowerCase())) &&
-        !intelligence.decisionFactors.some((term) => normalized.includes(term.toLowerCase()));
+        !intelligence.decisionFactors.some((term) => normalized.includes(term.toLowerCase())) &&
+        !intelligence.audiences.some((term) => normalized.includes(term.toLowerCase()));
     })
     .slice(0, 5);
   if (unsupportedStarters.length) warnings.push(`Starter intents need review: ${unsupportedStarters.join(", ")}`);
@@ -974,6 +1032,17 @@ function buildUseCaseProfiles(input: {
   return Object.fromEntries(entries);
 }
 
+function mergeTermLists(primary: string[] | undefined, fallback: string[], limit: number): string[] {
+  const values = new Map<string, string>();
+  for (const value of [...(primary ?? []), ...fallback]) {
+    const label = value.trim();
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (!values.has(key)) values.set(key, label);
+  }
+  return [...values.values()].slice(0, limit);
+}
+
 function deterministicOfferingIntelligence(input: {
   items: ProductRecord[];
   categories: string[];
@@ -984,7 +1053,12 @@ function deterministicOfferingIntelligence(input: {
 }): CatalogOfferingIntelligence {
   const offeringMode = detectOfferingMode(input.items);
   const offeringTypes = buildOfferingTypes(input);
-  const audiences = mostCommonTerms(input.recipients, 20);
+  const derivedAudiences = audienceTermsFromCatalogLabels([
+    ...input.categories,
+    ...input.useCases,
+    ...input.productTypeHints.map((hint) => hint.term),
+  ]);
+  const audiences = mostCommonTerms([...input.recipients, ...derivedAudiences], 20);
   const decisionFactors = defaultDecisionFactors(input.items);
   const useCaseProfiles = buildUseCaseProfiles({
     items: input.items,
@@ -1001,7 +1075,7 @@ function deterministicOfferingIntelligence(input: {
     starterIntents: buildStarterIntents({ offeringMode, offeringTypes, useCases: input.useCases, audiences }),
     confidence: input.items.length ? 0.65 : 0,
     sourceEvidence: input.items.slice(0, 5).map((item) => item.name).filter(Boolean),
-    quality: qualityScoreOfferingIntelligence(input.items, { offeringTypes, decisionFactors, starterIntents: buildStarterIntents({ offeringMode, offeringTypes, useCases: input.useCases, audiences }) }),
+    quality: qualityScoreOfferingIntelligence(input.items, { offeringTypes, audiences, decisionFactors, starterIntents: buildStarterIntents({ offeringMode, offeringTypes, useCases: input.useCases, audiences }) }),
   };
 }
 
@@ -1059,7 +1133,7 @@ function mergeOfferingIntelligence(
     offeringMode: generated.offeringMode ?? base.offeringMode,
     offeringTypes: generated.offeringTypes?.length ? generated.offeringTypes : base.offeringTypes,
     useCaseProfiles: Object.keys(generated.useCaseProfiles ?? {}).length ? generated.useCaseProfiles! : base.useCaseProfiles,
-    audiences: generated.audiences?.length ? generated.audiences : base.audiences,
+    audiences: mergeTermLists(generated.audiences, base.audiences, 30),
     decisionFactors: generated.decisionFactors?.length ? generated.decisionFactors : base.decisionFactors,
     starterIntents: generated.starterIntents?.length ? generated.starterIntents : base.starterIntents,
   };
@@ -1159,7 +1233,10 @@ async function generateOfferingIntelligenceWithModel(input: {
             "Generate tenant commerce intelligence from catalog/service data. Return ONLY compact JSON. " +
             "Do not assume the tenant sells gifts or physical products. It may sell services, products, or both. " +
             "Schema: {offeringMode,offeringTypes,useCaseProfiles,audiences,decisionFactors,starterIntents,confidence,sourceEvidence}. " +
-            "offeringMode must be products, services, mixed, or unknown. starterIntents must be clickable customer messages.",
+            "offeringMode must be products, services, mixed, or unknown. " +
+            "audiences must be customer/recipient/participant groups explicitly supported by catalog labels or item recipient fields; " +
+            "derive groups from labels like 'for X' when present, but do not put product types, materials, occasions, or generic use cases in audiences. " +
+            "starterIntents must be clickable customer messages.",
         },
         {
           role: "user",
@@ -1265,6 +1342,8 @@ export async function listCatalogSearchHints(
   tenantId: string,
   config: CoreConfig
 ): Promise<CatalogSearchHints> {
+  const cached = catalogHintsCache.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) return cached.hints;
   const items = (await listProductItems(tenantId, config)) as ProductRecord[];
   const categories = new Set<string>();
   const tags = new Set<string>();
@@ -1326,7 +1405,7 @@ export async function listCatalogSearchHints(
   const offeringIntelligence = mergeOfferingIntelligence(deterministicIntelligence, storedIntelligence);
   offeringIntelligence.quality = qualityScoreOfferingIntelligence(items, offeringIntelligence);
 
-  return {
+  const hints: CatalogSearchHints = {
     categories: categoryList,
     tags: [...tags].sort((a, b) => a.localeCompare(b)),
     materials: materialList,
@@ -1360,6 +1439,8 @@ export async function listCatalogSearchHints(
     intelligenceGeneratedAt: offeringIntelligence.generatedAt,
     intelligenceModel: offeringIntelligence.model,
   };
+  catalogHintsCache.set(tenantId, { expiresAt: Date.now() + CATALOG_HINTS_CACHE_TTL_MS, hints });
+  return hints;
 }
 
 export {

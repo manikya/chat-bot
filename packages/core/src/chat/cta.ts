@@ -260,18 +260,23 @@ function productSearchMeta(toolResults: Array<{ tool: string; success: boolean; 
 
 function currentSearchPhrase(qualification?: QualificationState, query?: string): string {
   const selected: string[] = [];
+  const broadContext: string[] = [];
   const add = (value?: string) => {
     const label = value?.trim();
     const key = normalizeTerm(label ?? "");
     if (!label || !key || isBudgetTierTerm(label) || isBudgetPhraseTerm(label)) return;
-    if (["gift", "gifts", "gifting", "brass items", "items", "item", "options"].includes(key)) return;
+    if (["gift", "gifts", "gifting"].includes(key)) {
+      broadContext.push("gifts");
+      return;
+    }
+    if (["brass items", "items", "item", "options"].includes(key)) return;
     if (selected.some((existing) => hasHighTokenOverlap(existing, label))) return;
     selected.push(label);
   };
   for (const constraint of qualification?.constraints ?? []) add(constraint);
   add(qualification?.category);
   const focused = phraseFromTerms(selected);
-  if (focused) return focused;
+  if (focused) return phraseFromTerms([focused, broadContext[0]]);
   const queryTerms = (query ?? "")
     .split(/\s+/)
     .filter((term) => {

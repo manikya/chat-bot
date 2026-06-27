@@ -55,6 +55,7 @@ import {
   shouldPauseForStaleCart,
 } from "./stale-cart";
 import { executeTool, toolsForIntent } from "./tools";
+import { ChatTurnTrace, persistChatTraceSafely } from "./trace";
 import { assertChannelEnabled, incrementUsage, reserveMessageQuota } from "./usage";
 import { assertTenantOperational } from "../tenant/status";
 import { notifyAgentInboundMessage, getHandlingMode } from "./agent-notify";
@@ -462,45 +463,69 @@ export async function runChatOrchestrator(
 ): Promise<ChatResult> {
   const text = input.message?.trim();
   if (!text) throw new ApiError(ErrorCodes.VALIDATION_ERROR, "Message is required", 400);
+  const trace = new ChatTurnTrace({
+    tenantId: auth.tenantId,
+    channel: input.channel,
+    externalUserId: input.externalUserId,
+    messagePreview: text.slice(0, 120),
+  });
+  trace.mark("token_callback_enabled", Boolean(options?.onToken));
 
-  await assertChannelEnabled(auth.tenantId, input.channel, config);
-  if (input.channel !== "test") {
-    await reserveMessageQuota(auth.tenantId, config);
-  }
+  await trace.time("channel_quota", async () => {
+    await assertChannelEnabled(auth.tenantId, input.channel, config);
+    if (input.channel !== "test") {
+      await reserveMessageQuota(auth.tenantId, config);
+    }
+  });
 
-  const { storeName, timezone, config: tenantConfig } = await loadTenantContext(auth, config);
-  const conversation = await resolveConversation(
-    auth.tenantId,
-    input.channel,
-    input.externalUserId,
-    config
+  const { storeName, timezone, config: tenantConfig } = await trace.time("load_tenant_context", () => loadTenantContext(auth, config));
+  const conversation = await trace.time("resolve_conversation", () =>
+    resolveConversation(
+      auth.tenantId,
+      input.channel,
+      input.externalUserId,
+      config
+    )
   );
 
   const handlingMode = getHandlingMode(conversation);
   if (handlingMode === "human") {
-    await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
+    await trace.time("persist_human_inbound", () => persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
       awaitingAgent: true,
-    });
-    await notifyAgentInboundMessage(auth.tenantId, conversation, text, config);
+    }));
+    await trace.time("notify_agent", () => notifyAgentInboundMessage(auth.tenantId, conversation, text, config));
 
     const webAck =
       input.channel === "web"
         ? "Thanks — our team has been notified and will reply shortly."
         : "";
 
-    return {
+    const result: ChatResult = {
       conversationId: conversation.conversationId,
       reply: { type: "text", content: webAck },
       handledBy: "human",
       handlingMode: "human",
       usage: { inputTokens: 0, outputTokens: 0 },
     };
+    result.agentTrace = trace.snapshot();
+    await persistChatTraceSafely(trace, {
+      conversationId: conversation.conversationId,
+      config,
+      handledBy: "human",
+    });
+    return result;
   }
 
-  const history = await loadMessageHistory(auth.tenantId, conversation.conversationId, config);
+  const [history, initialCart, catalogHints] = await trace.time("load_history_cart_catalog_hints", () =>
+    Promise.all([
+      loadMessageHistory(auth.tenantId, conversation.conversationId, config),
+      loadCart(auth.tenantId, conversation.conversationId, config),
+      listCatalogSearchHints(auth.tenantId, config),
+    ])
+  );
   const isFirstMessage = history.length === 0;
   const fallbackIntent: ChatIntent = isFirstMessage ? "unknown" : "product";
-  let cart = await loadCart(auth.tenantId, conversation.conversationId, config);
+  let cart = initialCart;
   const fallbackFunnel = resolveFunnelContext(conversation, {
     message: text,
     intent: fallbackIntent,
@@ -510,11 +535,10 @@ export async function runChatOrchestrator(
   const market = marketFromTimezone(timezone);
   const pageUrl = typeof input.metadata?.pageUrl === "string" ? input.metadata.pageUrl : undefined;
   const llm = createLLMProvider(config);
-  const catalogHints = await listCatalogSearchHints(auth.tenantId, config);
   const fallbackGateProductSearch = false;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
-  const planner = await runSalesPlanner({
+  const planner = await trace.time("llm_planner", () => runSalesPlanner({
     llm,
     model: tenantConfig.llmConfig.models.product ?? config.llmModel,
     message: text,
@@ -529,7 +553,7 @@ export async function runChatOrchestrator(
     },
     cartItemCount: cart?.items.length ?? 0,
     pageUrl,
-  });
+  }), { model: tenantConfig.llmConfig.models.product ?? config.llmModel });
   totalInputTokens += planner.usage.inputTokens;
   totalOutputTokens += planner.usage.outputTokens;
   let trustedPlan = trustedSalesPlan(planner.plan);
@@ -612,7 +636,7 @@ export async function runChatOrchestrator(
     conversation.lastSubIntent !== subIntent;
 
   if (funnelOrQualChanged) {
-    await updateConversationFunnel(
+    await trace.time("update_conversation_funnel", () => updateConversationFunnel(
       auth.tenantId,
       conversation,
       funnel.stage,
@@ -620,27 +644,28 @@ export async function runChatOrchestrator(
       qualification,
       intent,
       subIntent
-    );
+    ));
     conversation.funnelStage = funnel.stage;
     conversation.qualification = qualification;
     conversation.lastIntent = intent;
     conversation.lastSubIntent = subIntent;
   }
 
-  await persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
+  await trace.time("persist_inbound", () => persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
     intent,
     subIntent,
     funnelStage: funnel.stage,
-  });
+  }));
 
-  if (cart?.items.length && (shouldPauseForStaleCart(text, conversation, cart) || isCartAbandonmentReply(text))) {
-    const staleOutcome = await handleStaleCartMessage({
+  const activeCart = cart;
+  if (activeCart?.items.length && (shouldPauseForStaleCart(text, conversation, activeCart) || isCartAbandonmentReply(text))) {
+    const staleOutcome = await trace.time("stale_cart_check", () => handleStaleCartMessage({
       auth,
       conversation,
-      cart,
+      cart: activeCart,
       message: text,
       config,
-    });
+    }));
     if (staleOutcome.handled && staleOutcome.reply) {
       cart = staleOutcome.cart ?? cart;
       const replyContent = compactReplyText(staleOutcome.reply, { channel: input.channel, maxWords: 35 });
@@ -663,14 +688,14 @@ export async function runChatOrchestrator(
           : [
               { type: "message" as const, label: "Show options", message: "Show me options" },
             ];
-      await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
+      await trace.time("persist_stale_cart_outbound", () => persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
         intent,
         subIntent,
         funnelStage: cart?.items.length ? "cart" : "discover",
         staleCartCheck: true,
-      });
-      await incrementUsage(auth.tenantId, config, { inputTokens: 0, outputTokens: 0 });
-      return {
+      }));
+      await trace.time("increment_usage_stale_cart", () => incrementUsage(auth.tenantId, config, { inputTokens: 0, outputTokens: 0 }));
+      const result: ChatResult = {
         conversationId: conversation.conversationId,
         reply: { type: "text", content: replyContent },
         toolResults: [],
@@ -682,6 +707,16 @@ export async function runChatOrchestrator(
         handlingMode: "bot",
         suggestedActions,
       };
+      result.agentTrace = { timings: trace.snapshot(), staleCartCheck: true };
+      await persistChatTraceSafely(trace, {
+        conversationId: conversation.conversationId,
+        config,
+        intent,
+        subIntent,
+        funnelStage: cart?.items.length ? "cart" : "discover",
+        handledBy: "bot",
+      });
+      return result;
     }
   }
 
@@ -698,10 +733,10 @@ export async function runChatOrchestrator(
     (intent === "product" || actionRunsProductSearch(planAction) ? productAwareQuery : text);
   const ragChunks = directPlannerProductSearch
     ? []
-    : await retrieveForIntent(auth, ragQuery, intent, config, trustedPlan ? undefined : text, {
+    : await trace.time("rag_retrieve", () => retrieveForIntent(auth, ragQuery, intent, config, trustedPlan ? undefined : text, {
         subIntent,
         objectionsRaised: qualification.objectionsRaised,
-      });
+      }), { query: ragQuery.slice(0, 120), intent });
   const currency = tenantConfig.commerceConnector?.currency ?? (market === "lk" ? "LKR" : "USD");
   const conversationPolicy = { reply: undefined, suggestedActions: [] as WidgetAction[] };
   const policyFlags = [...policy.flags];
@@ -759,7 +794,7 @@ export async function runChatOrchestrator(
   }
 
   if (directPlannerProductSearch) {
-    const { result, success } = await executeTool(
+    const { result, success } = await trace.time("tool_search_products_direct", () => executeTool(
       "search_products",
       JSON.stringify({
         query: plannedSearchQuery ?? text,
@@ -769,7 +804,7 @@ export async function runChatOrchestrator(
         minPrice: searchBudget?.min,
       }),
       toolCtx
-    );
+    ), { query: String(plannedSearchQuery ?? text).slice(0, 120) });
     toolResults.push({ tool: "search_products", success, result });
   }
 
@@ -790,10 +825,11 @@ export async function runChatOrchestrator(
       };
       const response =
         options?.onToken && llm.streamChat
-          ? await llm.streamChat(request, async (event) => {
+          ? await trace.time("llm_answer_stream", () => llm.streamChat!(request, async (event) => {
               if (event.type === "token") await options.onToken?.(event.text);
-            })
-          : await llm.chat(request);
+            }), { model, round })
+          : await trace.time("llm_answer", () => llm.chat(request), { model, round });
+      trace.mark(`llm_answer_${round}_latency_ms`, response.latencyMs);
       totalInputTokens += response.usage.inputTokens;
       totalOutputTokens += response.usage.outputTokens;
 
@@ -805,7 +841,9 @@ export async function runChatOrchestrator(
         });
 
         for (const tc of response.toolCalls) {
-          const { result, success } = await executeTool(tc.name, tc.arguments, toolCtx);
+          const { result, success } = await trace.time(`tool_${tc.name}`, () => executeTool(tc.name, tc.arguments, toolCtx), {
+            round,
+          });
           toolResults.push({ tool: tc.name, success, result });
           messages.push({
             role: "tool",
@@ -831,7 +869,7 @@ export async function runChatOrchestrator(
     if (plannerQuestion && (gateProductSearch || planAsksQuestion)) {
       replyContent = plannerQuestion;
     } else if (planRunsSearch) {
-      const { result, success } = await executeTool(
+      const { result, success } = await trace.time("tool_search_products_fallback", () => executeTool(
         "search_products",
         JSON.stringify({
           query: plannedSearchQuery ?? text,
@@ -841,7 +879,7 @@ export async function runChatOrchestrator(
           minPrice: searchBudget?.min,
         }),
         toolCtx
-      );
+      ), { query: String(plannedSearchQuery ?? text).slice(0, 120) });
       toolResults.push({ tool: "search_products", success, result });
     }
     if (!replyContent) {
@@ -861,7 +899,7 @@ export async function runChatOrchestrator(
     planRunsSearch &&
     !toolResults.some((t) => t.tool === "search_products" && t.success)
   ) {
-    const { result, success } = await executeTool(
+    const { result, success } = await trace.time("tool_search_products_safety", () => executeTool(
       "search_products",
       JSON.stringify({
         query: plannedSearchQuery ?? text,
@@ -871,7 +909,7 @@ export async function runChatOrchestrator(
         minPrice: searchBudget?.min,
       }),
       toolCtx
-    );
+    ), { query: String(plannedSearchQuery ?? text).slice(0, 120) });
     toolResults.push({ tool: "search_products", success, result });
   }
 
@@ -894,6 +932,7 @@ export async function runChatOrchestrator(
     });
   }
 
+  const responseShapeStart = Date.now();
   replyContent = compactReplyText(sanitizeReplyText(replyContent, input.channel), {
     channel: input.channel,
     maxWords: gateProductSearch ? 35 : undefined,
@@ -922,7 +961,7 @@ export async function runChatOrchestrator(
     skipListAppend: gateProductSearch || !surfaceProducts,
   });
 
-  const refreshedCart = await loadCart(auth.tenantId, conversation.conversationId, config);
+  const refreshedCart = await trace.time("load_refreshed_cart", () => loadCart(auth.tenantId, conversation.conversationId, config));
   let finalFunnel = {
     ...funnel,
     stage: closeIntent === "product_interest" ? "compare" : trustedPlan ? funnel.stage : resolveFunnelContext(conversation, {
@@ -939,7 +978,7 @@ export async function runChatOrchestrator(
     };
   }
   if (finalFunnel.stage !== funnel.stage) {
-    await updateConversationFunnel(
+    await trace.time("update_final_funnel", () => updateConversationFunnel(
       auth.tenantId,
       conversation,
       finalFunnel.stage,
@@ -947,7 +986,7 @@ export async function runChatOrchestrator(
       qualification,
       intent,
       subIntent
-    );
+    ));
     conversation.funnelStage = finalFunnel.stage;
     conversation.lastIntent = intent;
     conversation.lastSubIntent = subIntent;
@@ -1029,6 +1068,14 @@ export async function runChatOrchestrator(
   const recentProductSet = new Set(agentState.memory.recentProductSkus.map((sku) => sku.toUpperCase()));
   const repeatedSurfacedSkus = finalProductSkus.filter((sku) => recentProductSet.has(sku.toUpperCase()));
   const toolObservations = summarizeToolObservations(finalToolResults);
+  trace.record("response_shape", Date.now() - responseShapeStart, true, {
+    productCount: finalProducts.length,
+    actionCount: suggestedActions.length,
+  });
+  trace.mark("tool_count", finalToolResults.length);
+  trace.mark("product_count", finalProducts.length);
+  trace.mark("input_tokens", totalInputTokens);
+  trace.mark("output_tokens", totalOutputTokens);
   const agentTrace = {
     userMove: agentState.userMove,
     replyLanguage: agentState.replyLanguage,
@@ -1047,9 +1094,10 @@ export async function runChatOrchestrator(
     repeatedSurfacedSkuCount: repeatedSurfacedSkus.length,
     suggestedActionLabels: suggestedActions.map((action) => action.label).filter(Boolean),
     suggestedActionMessages: suggestedActions.map((action) => action.message).filter(Boolean),
+    timings: trace.snapshot(),
   };
 
-  await persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
+  await trace.time("persist_outbound", () => persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
     intent,
     subIntent,
     funnelStage: finalFunnel.stage,
@@ -1062,14 +1110,14 @@ export async function runChatOrchestrator(
     suggestedActionLabels: agentTrace.suggestedActionLabels,
     suggestedActionMessages: agentTrace.suggestedActionMessages,
     agentTrace,
-  });
+  }));
 
-  await incrementUsage(auth.tenantId, config, {
+  await trace.time("increment_usage", () => incrementUsage(auth.tenantId, config, {
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
-  });
+  }));
 
-  return {
+  const result: ChatResult = {
     conversationId: conversation.conversationId,
     reply: { type: "text", content: replyContent },
     toolResults: finalToolResults.map((t) => ({
@@ -1088,4 +1136,14 @@ export async function runChatOrchestrator(
     salesPlan: publicSalesPlan(planner.plan),
     agentTrace,
   };
+  await persistChatTraceSafely(trace, {
+    conversationId: conversation.conversationId,
+    config,
+    intent,
+    subIntent,
+    funnelStage: finalFunnel.stage,
+    handledBy: "bot",
+  });
+  result.agentTrace = { ...agentTrace, timings: trace.snapshot() };
+  return result;
 }
