@@ -41,6 +41,8 @@ export interface TenantConfig {
   llmConfig: {
     primaryProvider: string;
     models: { faq: string; product: string; checkout: string };
+    /** Higher-quality model used for offline/admin catalog intelligence generation. */
+    catalogIntelligenceModel?: string;
     embeddingModel: string;
     /** LLM sampling temperature (0–1). Default 0.4 when unset. */
     temperature?: number;

@@ -22,7 +22,7 @@ export default function ProductGeneratedDataPage() {
     setRegenerating(true);
     try {
       const res = await api.commerce.regenerateProductAttributes();
-      toast.success(`Regenerated attributes for ${res.data.updated} of ${res.data.total} products`);
+      toast.success(`Regenerated catalog intelligence for ${res.data.updated} of ${res.data.total} records`);
       await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not regenerate product attributes");
@@ -34,8 +34,8 @@ export default function ProductGeneratedDataPage() {
   return (
     <ProductPageShell loading={loading && !data} error={error}>
       <ProductPageHeader
-        title="Generated product data"
-        description="Inspect derived catalog intelligence used by sales questions, dynamic actions, budget buttons, and related product recommendations."
+        title="Generated offering data"
+        description="Inspect derived tenant intelligence used by sales questions, dynamic actions, budget buttons, service/product starters, and recommendations."
         action={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => reload()}>
@@ -44,7 +44,7 @@ export default function ProductGeneratedDataPage() {
             </Button>
             <Button onClick={regenerate} disabled={regenerating}>
               <RefreshCw className="h-4 w-4" />
-              {regenerating ? "Regenerating..." : "Regenerate attributes"}
+              {regenerating ? "Regenerating..." : "Regenerate intelligence"}
             </Button>
           </div>
         }

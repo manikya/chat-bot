@@ -4,7 +4,7 @@ import type { CoreConfig } from "../config";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { getTenantLimits } from "../tenant/service";
-import { deleteProductsForSource, upsertProductCache } from "../catalog/products";
+import { deleteProductsForSource, regenerateProductAttributes, upsertProductCache } from "../catalog/products";
 import { chunkCatalogProducts, toCatalogVectorChunks } from "./chunker/catalog";
 import { chunkWebsiteSections, countTokens, toVectorChunks } from "./chunker/website";
 import { parseCatalogCsv } from "./parsers/catalog-csv";
@@ -35,6 +35,14 @@ async function recordIngestJobCompleted(tenantId: string, config: CoreConfig) {
     await incrementIngestJobs(tenantId, config);
   } catch {
     // usage tracking is best-effort
+  }
+}
+
+async function refreshCatalogIntelligenceAfterSync(tenantId: string, config: CoreConfig) {
+  try {
+    await regenerateProductAttributes(tenantId, config, { catalogIntelligenceModel: config.catalogIntelligenceModel });
+  } catch (err) {
+    console.warn("[catalog-intelligence] post-sync regeneration failed", err instanceof Error ? err.message : err);
   }
 }
 
@@ -307,6 +315,7 @@ export async function runCatalogIngestJob(
     const vectorChunks = toCatalogVectorChunks(sourceId, drafts, embeddings);
     await vectorStore.upsert(tenantId, vectorChunks);
     await upsertProductCache(tenantId, sourceId, products, config);
+    await refreshCatalogIntelligenceAfterSync(tenantId, config);
 
     stats.chunksCreated = vectorChunks.length;
     stats.durationSec = Math.round((Date.now() - started) / 1000);
@@ -461,6 +470,7 @@ export async function runWordPressCatalogIngestJob(
     const vectorChunks = toCatalogVectorChunks(sourceId, drafts, embeddings);
     await vectorStore.upsert(tenantId, vectorChunks);
     await upsertProductCache(tenantId, sourceId, products, config);
+    await refreshCatalogIntelligenceAfterSync(tenantId, config);
 
     stats.chunksCreated = vectorChunks.length;
     stats.durationSec = Math.round((Date.now() - started) / 1000);
@@ -617,6 +627,7 @@ export async function runShopifyCatalogIngestJob(
     const vectorChunks = toCatalogVectorChunks(sourceId, drafts, embeddings);
     await vectorStore.upsert(tenantId, vectorChunks);
     await upsertProductCache(tenantId, sourceId, products, config);
+    await refreshCatalogIntelligenceAfterSync(tenantId, config);
 
     stats.chunksCreated = vectorChunks.length;
     stats.durationSec = Math.round((Date.now() - started) / 1000);

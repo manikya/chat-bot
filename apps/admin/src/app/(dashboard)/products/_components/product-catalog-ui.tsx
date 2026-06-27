@@ -37,6 +37,13 @@ export function listText(values?: string[], max = 3) {
   return clean.length > max ? `${shown} +${clean.length - max}` : shown;
 }
 
+function priceCoverageText(coverage?: { min?: number; max?: number; currency: string; inStockCount: number }) {
+  if (!coverage || coverage.min == null) return "No price coverage";
+  const min = formatProductPrice(coverage.min, coverage.currency);
+  const max = coverage.max != null && coverage.max !== coverage.min ? `-${formatProductPrice(coverage.max, coverage.currency)}` : "";
+  return `${min}${max} · ${coverage.inStockCount} in stock`;
+}
+
 export function DataChips({ values, empty = "No data collected yet" }: { values?: string[]; empty?: string }) {
   const clean = (values ?? []).filter(Boolean);
   if (!clean.length) return <p className="text-sm text-muted-foreground">{empty}</p>;
@@ -243,6 +250,62 @@ export function GeneratedDataPanel({ data }: { data: CommerceCatalogData | null 
         <CardDescription>Derived values used by the chat for budget buttons, discovery, CTAs, and related products.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="rounded-lg border border-border bg-muted px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold">Offering mode</span>
+            <Badge variant="default">{generated?.offeringMode ?? "unknown"}</Badge>
+            {generated?.intelligenceModel && <Badge variant="secondary">{generated.intelligenceModel}</Badge>}
+          </div>
+          {generated?.intelligenceGeneratedAt && (
+            <p className="mt-1 text-xs text-muted-foreground">Generated {new Date(generated.intelligenceGeneratedAt).toLocaleString()}</p>
+          )}
+          {generated?.intelligenceQuality && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Quality score {Math.round(generated.intelligenceQuality.score * 100)}%
+              {generated.intelligenceQuality.warnings.length ? ` · ${generated.intelligenceQuality.warnings.join("; ")}` : ""}
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Offering types</h3>
+            <DataChips values={generated?.offeringTypes} empty="No offering types generated yet" />
+          </div>
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Audiences</h3>
+            <DataChips values={generated?.audiences} empty="No audiences generated yet" />
+          </div>
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Decision factors</h3>
+            <DataChips values={generated?.decisionFactors} empty="No decision factors generated yet" />
+          </div>
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Starter intents</h3>
+            <DataChips values={generated?.starterIntents} empty="No starter intents generated yet" />
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold">Use case profiles</h3>
+          {Object.entries(generated?.useCaseProfiles ?? {}).length ? (
+            <div className="grid gap-2 md:grid-cols-2">
+              {Object.entries(generated?.useCaseProfiles ?? {})
+                .slice(0, 8)
+                .map(([useCase, profile]) => (
+                  <div key={useCase} className="rounded-lg border border-border bg-muted px-3 py-2.5">
+                    <div className="font-medium">{useCase}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">Offerings: {listText(profile.offeringTypes, 4)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Audiences: {listText(profile.audiences, 4)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Factors: {listText(profile.decisionFactors, 4)}</p>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No use case profiles generated yet.</p>
+          )}
+        </div>
+
         <div>
           <h3 className="mb-2 text-sm font-semibold">Tenant price bands</h3>
           <div className="flex flex-wrap gap-2">
@@ -278,6 +341,68 @@ export function GeneratedDataPanel({ data }: { data: CommerceCatalogData | null 
           <div className="md:col-span-2">
             <h3 className="mb-2 text-sm font-semibold">Use cases and compatibility</h3>
             <DataChips values={generated?.useCases} />
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold">Product type intelligence</h3>
+          {(generated?.productTypeHints ?? []).length ? (
+            <div className="grid gap-2 md:grid-cols-2">
+              {generated?.productTypeHints?.slice(0, 8).map((hint) => (
+                <div key={`${hint.source}:${hint.term}`} className="rounded-lg border border-border bg-muted px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{hint.term}</span>
+                    <Badge variant="secondary">{hint.source.replace("_", " ")}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{priceCoverageText(hint.priceCoverage)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Top SKUs {listText(hint.topSkus, 4)}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No product type intelligence generated yet.</p>
+          )}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Gift profiles</h3>
+            {Object.entries(generated?.giftProfiles ?? {}).length ? (
+              <div className="space-y-2">
+                {Object.entries(generated?.giftProfiles ?? {})
+                  .slice(0, 6)
+                  .map(([occasion, profile]) => (
+                    <div key={occasion} className="rounded-lg border border-border bg-muted px-3 py-2.5">
+                      <div className="font-medium">{occasion}</div>
+                      <p className="mt-1 text-xs text-muted-foreground">Recipients: {listText(profile.recipients, 4)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Styles: {listText(profile.styles, 4)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{priceCoverageText(profile.priceCoverage)}</p>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No gift profiles generated yet.</p>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Attribute summaries</h3>
+            {Object.entries(generated?.attributeSummaries ?? {}).length ? (
+              <div className="space-y-2">
+                {Object.entries(generated?.attributeSummaries ?? {})
+                  .slice(0, 6)
+                  .map(([category, summary]) => (
+                    <div key={category} className="rounded-lg border border-border bg-muted px-3 py-2.5">
+                      <div className="font-medium">{category}</div>
+                      <p className="mt-1 text-xs text-muted-foreground">Materials: {listText(summary.materials, 4)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Use cases: {listText(summary.useCases, 4)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Variants: {listText(summary.variants, 4)}</p>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No attribute summaries generated yet.</p>
+            )}
           </div>
         </div>
       </CardContent>

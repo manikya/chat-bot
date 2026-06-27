@@ -61,6 +61,7 @@ const CLOSE_INTENTS = ["none", "product_interest", "add_to_cart", "checkout_read
 export type ChatCloseIntent = (typeof CLOSE_INTENTS)[number];
 
 const TOOL_NAMES = [
+  "search_offerings",
   "search_products",
   "get_product_details",
   "add_to_cart",
@@ -158,7 +159,7 @@ function isPlannedToolName(value: unknown): value is PlannedToolName {
 function defaultToolsForAction(action: ChatPlanAction): PlannedToolName[] {
   switch (action) {
     case "search_products":
-      return ["search_products", "get_product_details", "get_related_products"];
+      return ["search_offerings", "search_products", "get_product_details", "get_related_products"];
     case "compare_products":
       return ["compare_products", "search_products", "get_product_details"];
     case "get_product_details":
@@ -175,6 +176,8 @@ function defaultToolsForAction(action: ChatPlanAction): PlannedToolName[] {
 }
 
 function compactHints(catalogHints?: CatalogSearchHints) {
+  const compactObject = <T>(value: Record<string, T> | undefined, limit: number): Record<string, T> =>
+    Object.fromEntries(Object.entries(value ?? {}).slice(0, limit));
   return {
     categories: catalogHints?.categories?.slice(0, 40) ?? [],
     tags: catalogHints?.tags?.slice(0, 40) ?? [],
@@ -187,6 +190,22 @@ function compactHints(catalogHints?: CatalogSearchHints) {
     priceBandsByCategory: catalogHints?.priceBandsByCategory ?? {},
     priceBandsByMaterial: catalogHints?.priceBandsByMaterial ?? {},
     priceBands: catalogHints?.priceBands?.slice(0, 3) ?? [],
+    offeringMode: catalogHints?.offeringMode ?? "unknown",
+    offeringTypes: catalogHints?.offeringTypes?.slice(0, 30) ?? [],
+    useCaseProfiles: catalogHints?.useCaseProfiles ?? {},
+    audiences: catalogHints?.audiences?.slice(0, 30) ?? [],
+    decisionFactors: catalogHints?.decisionFactors?.slice(0, 20) ?? [],
+    starterIntents: catalogHints?.starterIntents?.slice(0, 10) ?? [],
+    productTypeHints: catalogHints?.productTypeHints?.slice(0, 25).map((item) => ({
+      term: item.term,
+      source: item.source,
+      inStockCount: item.inStockCount,
+      priceCoverage: item.priceCoverage
+        ? { min: item.priceCoverage.min, max: item.priceCoverage.max, currency: item.priceCoverage.currency }
+        : undefined,
+    })) ?? [],
+    giftProfiles: compactObject(catalogHints?.giftProfiles, 12),
+    attributeSummaries: compactObject(catalogHints?.attributeSummaries, 12),
   };
 }
 
@@ -605,15 +624,6 @@ export function salesPlanToQualificationPatch(
     for (const constraint of constraints) seen.set(constraint.toLowerCase(), constraint);
     patch.constraints = [...seen.values()];
   }
-  const latestMessage = options?.latestMessage ?? "";
-  const giftTerms = ["gift", "gifts", "birthday", "anniversary", "wedding", "housewarming", "father s day", "mothers day", "mother s day"];
-  const eventTerms = ["corporate", "cooperate", "event", "giveaway", "giveaways", "award", "awards", "appreciation"];
-  if ((plan.intent === "gift" || plan.intent === "product") && giftTerms.some((term) => normalizedIncludesPhrase(latestMessage, term))) {
-    patch.category = "gift";
-  }
-  if ((plan.intent === "event" || plan.intent === "product") && eventTerms.some((term) => normalizedIncludesPhrase(latestMessage, term))) {
-    patch.category = "event";
-  }
   return patch;
 }
 
@@ -645,7 +655,7 @@ export async function runSalesPlanner(input: {
         {
           role: "system",
           content:
-            "You are a multilingual ecommerce chat router and sales planning module. Return ONLY valid compact JSON. " +
+            "You are a multilingual commerce chat router and sales planning module for tenants that may sell products, services, or both. Return ONLY valid compact JSON. " +
             "You are the primary decision maker for intent, subIntent, funnelStage, next action, discovery gating, search query, and recovery strategy. " +
             "Choose exactly one action from ask_question, answer, search_products, compare_products, get_product_details, cart_action, handoff_suggested. " +
             "Choose userMove from new_request, budget_answer, recipient_answer, style_answer, use_case_answer, chip_selection, show_more, product_question, cart_reply, faq_question, greeting, unknown. " +
@@ -654,28 +664,28 @@ export async function runSalesPlanner(input: {
             "Choose intent from faq, product, checkout, greeting, unknown. Choose subIntent from product_browse, product_compare, product_detail, faq_policy, faq_objection, cart_review, checkout_ready, order_status. " +
             "Choose funnelStage from discover, compare, objection, cart, checkout. " +
             "Choose contextPolicy from continue, reset, show_more, narrow, recover. Choose resultPolicy from exact, diversify, exclude_seen, relax_constraints, ask_clarification. Choose responsePolicy from answer, ask_one_question, show_cards, recover, handoff. " +
-            "Do not assume recipient from occasions like Father's Day or Mother's Day. " +
-            "For broad shopping requests, prefer ask_question until one useful missing slot is clear; for concrete product phrases, search_products is allowed even without budget. " +
+            "Do not assume audiences, recipients, occasions, service types, or product types unless grounded in catalogHints or the latest message. " +
+            "For broad requests, prefer ask_question until one useful missing slot is clear; for concrete offering phrases, search_products is allowed even without budget. " +
             "If latestMessage is a budget answer such as 'around 5000', '5000', 'under 7000', 'mid range', or a catalog price-band message and existingQualification has shopping context, set userMove:'budget_answer', action:'search_products', gateProductSearch:false, keep the existing shopping context, and set budget. Treat 'around/about/near N' as budget.max=N unless the user says above/from/over. " +
-            "If latestMessage answers who the gift is for, such as 'for a lady', 'gift is for my wife', or 'for a client', set userMove:'recipient_answer', keep existing shopping context, and do not immediately broaden into unrelated products. If budget is missing, set action:'ask_question', gateProductSearch:true, missingSlot:'budget', and ask for budget. If budget is known but style/tone is missing, ask one style/tone question. " +
+            "If latestMessage answers an audience/persona/use case for the current request, set userMove:'recipient_answer' or 'use_case_answer', keep existing context, and do not immediately broaden into unrelated offerings. If budget is missing and price matters for this tenant, ask for budget. If a generated decisionFactor is missing, ask one useful narrowing question. " +
             "If latestMessage asks for best/top products after you already asked a budget question and existingQualification has shopping context, treat it as progress: set action:'search_products', gateProductSearch:false, keep the current context, and do not repeat the same budget question. " +
-            "If latestMessage says the shopper wants, likes, is interested in, wants to get/buy/order, or names a recently shown product, such as 'can I get the ribbon flowers' or 'i want valmpuri box', treat it as close intent even with typos/transliteration: set closeIntent:'product_interest' or 'add_to_cart', closeTarget to the matching recent product, userMove:'cart_reply', intent:'product' or 'checkout', subIntent:'product_detail' or 'checkout_ready', action:'search_products' unless a SKU is explicit, gateProductSearch:false, and confirm the matching product. Do not suggest lower-value alternatives, ask for budget, or budget relaxation when the shopper is ready to buy a shown item. " +
-            "If latestMessage is a short suggested-action reply such as 'Gift', 'Anniversary', 'Decorative', 'Show me Gift', or 'Show mid range options ...' and existingQualification has shopping context, set userMove:'chip_selection' and choose search_products when enough context exists. " +
+            "If latestMessage says the shopper wants, likes, is interested in, wants to get/buy/order/book, or names a recently shown offering, treat it as close intent even with typos/transliteration: set closeIntent:'product_interest' or 'add_to_cart', closeTarget to the matching recent offering, userMove:'cart_reply', intent:'product' or 'checkout', subIntent:'product_detail' or 'checkout_ready', action:'search_products' unless a SKU is explicit, gateProductSearch:false, and confirm the matching offering. Do not suggest lower-value alternatives, ask for budget, or budget relaxation when the shopper is ready to buy/book a shown offering. " +
+            "If latestMessage is a short suggested-action reply matching catalogHints offeringTypes, audiences, use cases, decision factors, or price bands, set userMove:'chip_selection' and choose search_products when enough context exists. " +
             "If latestMessage asks for more results such as 'what else do you have', 'anything else', 'show more', or 'more options', set userMove:'show_more', contextPolicy:'show_more', resultPolicy:'exclude_seen', action:'search_products', gateProductSearch:false, keep existing shopping context, and search for additional products instead of repeating the same products. If it says 'like this X' or 'looks like X', make X the active productType/searchQuery. " +
             "If latestMessage clearly starts a different product request, set userMove:'new_request', contextPolicy:'reset', resetContext:true, and build searchQuery only from the new request. " +
             "Be sales-skilled and engaging: suggestedActions should be useful next-click choices that move the shopper toward a purchase, not repeated generic chips. " +
             "Every suggestedActions item must include type:'message', a concise label, and the exact message the widget should send. " +
             "Match suggestedActions to the question. For yes/no questions, return exactly two useful choices such as Yes and No. For budget questions, prefer the catalog price-band choices. Do not pad every question to three choices. " +
-            "For greeting/hello-only messages, answer warmly and make suggestedActions concrete shopping starters such as catalog categories, best sellers, gift ideas, or product types; never use a vague question chip like 'What are you looking for?'. " +
+            "For greeting/hello-only messages, answer warmly and make suggestedActions concrete tenant-specific starters from catalogHints.starterIntents, offeringTypes, useCaseProfiles, or categories; never use a vague question chip like 'What are you looking for?'. " +
             "For budget bands, use the catalogHints priceBands message text exactly, e.g. 'Show mid range options from ... to ...'. " +
             "When action is search_products, nextQuestion may be a short post-results sales question only if it helps narrow or close the sale; otherwise omit it. " +
             "Do not repeat a question already answered in recentHistory. If the latest message answers the most recent assistant question, treat it as progress, not a fresh vague browse. " +
-            "Do not use action:'answer' to list product recommendations from memory. For product recommendations, use search_products so the application can render grounded product cards. " +
+            "Do not use action:'answer' to list offering recommendations from memory. For product/service recommendations, use search_products so the application can render grounded cards. " +
             "languageStyle and replyLanguage must describe the latestMessage only, not catalog/history language. If latestMessage is English, replyLanguage, nextQuestion, and suggestedActions must be English only. If latestMessage is Singlish/Sinhala/Tamil/mixed, replyLanguage and nextQuestion must match that style. " +
             "If the latest message asks product attributes like height, size, dimensions, colors, materials, price, or stock for the current product context, set userMove:'product_question', attributeRequest to the requested attribute, action:'search_products', gateProductSearch:false, and searchQuery from existingQualification/search context. Do not ask which size/height they want. " +
             "Tolerate minor typos like 'ahve' for 'have'. " +
-            "Use tenant catalog hints when they match, but do not invent unavailable specific products. " +
-            "searchQuery must be a clean product catalog query, e.g. 'brass oil lamp' from Singlish/Sinhala wording. " +
+            "Use tenant catalog hints when they match, especially offeringTypes, useCaseProfiles, audiences, decisionFactors, productTypeHints, attributeSummaries, and price coverage; do not invent unavailable specific offerings. " +
+            "searchQuery must be a clean tenant catalog query, e.g. a product type, service package, or use case from the shopper wording. " +
             "Only include productType/material/occasion/recipient/useCase/style when the latest message states or clearly aliases that slot; do not copy old slots from existingQualification. " +
             "Treat 'no idea', 'not sure', and 'don't know' as uncertainty, not as product attributes or search terms. " +
             "confidence is 0..1; use lower confidence when language/catalog match is uncertain. " +

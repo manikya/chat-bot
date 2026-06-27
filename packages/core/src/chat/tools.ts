@@ -37,6 +37,26 @@ export interface ProductToolObservation {
 }
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
+  search_offerings: {
+    name: "search_offerings",
+    description: "Search the tenant catalog for products, services, packages, or other offerings by query, category, or price range",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search terms" },
+        category: { type: "string" },
+        maxPrice: { type: "number" },
+        minPrice: { type: "number" },
+        excludeSkus: {
+          type: "array",
+          items: { type: "string" },
+          description: "Offering SKUs/IDs to exclude when asking for more options",
+        },
+        limit: { type: "integer", default: 5 },
+      },
+      required: ["query"],
+    },
+  },
   search_products: {
     name: "search_products",
     description: "Search the store product catalog by query, category, or price range",
@@ -391,6 +411,9 @@ const BROAD_FOCUSED_TERMS = new Set([
 
 function focusedPreferenceTerms(qualification?: QualificationState, catalogHints?: CatalogSearchHints): string[] {
   const focusedHints = [
+    ...(catalogHints?.offeringTypes ?? []),
+    ...(catalogHints?.audiences ?? []),
+    ...(catalogHints?.decisionFactors ?? []),
     ...(catalogHints?.materials ?? []),
     ...(catalogHints?.occasions ?? []),
     ...(catalogHints?.styles ?? []),
@@ -489,6 +512,7 @@ export async function executeTool(
   }
 
   switch (name) {
+    case "search_offerings":
     case "search_products": {
       const query = String(args.query ?? "");
       const limit = Number(args.limit ?? 5);
@@ -587,7 +611,7 @@ export async function executeTool(
           recallLimit,
           storeCurrency,
           categoryFilter,
-          requiredTerms: [],
+          requiredTerms,
           excludeSkus: [],
         });
         const diagnosticCoverage = priceCoverage(diagnostic.ranked);

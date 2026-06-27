@@ -57,6 +57,9 @@ function fallbackInitialSuggestedQuestions(input: {
   };
   const pageTerms = pageContext(pageUrl);
   const catalogTerms = [
+    ...(catalogHints?.starterIntents ?? []),
+    ...(catalogHints?.productTypeHints ?? []).map((hint) => hint.term),
+    ...(catalogHints?.offeringTypes ?? []),
     ...(catalogHints?.categories ?? []),
     ...(catalogHints?.materials ?? []).map((material) => `${material} items`),
     ...(catalogHints?.occasions ?? []).map((occasion) => `${occasion} gifts`),
@@ -67,13 +70,15 @@ function fallbackInitialSuggestedQuestions(input: {
     return pageTerms.some((pageTerm) => normalized.includes(pageTerm) || pageTerm.includes(normalized));
   });
   if (pageMatch) add(`Show me ${pageMatch}`);
+  for (const starter of catalogHints?.starterIntents ?? []) add(starter);
+  for (const offering of catalogHints?.offeringTypes ?? []) add(`Show me ${offering}`);
   for (const category of catalogHints?.categories ?? []) add(`Show me ${category}`);
   for (const material of catalogHints?.materials ?? []) add(`Show me ${material} items`);
   for (const occasion of catalogHints?.occasions ?? []) add(`I need a ${occasion} gift`);
   for (const fallback of defaults) add(fallback);
   add(market === "lk" ? "Best sellers pennanna" : "Show best sellers");
-  add("I need help choosing a gift");
-  add("What products do you have?");
+  if ((catalogHints?.useCases ?? []).some((term) => normalizeStarter(term).includes("gift"))) add("I need help choosing a gift");
+  add(catalogHints?.offeringMode === "services" ? "Compare service options" : "What options do you have?");
 
   const seen = new Set<string>();
   return candidates
@@ -130,9 +135,9 @@ async function generateInitialSuggestedQuestions(input: {
         {
           role: "system",
           content:
-            "You generate initial ecommerce chat starter chips. Return ONLY compact JSON. " +
+            "You generate initial commerce chat starter chips for tenants that may sell products, services, or both. Return ONLY compact JSON. " +
             "Create exactly 3 short customer messages that invite high-intent shopping behavior. " +
-            "Prefer catalog-aware starters over generic support questions. Use the shopper's market/language style when obvious. " +
+            "Prefer tenant-generated starterIntents and offeringTypes over generic support questions. Use the shopper's market/language style when obvious. " +
             "Never return budget-only or price-band starters like 'Show premium options', 'under LKR ...', or 'mid range'. " +
             "Never return generic question chips like 'What are you looking for?'. " +
             "Each item must be clickable as a user message, under 70 characters, and must not mention unavailable products. " +
@@ -146,6 +151,16 @@ async function generateInitialSuggestedQuestions(input: {
             market,
             pageTerms: pageContext(pageUrl),
             catalogHints: {
+              productTypeHints: catalogHints?.productTypeHints?.slice(0, 12).map((hint) => ({
+                term: hint.term,
+                source: hint.source,
+                inStockCount: hint.inStockCount,
+              })) ?? [],
+              offeringMode: catalogHints?.offeringMode ?? "unknown",
+              starterIntents: catalogHints?.starterIntents?.slice(0, 10) ?? [],
+              offeringTypes: catalogHints?.offeringTypes?.slice(0, 12) ?? [],
+              audiences: catalogHints?.audiences?.slice(0, 10) ?? [],
+              decisionFactors: catalogHints?.decisionFactors?.slice(0, 8) ?? [],
               categories: catalogHints?.categories?.slice(0, 12) ?? [],
               materials: catalogHints?.materials?.slice(0, 10) ?? [],
               occasions: catalogHints?.occasions?.slice(0, 10) ?? [],

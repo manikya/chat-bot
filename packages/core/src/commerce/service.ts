@@ -9,6 +9,7 @@ import {
   splitProductRelationship,
   type ProductRecord,
 } from "../catalog/products";
+import { getTenantConfig } from "../tenant/service";
 
 type ProductCacheRecord = ProductRecord & { sourceId?: string; updatedAt?: string };
 
@@ -32,6 +33,15 @@ function toProductListItem(item: ProductCacheRecord) {
     compatibility: splitProductRelationship(item.compatibility),
     bundles: splitProductRelationship(item.bundles),
     variants: item.variants,
+    service: {
+      duration: item.duration,
+      location: item.location,
+      bookingType: item.bookingType,
+      packageIncludes: item.packageIncludes,
+      availability: item.availability,
+      staffRole: item.staffRole,
+      serviceArea: item.serviceArea,
+    },
     sourceId: item.sourceId,
     updatedAt: item.updatedAt,
   };
@@ -81,6 +91,20 @@ export async function listCommerceProducts(
       styles: catalogHints.styles,
       occasionRecipients: catalogHints.occasionRecipients,
       relatedByCategory: catalogHints.relatedByCategory,
+      priceCoverageByCategory: catalogHints.priceCoverageByCategory,
+      priceCoverageByMaterial: catalogHints.priceCoverageByMaterial,
+      productTypeHints: catalogHints.productTypeHints,
+      giftProfiles: catalogHints.giftProfiles,
+      attributeSummaries: catalogHints.attributeSummaries,
+      offeringMode: catalogHints.offeringMode,
+      offeringTypes: catalogHints.offeringTypes,
+      useCaseProfiles: catalogHints.useCaseProfiles,
+      audiences: catalogHints.audiences,
+      decisionFactors: catalogHints.decisionFactors,
+      starterIntents: catalogHints.starterIntents,
+      intelligenceQuality: catalogHints.intelligenceQuality,
+      intelligenceGeneratedAt: catalogHints.intelligenceGeneratedAt,
+      intelligenceModel: catalogHints.intelligenceModel,
     },
     sources: sourceIds.map((sourceId) => ({
       sourceId,
@@ -90,7 +114,10 @@ export async function listCommerceProducts(
 }
 
 export async function regenerateCommerceProductAttributes(auth: AuthContext, config: CoreConfig) {
-  const result = await regenerateProductAttributes(auth.tenantId, config);
+  const tenantConfig = await getTenantConfig(auth, config);
+  const result = await regenerateProductAttributes(auth.tenantId, config, {
+    catalogIntelligenceModel: tenantConfig.data?.llmConfig.catalogIntelligenceModel ?? config.catalogIntelligenceModel,
+  });
   const catalogHints = await listCatalogSearchHints(auth.tenantId, config);
   return ok({
     ...result,
@@ -102,6 +129,18 @@ export async function regenerateCommerceProductAttributes(auth: AuthContext, con
       useCases: catalogHints.useCases,
       styles: catalogHints.styles,
       priceBands: catalogHints.priceBands,
+      productTypeHints: catalogHints.productTypeHints,
+      giftProfiles: catalogHints.giftProfiles,
+      attributeSummaries: catalogHints.attributeSummaries,
+      offeringMode: catalogHints.offeringMode,
+      offeringTypes: catalogHints.offeringTypes,
+      useCaseProfiles: catalogHints.useCaseProfiles,
+      audiences: catalogHints.audiences,
+      decisionFactors: catalogHints.decisionFactors,
+      starterIntents: catalogHints.starterIntents,
+      intelligenceQuality: catalogHints.intelligenceQuality,
+      intelligenceGeneratedAt: catalogHints.intelligenceGeneratedAt,
+      intelligenceModel: catalogHints.intelligenceModel,
     },
   });
 }

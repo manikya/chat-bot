@@ -21,6 +21,13 @@ export interface ChunkMetadata {
   recipient?: string[];
   compatibility?: string[];
   bundles?: string[];
+  duration?: string;
+  location?: string;
+  bookingType?: string;
+  packageIncludes?: string;
+  availability?: string;
+  staffRole?: string;
+  serviceArea?: string;
 }
 
 export interface VectorChunk {

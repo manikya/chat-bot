@@ -53,6 +53,10 @@ function pageTerms(pageUrl?: string): string[] {
 
 function termsFromHints(catalogHints?: CatalogSearchHints): string[] {
   return [
+    ...(catalogHints?.starterIntents ?? []),
+    ...(catalogHints?.offeringTypes ?? []),
+    ...(catalogHints?.audiences ?? []),
+    ...(catalogHints?.decisionFactors ?? []),
     ...(catalogHints?.categories ?? []),
     ...(catalogHints?.occasions ?? []),
     ...(catalogHints?.useCases ?? []),
@@ -165,7 +169,7 @@ function budgetPhrase(qualification?: QualificationState, market: "default" | "l
 }
 
 function isBroadAnchorTerm(value?: string): boolean {
-  return ["decor", "decoration", "decorative", "gift", "gifting", "home decor", "event", "personal use"].includes(
+  return ["decor", "decoration", "decorative", "gift", "gifts", "gifting", "home decor", "event", "personal use"].includes(
     normalizeTerm(value ?? "")
   );
 }
@@ -227,7 +231,7 @@ function productSearchMeta(toolResults: Array<{ tool: string; success: boolean; 
   relaxedPriceCoverage?: { min?: number; max?: number };
   blockedBy?: "budget" | "stock" | "constraints";
 } {
-  const search = toolResults.find((item) => item.tool === "search_products" && item.success);
+  const search = toolResults.find((item) => (item.tool === "search_products" || item.tool === "search_offerings") && item.success);
   const result = search?.result as
     | {
         query?: string;
@@ -334,7 +338,7 @@ function recoveryActions(input: {
   };
 
   if (meta?.blockedBy === "budget" && meta.relaxedPriceCoverage?.min != null && (premiumPhrase || focused[0])) {
-    const phrase = premiumPhrase || focused[0]!;
+    const phrase = focused[0] || premiumPhrase;
     const currency = market === "lk" ? "LKR" : "USD";
     add(
       compactActionLabel(`Show ${phrase} from ${formatMoney(meta.relaxedPriceCoverage.min, currency)}`),
@@ -455,6 +459,14 @@ export function buildSuggestedCtas(input: {
     ];
   }
 
+  if (emptyProductSearch && hasFocusedQualification(qualification)) {
+    const plannerActions = plannerRecoveryActions(salesPlan ?? null);
+    if (searchMeta.blockedBy === "budget") {
+      return recoveryActions({ qualification, catalogHints, market, meta: searchMeta }).slice(0, 3);
+    }
+    return (plannerActions.length ? plannerActions : recoveryActions({ qualification, catalogHints, market, meta: searchMeta })).slice(0, 3);
+  }
+
   if (subIntent === "product_compare" || funnelStage === "compare") {
     if (inStockProducts.length) return productActions(inStockProducts, 3);
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
@@ -471,13 +483,6 @@ export function buildSuggestedCtas(input: {
           message: "Show similar items that are in stock",
         },
       ];
-    }
-    if (emptyProductSearch && hasFocusedQualification(qualification)) {
-      const plannerActions = plannerRecoveryActions(salesPlan ?? null);
-      if (searchMeta.blockedBy === "budget") {
-        return recoveryActions({ qualification, catalogHints, market, meta: searchMeta }).slice(0, 3);
-      }
-      return (plannerActions.length ? plannerActions : recoveryActions({ qualification, catalogHints, market, meta: searchMeta })).slice(0, 3);
     }
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
     return hintActions.length ? hintActions : [];

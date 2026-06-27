@@ -18,6 +18,13 @@ export interface CatalogProduct {
   recipient?: string;
   compatibility?: string;
   bundles?: string;
+  duration?: string;
+  location?: string;
+  bookingType?: string;
+  packageIncludes?: string;
+  availability?: string;
+  staffRole?: string;
+  serviceArea?: string;
   inStock: boolean;
   url?: string;
 }
@@ -139,6 +146,13 @@ export function parseCatalogCsv(csvText: string): CatalogProduct[] {
       recipient: col(row, "recipient") || col(row, "recipients") || undefined,
       compatibility: col(row, "compatibility") || col(row, "compatible_with") || undefined,
       bundles: col(row, "bundles") || col(row, "bundle_skus") || col(row, "bundle_with") || undefined,
+      duration: col(row, "duration") || undefined,
+      location: col(row, "location") || undefined,
+      bookingType: col(row, "booking_type") || col(row, "booking") || undefined,
+      packageIncludes: col(row, "package_includes") || col(row, "includes") || undefined,
+      availability: col(row, "availability") || undefined,
+      staffRole: col(row, "staff_role") || col(row, "provider_role") || undefined,
+      serviceArea: col(row, "service_area") || col(row, "coverage_area") || undefined,
       inStock: parseBool(col(row, "stock") || col(row, "in_stock")),
       url: col(row, "url") || undefined,
     });

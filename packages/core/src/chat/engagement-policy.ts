@@ -76,20 +76,27 @@ function hasBudget(qualification?: QualificationState): boolean {
   return qualification?.budget?.max != null || qualification?.budget?.min != null;
 }
 
-function isGiftLike(qualification?: QualificationState): boolean {
+function isGeneratedOfferingFlow(qualification?: QualificationState, catalogHints?: CatalogSearchHints): boolean {
   const terms = [qualification?.category, ...(qualification?.constraints ?? [])].join(" ");
+  const generatedTerms = [
+    ...(catalogHints?.offeringTypes ?? []),
+    ...(catalogHints?.useCases ?? []),
+    ...(catalogHints?.occasions ?? []),
+    ...(catalogHints?.audiences ?? []),
+    ...(catalogHints?.recipients ?? []),
+  ];
   return Boolean(
+    qualification?.recipient ||
     qualification?.category === "gift" ||
-      includesAnyPhrase(terms, ["gift", "gifts", "birthday", "anniversary", "wedding", "housewarming", "father s day", "mother s day"])
+      qualification?.category === "event" ||
+      generatedTerms.some((term) => includesAnyPhrase(terms, [term]))
   );
 }
 
-function isEventLike(qualification?: QualificationState): boolean {
+function isGeneratedUseCaseFlow(qualification?: QualificationState, catalogHints?: CatalogSearchHints): boolean {
   const terms = [qualification?.category, ...(qualification?.constraints ?? [])].join(" ");
-  return Boolean(
-    qualification?.category === "event" ||
-      includesAnyPhrase(terms, ["corporate", "cooperate", "event", "giveaway", "giveaways", "decor", "award", "awards", "appreciation"])
-  );
+  const useCaseTerms = [...(catalogHints?.useCases ?? []), ...Object.keys(catalogHints?.useCaseProfiles ?? {})];
+  return Boolean(qualification?.category === "event" || useCaseTerms.some((term) => includesAnyPhrase(terms, [term])));
 }
 
 function isHomeDecorLike(qualification?: QualificationState): boolean {
@@ -286,11 +293,12 @@ function resultRefinementMove(input: {
     return null;
   }
 
-  if (isGiftLike(qualification)) {
-    if (!qualification?.constraints?.some((constraint) => includesAnyPhrase(constraint, ["practical", "sentimental", "decorative"]))) {
+  if (isGeneratedOfferingFlow(qualification, catalogHints)) {
+    const factors = uniqueOptions((catalogHints?.decisionFactors ?? []).filter((factor) => normalize(factor) !== "budget"));
+    if (factors.length >= 2 && !qualification?.constraints?.some((constraint) => factors.some((factor) => includesAnyPhrase(constraint, [factor])))) {
       return {
-        question: "Should it feel practical, sentimental, or decorative?",
-        suggestedActions: occasionToneActions(),
+        question: `Should I narrow these by ${optionPhrase(factors)}?`,
+        suggestedActions: preferenceActions(factors),
       };
     }
     const options = uniqueOptions([...styleTerms, ...materialTerms, ...actionLabels]);
@@ -309,21 +317,23 @@ function resultRefinementMove(input: {
     };
   }
 
-  if (isEventLike(qualification)) {
+  if (isGeneratedUseCaseFlow(qualification, catalogHints)) {
     const options = uniqueOptions([...styleTerms, ...materialTerms]);
     if (options.length >= 2) {
       return {
-        question: `Would you prefer ${optionPhrase(options)} for the event?`,
+        question: `Would you prefer ${optionPhrase(options)}?`,
         suggestedActions: preferenceActions(options),
       };
     }
+    const useCases = uniqueOptions([...(catalogHints?.useCases ?? []), ...Object.keys(catalogHints?.useCaseProfiles ?? {})]);
     return {
-      question: "Do you need these for giveaways, table decor, or appreciation gifts?",
-      suggestedActions: messageActions([
-        { label: "Giveaways", message: "It's for event giveaways" },
-        { label: "Table decor", message: "It's for event table decor" },
-        { label: "Appreciation gifts", message: "It's for appreciation gifts" },
-      ]),
+      question: useCases.length ? "What is this for?" : "Want me to narrow these by use case or price range?",
+      suggestedActions: useCases.length
+        ? useCases.map((useCase) => ({ type: "message" as const, label: useCase, message: `It's for ${useCase}` }))
+        : messageActions([
+            { label: "Use case", message: "Narrow by use case" },
+            { label: "Price range", message: "Show a different price range" },
+          ]),
     };
   }
 
@@ -344,7 +354,7 @@ function resultRefinementMove(input: {
 }
 
 function recipientActions(catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
-  const recipients = uniqueOptions(catalogHints?.recipients ?? []);
+  const recipients = uniqueOptions(catalogHints?.audiences?.length ? catalogHints.audiences : catalogHints?.recipients ?? []);
   return recipients.length ? recipients.map((recipient) => ({
     type: "message" as const,
     label: `For ${recipient}`,
@@ -352,8 +362,9 @@ function recipientActions(catalogHints?: CatalogSearchHints): WidgetAction[] | u
   })) : undefined;
 }
 
-function occasionToneActions(): WidgetAction[] {
-  return preferenceActions(["Practical", "Sentimental", "Decorative"]);
+function decisionFactorActions(catalogHints?: CatalogSearchHints): WidgetAction[] {
+  const factors = uniqueOptions((catalogHints?.decisionFactors ?? []).filter((factor) => normalize(factor) !== "budget"));
+  return factors.length ? preferenceActions(factors) : [];
 }
 
 function preProductMove(qualification?: QualificationState, catalogHints?: CatalogSearchHints): EngagementMove | null {
@@ -367,26 +378,26 @@ function preProductMove(qualification?: QualificationState, catalogHints?: Catal
       })),
     };
   }
-  if (isGiftLike(qualification) && !qualification?.recipient) {
+  if (isGeneratedOfferingFlow(qualification, catalogHints) && !qualification?.recipient && (catalogHints?.audiences?.length || catalogHints?.recipients?.length)) {
     return {
       question: "Who is this for?",
       suggestedActions: recipientActions(catalogHints),
     };
   }
-  if (isGiftLike(qualification) && qualification?.recipient && !qualification?.constraints?.some((constraint) => includesAnyPhrase(constraint, ["practical", "sentimental", "decorative"]))) {
+  if (isGeneratedOfferingFlow(qualification, catalogHints) && qualification?.recipient) {
+    const actions = decisionFactorActions(catalogHints);
+    if (!actions.length) return null;
     return {
-      question: "Should it feel practical, sentimental, or decorative?",
-      suggestedActions: occasionToneActions(),
+      question: `Should I narrow by ${optionPhrase(actions.map((action) => action.label))}?`,
+      suggestedActions: actions,
     };
   }
-  if (isEventLike(qualification) && !qualification?.constraints?.some((constraint) => includesAnyPhrase(constraint, ["giveaway", "decor", "award", "appreciation"]))) {
+  if (isGeneratedUseCaseFlow(qualification, catalogHints)) {
+    const useCases = uniqueOptions([...(catalogHints?.useCases ?? []), ...Object.keys(catalogHints?.useCaseProfiles ?? {})]);
+    if (!useCases.length) return null;
     return {
-      question: "What is this for at the event?",
-      suggestedActions: messageActions([
-        { label: "Giveaways", message: "It's for event giveaways" },
-        { label: "Table decor", message: "It's for event table decor" },
-        { label: "Appreciation gifts", message: "It's for appreciation gifts" },
-      ]),
+      question: "What is this for?",
+      suggestedActions: useCases.map((useCase) => ({ type: "message" as const, label: useCase, message: `It's for ${useCase}` })),
     };
   }
   if (!qualification?.category && !qualification?.constraints?.length) {

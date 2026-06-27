@@ -44,24 +44,47 @@ function messageMentionsAny(message: string, terms: string[]): boolean {
   return terms.some((term) => messageMentionsHint(message, term));
 }
 
-function mentionsGift(message: string, qualification?: QualificationState): boolean {
-  if (qualification?.category === "gift") return true;
-  return messageMentionsAny(message, ["gift", "gifts", "father s day", "mother s day", "birthday", "anniversary", "wedding", "housewarming"]);
+function generatedTerms(catalogHints?: CatalogSearchHints): string[] {
+  return [
+    ...(catalogHints?.offeringTypes ?? []),
+    ...(catalogHints?.useCases ?? []),
+    ...(catalogHints?.occasions ?? []),
+    ...(catalogHints?.audiences ?? []),
+    ...(catalogHints?.recipients ?? []),
+  ];
 }
 
-function mentionsEvent(message: string, qualification?: QualificationState): boolean {
-  const eventTerms = ["corporate", "cooperate", "event", "giveaway", "giveaways", "decor", "award", "awards", "appreciation"];
+function mentionsGeneratedFlow(message: string, qualification?: QualificationState, catalogHints?: CatalogSearchHints): boolean {
+  const terms = generatedTerms(catalogHints);
   return (
-    qualification?.constraints?.some((c) => messageMentionsAny(c, eventTerms)) ??
-    false
-  ) || qualification?.category === "event" || messageMentionsAny(message, eventTerms);
+    qualification?.category === "gift" ||
+    qualification?.category === "event" ||
+    Boolean(qualification?.recipient) ||
+    qualification?.constraints?.some((c) => messageMentionsAny(c, terms)) ||
+    messageMentionsAny(message, terms)
+  );
 }
 
-function hasSpecificEventUseCase(qualification?: QualificationState): boolean {
-  const eventUseCaseTerms = ["giveaway", "giveaways", "decor", "award", "awards", "appreciation"];
+function mentionsGeneratedUseCase(message: string, qualification?: QualificationState, catalogHints?: CatalogSearchHints): boolean {
+  const useCaseTerms = [
+    ...(catalogHints?.useCases ?? []),
+    ...(catalogHints?.occasions ?? []),
+    ...Object.keys(catalogHints?.useCaseProfiles ?? {}),
+  ];
+  return (
+    qualification?.constraints?.some((c) => messageMentionsAny(c, useCaseTerms)) ??
+    false
+  ) || messageMentionsAny(qualification?.category ?? "", useCaseTerms) || messageMentionsAny(message, useCaseTerms);
+}
+
+function hasSpecificUseCase(qualification?: QualificationState, catalogHints?: CatalogSearchHints): boolean {
+  const useCaseTerms = [
+    ...(catalogHints?.useCases ?? []),
+    ...Object.keys(catalogHints?.useCaseProfiles ?? {}),
+  ];
   return Boolean(
-    qualification?.constraints?.some((c) => messageMentionsAny(c, eventUseCaseTerms)) ||
-      (qualification?.category && messageMentionsAny(qualification.category, eventUseCaseTerms))
+    qualification?.constraints?.some((c) => messageMentionsAny(c, useCaseTerms)) ||
+      (qualification?.category && messageMentionsAny(qualification.category, useCaseTerms))
   );
 }
 
@@ -125,16 +148,11 @@ function budgetActions(catalogHints?: CatalogSearchHints, qualification?: Qualif
 
 function recipientActions(message: string, catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
   const matchedOccasion = catalogHints?.occasions?.find((occasion) => messageMentionsHint(message, occasion));
-  const messageHasOccasion = messageMentionsAny(message, ["father s day", "mother s day", "birthday", "anniversary", "wedding", "housewarming"]);
-  const fallbackRecipients = messageMentionsHint(message, "father s day")
-    ? ["dad", "husband", "grandpa"]
-    : messageMentionsHint(message, "mother s day")
-      ? ["mom", "wife", "grandma"]
-      : [];
+  const messageHasOccasion = Boolean(matchedOccasion);
   const recipients = matchedOccasion
-    ? catalogHints?.occasionRecipients?.[matchedOccasion] ?? catalogHints?.recipients
-    : fallbackRecipients.length
-      ? fallbackRecipients
+    ? catalogHints?.occasionRecipients?.[matchedOccasion] ?? catalogHints?.audiences ?? catalogHints?.recipients
+    : catalogHints?.audiences?.length
+      ? catalogHints.audiences
       : catalogHints?.recipients;
   const unique = [...new Set((recipients ?? []).map((recipient) => recipient.trim()).filter(Boolean))].slice(0, 3);
   if (!unique.length) return messageHasOccasion ? [{ type: "message" as const, label: "Someone else", message: "It's for someone else" }] : undefined;
@@ -148,18 +166,9 @@ function recipientActions(message: string, catalogHints?: CatalogSearchHints): W
   ].slice(0, 4);
 }
 
-function recipientQuestion(message: string, budget?: string): string {
+function recipientQuestion(_message: string, budget?: string): string {
   const prefix = budget ? `Got it, ${budget}.` : "Sure, I can help with that.";
-  if (messageMentionsHint(message, "father s day")) {
-    return `${prefix} Is this for dad, husband, grandpa, or someone else?`;
-  }
-  if (messageMentionsHint(message, "mother s day")) {
-    return `${prefix} Is this for mom, wife, grandma, or someone else?`;
-  }
-  if (messageMentionsAny(message, ["birthday", "anniversary", "wedding", "housewarming"])) {
-    return `${prefix} Who is the gift for?`;
-  }
-  return budget ? `Got it, ${budget}. Who is it for?` : "Sure, I can help with that. Who is it for?";
+  return budget ? `${prefix} Who is this for?` : "Sure, I can help with that. Who is this for?";
 }
 
 function messageAction(label: string, message: string): WidgetAction {
@@ -169,34 +178,33 @@ function messageAction(label: string, message: string): WidgetAction {
 function hintActions(values: string[] | undefined, prefix: string, max = 3): WidgetAction[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]
     .slice(0, max)
-    .map((value) => messageAction(value, `${prefix} ${value}`));
+    .map((value) => messageAction(value, prefix ? `${prefix} ${value}` : value));
 }
 
 function shoppingIntentActions(catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
   const actions = [
-    ...hintActions(catalogHints?.occasions, "I'm shopping for", 2),
+    ...hintActions(catalogHints?.starterIntents, "", 3),
+    ...hintActions(catalogHints?.offeringTypes, "Show me", 3),
     ...hintActions(catalogHints?.categories, "Show me", 3),
   ];
   return actions.length ? actions.slice(0, 3) : undefined;
 }
 
-function eventUseCaseActions(catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
+function useCaseActions(catalogHints?: CatalogSearchHints): WidgetAction[] | undefined {
   const candidates = [
     ...(catalogHints?.useCases ?? []),
-    ...(catalogHints?.occasions ?? []),
-    ...(catalogHints?.tags ?? []),
-  ].filter((value) => messageMentionsAny(value, ["event", "giveaway", "decor", "award", "appreciation", "corporate", "cooperate"]));
+    ...Object.keys(catalogHints?.useCaseProfiles ?? {}),
+    ...(catalogHints?.decisionFactors ?? []),
+  ];
   const actions = hintActions(candidates, "It's for", 3);
   return actions.length ? actions : undefined;
 }
 
-function styleActions(recipient?: string): WidgetAction[] {
+function decisionFactorActions(catalogHints?: CatalogSearchHints, recipient?: string): WidgetAction[] {
   const suffix = recipient ? ` for ${recipient}` : "";
-  return [
-    { type: "message", label: "Popular picks", message: `Show popular options${suffix}` },
-    { type: "message", label: "Something premium", message: `Show premium options${suffix}` },
-    { type: "message", label: "Budget-friendly", message: `Show budget-friendly options${suffix}` },
-  ];
+  const factors = catalogHints?.decisionFactors?.filter((factor) => normalizeHint(factor) !== "budget").slice(0, 3) ?? [];
+  if (factors.length) return factors.map((factor) => messageAction(factor, `Narrow by ${factor}${suffix}`));
+  return [messageAction("Popular options", `Show popular options${suffix}`)];
 }
 
 export function planConversationMove(input: {
@@ -223,12 +231,12 @@ export function planConversationMove(input: {
   if (intent !== "product" && subIntent !== "product_browse") return { move: "continue" };
   if (!gateProductSearch && funnelStage && funnelStage !== "discover") return { move: "continue" };
 
-  const giftLike = mentionsGift(message, qualification);
-  const eventLike = mentionsEvent(message, qualification);
+  const generatedFlow = mentionsGeneratedFlow(message, qualification, catalogHints);
+  const useCaseLike = mentionsGeneratedUseCase(message, qualification, catalogHints);
   const budget = budgetLabel(qualification, market);
   const recipient = qualification?.recipient;
 
-  if (gateProductSearch && giftLike && !recipient) {
+  if (gateProductSearch && generatedFlow && !recipient && (catalogHints?.audiences?.length || catalogHints?.recipients?.length)) {
     const actions = recipientActions(message, catalogHints);
     return {
       move: "ask_recipient",
@@ -237,24 +245,24 @@ export function planConversationMove(input: {
     };
   }
 
-  if (gateProductSearch && eventLike && !hasSpecificEventUseCase(qualification)) {
-    const actions = eventUseCaseActions(catalogHints);
+  if (gateProductSearch && useCaseLike && !hasSpecificUseCase(qualification, catalogHints)) {
+    const actions = useCaseActions(catalogHints);
     return {
       move: "ask_use_case",
       reply: actions?.length
-        ? "Sure, what is this for at the event?"
-        : "Sure, what is this for at the event: giveaways, table decor, or awards/appreciation gifts?",
+        ? "Sure, what is this for?"
+        : "Sure, what should I help you narrow by?",
       suggestedActions: actions,
     };
   }
 
-  if (gateProductSearch && !hasUseCase(qualification) && !eventLike && !giftLike) {
+  if (gateProductSearch && !hasUseCase(qualification) && !useCaseLike && !generatedFlow) {
     const actions = shoppingIntentActions(catalogHints);
     return {
       move: "ask_use_case",
       reply: actions?.length
         ? "Sure, what are you shopping for?"
-        : "Sure, what are you shopping for: a gift, an event, or personal use?",
+        : "Sure, what are you looking for?",
       suggestedActions: actions,
     };
   }
@@ -269,10 +277,10 @@ export function planConversationMove(input: {
     };
   }
 
-  if (!gateProductSearch && giftLike && recipient && budget && !qualification?.constraints?.length) {
+  if (!gateProductSearch && generatedFlow && recipient && budget && !qualification?.constraints?.length) {
     return {
       move: "ask_style",
-      suggestedActions: styleActions(recipient),
+      suggestedActions: decisionFactorActions(catalogHints, recipient),
     };
   }
 

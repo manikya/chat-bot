@@ -4,6 +4,7 @@ import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import type { CatalogProduct } from "../ingest/parsers/catalog-csv";
 import { notifyWishlistRemindersForProducts } from "../chat/wishlist";
+import { createLLMProvider } from "../llm/provider";
 import {
   categoryFilterMatches,
   productCategoryList,
@@ -77,6 +78,13 @@ export async function upsertProductCache(
           compatibility: product.compatibility,
           bundles: product.bundles,
           variants: [product.sizes, product.colors].filter(Boolean).join("; ") || undefined,
+          duration: product.duration,
+          location: product.location,
+          bookingType: product.bookingType,
+          packageIncludes: product.packageIncludes,
+          availability: product.availability,
+          staffRole: product.staffRole,
+          serviceArea: product.serviceArea,
           updatedAt: now,
         },
       })
@@ -133,6 +141,13 @@ export interface ProductRecord {
   compatibility?: string;
   bundles?: string;
   variants?: string;
+  duration?: string;
+  location?: string;
+  bookingType?: string;
+  packageIncludes?: string;
+  availability?: string;
+  staffRole?: string;
+  serviceArea?: string;
 }
 
 export interface CatalogPriceBand {
@@ -140,6 +155,64 @@ export interface CatalogPriceBand {
   message: string;
   min?: number;
   max?: number;
+}
+
+export interface CatalogPriceCoverage {
+  min?: number;
+  max?: number;
+  count: number;
+  inStockCount: number;
+  currency: string;
+}
+
+export interface CatalogProductTypeHint {
+  term: string;
+  source: "category" | "material" | "occasion" | "use_case";
+  productCount: number;
+  inStockCount: number;
+  priceCoverage?: CatalogPriceCoverage;
+  topSkus: string[];
+}
+
+export interface CatalogGiftProfile {
+  recipients: string[];
+  styles: string[];
+  useCases: string[];
+  categories: string[];
+  priceCoverage?: CatalogPriceCoverage;
+}
+
+export interface CatalogAttributeSummary {
+  materials: string[];
+  styles: string[];
+  useCases: string[];
+  variants: string[];
+  priceCoverage?: CatalogPriceCoverage;
+  topSkus: string[];
+}
+
+export type CatalogOfferingMode = "products" | "services" | "mixed" | "unknown";
+
+export interface CatalogUseCaseProfile {
+  terms: string[];
+  audiences: string[];
+  decisionFactors: string[];
+  offeringTypes: string[];
+  priceCoverage?: CatalogPriceCoverage;
+}
+
+export interface CatalogOfferingIntelligence {
+  offeringMode: CatalogOfferingMode;
+  offeringTypes: string[];
+  useCaseProfiles: Record<string, CatalogUseCaseProfile>;
+  audiences: string[];
+  decisionFactors: string[];
+  starterIntents: string[];
+  quality?: { score: number; warnings: string[] };
+  model?: string;
+  confidence?: number;
+  sourceEvidence?: string[];
+  generatedAt?: string;
 }
 
 export interface CatalogSearchHints {
@@ -156,6 +229,20 @@ export interface CatalogSearchHints {
   aliases: Record<string, string[]>;
   occasionRecipients: Record<string, string[]>;
   relatedByCategory: Record<string, string[]>;
+  priceCoverageByCategory: Record<string, CatalogPriceCoverage>;
+  priceCoverageByMaterial: Record<string, CatalogPriceCoverage>;
+  productTypeHints: CatalogProductTypeHint[];
+  giftProfiles: Record<string, CatalogGiftProfile>;
+  attributeSummaries: Record<string, CatalogAttributeSummary>;
+  offeringMode: CatalogOfferingMode;
+  offeringTypes: string[];
+  useCaseProfiles: Record<string, CatalogUseCaseProfile>;
+  audiences: string[];
+  decisionFactors: string[];
+  starterIntents: string[];
+  intelligenceQuality?: { score: number; warnings: string[] };
+  intelligenceGeneratedAt?: string;
+  intelligenceModel?: string;
 }
 
 function mostCommonCurrency(items: Array<{ currency?: string }>): string {
@@ -492,8 +579,9 @@ export async function searchProductCache(
 
 export async function regenerateProductAttributes(
   tenantId: string,
-  config: CoreConfig
-): Promise<{ updated: number; total: number }> {
+  config: CoreConfig,
+  options?: { catalogIntelligenceModel?: string }
+): Promise<{ updated: number; total: number; intelligenceModel?: string; intelligenceConfidence?: number }> {
   const items = (await listProductItems(tenantId, config)) as Array<ProductRecord & { PK: string; SK: string }>;
   const db = getDocClient(config);
   const now = new Date().toISOString();
@@ -543,7 +631,46 @@ export async function regenerateProductAttributes(
     updated += 1;
   }
 
-  return { updated, total: items.length };
+  const refreshedItems = (await listProductItems(tenantId, config)) as ProductRecord[];
+  const categories = [...new Set(refreshedItems.flatMap((item) => productCategoryList(item)).map((item) => item.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const materials = [...new Set(refreshedItems.flatMap((item) => splitProductRelationship(item.material)))].sort((a, b) => a.localeCompare(b));
+  const useCases = [...new Set(refreshedItems.flatMap((item) => splitProductRelationship(item.compatibility)))].sort((a, b) => a.localeCompare(b));
+  const recipients = [...new Set(refreshedItems.flatMap((item) => splitProductRelationship(item.recipient)))].sort((a, b) => a.localeCompare(b));
+  const productTypeHints = buildProductTypeHints({
+    items: refreshedItems,
+    categories,
+    materials,
+    occasions: [...new Set(refreshedItems.flatMap((item) => splitProductRelationship(item.occasion)))],
+    useCases,
+  });
+  const base = deterministicOfferingIntelligence({
+    items: refreshedItems,
+    categories,
+    materials,
+    useCases,
+    recipients,
+    productTypeHints,
+  });
+  const generated = await generateOfferingIntelligenceWithModel({
+    items: refreshedItems,
+    base,
+    config,
+    model: options?.catalogIntelligenceModel,
+  });
+  const intelligence = {
+    ...mergeOfferingIntelligence(base, generated),
+    generatedAt: generated?.generatedAt ?? new Date().toISOString(),
+    model: generated?.model ?? "deterministic",
+  };
+  intelligence.quality = qualityScoreOfferingIntelligence(refreshedItems, intelligence);
+  await writeStoredOfferingIntelligence(tenantId, config, intelligence);
+
+  return {
+    updated,
+    total: items.length,
+    intelligenceModel: intelligence.model,
+    intelligenceConfidence: intelligence.confidence,
+  };
 }
 
 function addRelationshipTerms(target: Set<string>, value?: string) {
@@ -575,6 +702,21 @@ function topSkusByCategory(items: ProductRecord[]): Record<string, string[]> {
   );
 }
 
+function priceCoverageForProducts(items: ProductRecord[]): CatalogPriceCoverage | undefined {
+  const priced = items.filter((item) => Number.isFinite(item.price) && item.price > 0);
+  if (!priced.length) return undefined;
+  const inStock = priced.filter((item) => item.inStock !== false);
+  const coverageItems = inStock.length ? inStock : priced;
+  const prices = coverageItems.map((item) => item.price);
+  return {
+    min: Math.min(...prices),
+    max: Math.max(...prices),
+    count: priced.length,
+    inStockCount: inStock.length,
+    currency: mostCommonCurrency(priced),
+  };
+}
+
 function priceBandsForCatalog(items: ProductRecord[]): CatalogPriceBand[] {
   return buildCatalogPriceBands(items);
 }
@@ -585,6 +727,458 @@ function priceBandsByTerm(items: ProductRecord[], terms: string[], matcher: (ite
       .map((term) => [term, buildCatalogPriceBands(items.filter((item) => matcher(item, term)))] as const)
       .filter(([, bands]) => bands.length)
   );
+}
+
+function priceCoverageByTerm(items: ProductRecord[], terms: string[], matcher: (item: ProductRecord, term: string) => boolean) {
+  return Object.fromEntries(
+    terms
+      .map((term) => [term, priceCoverageForProducts(items.filter((item) => matcher(item, term)))] as const)
+      .filter((entry): entry is readonly [string, CatalogPriceCoverage] => Boolean(entry[1]))
+  );
+}
+
+function topSkus(items: ProductRecord[], limit = 6): string[] {
+  return items
+    .filter((item) => item.inStock !== false)
+    .sort((a, b) => b.price - a.price)
+    .slice(0, limit)
+    .map((item) => item.sku);
+}
+
+function buildProductTypeHints(input: {
+  items: ProductRecord[];
+  categories: string[];
+  materials: string[];
+  occasions: string[];
+  useCases: string[];
+}): CatalogProductTypeHint[] {
+  const { items, categories, materials, occasions, useCases } = input;
+  const candidates: CatalogProductTypeHint[] = [];
+  const add = (source: CatalogProductTypeHint["source"], term: string, matches: ProductRecord[]) => {
+    if (!term || !matches.length) return;
+    candidates.push({
+      term,
+      source,
+      productCount: matches.length,
+      inStockCount: matches.filter((item) => item.inStock !== false).length,
+      priceCoverage: priceCoverageForProducts(matches),
+      topSkus: topSkus(matches),
+    });
+  };
+
+  for (const category of categories) {
+    add(
+      "category",
+      category,
+      items.filter((item) => productCategoryList(item).some((value) => value.toLowerCase() === category.toLowerCase()))
+    );
+  }
+  for (const material of materials) {
+    add(
+      "material",
+      material,
+      items.filter((item) => splitProductRelationship(item.material).some((value) => value.toLowerCase() === material.toLowerCase()))
+    );
+  }
+  for (const occasion of occasions) {
+    add(
+      "occasion",
+      occasion,
+      items.filter((item) => splitProductRelationship(item.occasion).some((value) => value.toLowerCase() === occasion.toLowerCase()))
+    );
+  }
+  for (const useCase of useCases) {
+    add(
+      "use_case",
+      useCase,
+      items.filter((item) => splitProductRelationship(item.compatibility).some((value) => value.toLowerCase() === useCase.toLowerCase()))
+    );
+  }
+
+  return candidates
+    .filter((item) => item.inStockCount > 0)
+    .sort((a, b) => b.inStockCount - a.inStockCount || b.productCount - a.productCount || a.term.localeCompare(b.term))
+    .slice(0, 50);
+}
+
+function mostCommonTerms(values: string[], limit = 6): string[] {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const label = value.trim();
+    if (!label) continue;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([value]) => value);
+}
+
+function cleanOfferingTerm(value?: string): string | undefined {
+  const label = value?.trim();
+  if (!label) return undefined;
+  const normalized = label.toLowerCase();
+  if (["item", "items", "product", "products", "option", "options"].includes(normalized)) return undefined;
+  return label.length > 80 ? label.slice(0, 80).trim() : label;
+}
+
+function catalogText(items: ProductRecord[]): string {
+  return items
+    .slice(0, 500)
+    .map((item) =>
+      [
+        item.name,
+        item.description,
+        item.category,
+        ...(item.categories ?? []),
+        item.tags,
+        item.compatibility,
+        item.variants,
+        item.duration,
+        item.location,
+        item.bookingType,
+        item.packageIncludes,
+        item.availability,
+        item.staffRole,
+        item.serviceArea,
+      ].filter(Boolean).join(" ")
+    )
+    .join(" ")
+    .toLowerCase();
+}
+
+function detectOfferingMode(items: ProductRecord[]): CatalogOfferingMode {
+  if (!items.length) return "unknown";
+  const text = catalogText(items);
+  const serviceFieldCount = items.filter((item) =>
+    item.duration || item.bookingType || item.packageIncludes || item.availability || item.staffRole || item.serviceArea
+  ).length;
+  const serviceSignals = [
+    "service",
+    "services",
+    "consultation",
+    "appointment",
+    "booking",
+    "package",
+    "session",
+    "class",
+    "course",
+    "repair",
+    "installation",
+    "rental",
+    "training",
+  ];
+  const productSignals = ["sku", "stock", "in stock", "material", "size", "color", "shipping", "delivery"];
+  const serviceScore = serviceSignals.filter((term) => text.includes(term)).length + serviceFieldCount / Math.max(items.length, 1);
+  const productScore =
+    productSignals.filter((term) => text.includes(term)).length +
+    items.filter((item) => item.imageUrl || item.imageUrls?.length || item.inStock !== false).length / Math.max(items.length, 1);
+  if (serviceScore >= 2 && productScore >= 2) return "mixed";
+  if (serviceScore >= 2 && serviceScore > productScore) return "services";
+  if (productScore > 0) return "products";
+  return "unknown";
+}
+
+function defaultDecisionFactors(items: ProductRecord[]): string[] {
+  const factors = new Set<string>();
+  if (items.some((item) => Number.isFinite(item.price) && item.price > 0)) factors.add("budget");
+  if (items.some((item) => splitProductRelationship(item.material).length)) factors.add("material");
+  if (items.some((item) => splitProductRelationship(item.tags).length)) factors.add("style");
+  if (items.some((item) => splitProductRelationship(item.variants).length)) factors.add("variant");
+  if (items.some((item) => splitProductRelationship(item.compatibility).length)) factors.add("use case");
+  if (detectOfferingMode(items) === "services") {
+    factors.add("service type");
+    factors.add("schedule");
+  }
+  return [...factors].slice(0, 8);
+}
+
+function buildOfferingTypes(input: {
+  categories: string[];
+  materials: string[];
+  useCases: string[];
+  productTypeHints: CatalogProductTypeHint[];
+}): string[] {
+  return mostCommonTerms([
+    ...input.productTypeHints.map((hint) => hint.term),
+    ...input.categories,
+    ...input.useCases,
+    ...input.materials.map((material) => `${material} offerings`),
+  ], 30)
+    .map(cleanOfferingTerm)
+    .filter((term): term is string => Boolean(term));
+}
+
+function buildStarterIntents(input: {
+  offeringMode: CatalogOfferingMode;
+  offeringTypes: string[];
+  useCases: string[];
+  audiences: string[];
+}): string[] {
+  const starters: string[] = [];
+  for (const term of input.offeringTypes.slice(0, 4)) starters.push(`Show me ${term}`);
+  for (const useCase of input.useCases.slice(0, 3)) starters.push(`I need help with ${useCase}`);
+  for (const audience of input.audiences.slice(0, 2)) starters.push(`Options for ${audience}`);
+  if (input.offeringMode === "services") {
+    starters.push("Compare service options");
+    starters.push("Book a consultation");
+  } else if (input.offeringMode === "products") {
+    starters.push("Show best sellers");
+  } else {
+    starters.push("Show popular options");
+  }
+  return mostCommonTerms(starters, 8);
+}
+
+function qualityScoreOfferingIntelligence(items: ProductRecord[], intelligence: Pick<CatalogOfferingIntelligence, "starterIntents" | "offeringTypes" | "decisionFactors">): { score: number; warnings: string[] } {
+  const text = catalogText(items);
+  const warnings: string[] = [];
+  const unsupportedOfferings = intelligence.offeringTypes.filter((term) => !text.includes(term.toLowerCase())).slice(0, 5);
+  if (unsupportedOfferings.length) warnings.push(`Unsupported offering terms: ${unsupportedOfferings.join(", ")}`);
+  const unsupportedStarters = intelligence.starterIntents
+    .filter((starter) => {
+      const normalized = starter.toLowerCase();
+      return !intelligence.offeringTypes.some((term) => normalized.includes(term.toLowerCase())) &&
+        !intelligence.decisionFactors.some((term) => normalized.includes(term.toLowerCase()));
+    })
+    .slice(0, 5);
+  if (unsupportedStarters.length) warnings.push(`Starter intents need review: ${unsupportedStarters.join(", ")}`);
+  const score = Math.max(0, 1 - warnings.length * 0.25);
+  return { score, warnings };
+}
+
+function buildUseCaseProfiles(input: {
+  items: ProductRecord[];
+  useCases: string[];
+  audiences: string[];
+  decisionFactors: string[];
+}): Record<string, CatalogUseCaseProfile> {
+  const entries: Array<[string, CatalogUseCaseProfile]> = [];
+  for (const useCase of input.useCases.slice(0, 20)) {
+    const matches = input.items.filter((item) =>
+      splitProductRelationship(item.compatibility).some((value) => value.toLowerCase() === useCase.toLowerCase()) ||
+      productCategoryList(item).some((value) => value.toLowerCase() === useCase.toLowerCase())
+    );
+    if (!matches.length) continue;
+    entries.push([
+      useCase,
+      {
+        terms: mostCommonTerms(matches.flatMap((item) => [...productCategoryList(item), ...splitProductRelationship(item.tags)]), 8),
+        audiences: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.recipient)), 6),
+        decisionFactors: input.decisionFactors,
+        offeringTypes: mostCommonTerms(matches.flatMap((item) => productCategoryList(item)), 6),
+        priceCoverage: priceCoverageForProducts(matches),
+      },
+    ]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function deterministicOfferingIntelligence(input: {
+  items: ProductRecord[];
+  categories: string[];
+  materials: string[];
+  useCases: string[];
+  recipients: string[];
+  productTypeHints: CatalogProductTypeHint[];
+}): CatalogOfferingIntelligence {
+  const offeringMode = detectOfferingMode(input.items);
+  const offeringTypes = buildOfferingTypes(input);
+  const audiences = mostCommonTerms(input.recipients, 20);
+  const decisionFactors = defaultDecisionFactors(input.items);
+  const useCaseProfiles = buildUseCaseProfiles({
+    items: input.items,
+    useCases: input.useCases,
+    audiences,
+    decisionFactors,
+  });
+  return {
+    offeringMode,
+    offeringTypes,
+    useCaseProfiles,
+    audiences,
+    decisionFactors,
+    starterIntents: buildStarterIntents({ offeringMode, offeringTypes, useCases: input.useCases, audiences }),
+    confidence: input.items.length ? 0.65 : 0,
+    sourceEvidence: input.items.slice(0, 5).map((item) => item.name).filter(Boolean),
+    quality: qualityScoreOfferingIntelligence(input.items, { offeringTypes, decisionFactors, starterIntents: buildStarterIntents({ offeringMode, offeringTypes, useCases: input.useCases, audiences }) }),
+  };
+}
+
+function buildGiftProfiles(items: ProductRecord[], occasions: string[]): Record<string, CatalogGiftProfile> {
+  const entries: Array<[string, CatalogGiftProfile]> = [];
+  for (const occasion of occasions) {
+    const matches = items.filter((item) =>
+      splitProductRelationship(item.occasion).some((value) => value.toLowerCase() === occasion.toLowerCase())
+    );
+    if (!matches.length) continue;
+    entries.push([
+      occasion,
+      {
+        recipients: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.recipient))),
+        styles: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.tags))),
+        useCases: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.compatibility))),
+        categories: mostCommonTerms(matches.flatMap((item) => productCategoryList(item))),
+        priceCoverage: priceCoverageForProducts(matches),
+      },
+    ]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function buildAttributeSummaries(items: ProductRecord[], categories: string[]): Record<string, CatalogAttributeSummary> {
+  const entries: Array<[string, CatalogAttributeSummary]> = [];
+  for (const category of categories) {
+    const matches = items.filter((item) =>
+      productCategoryList(item).some((value) => value.toLowerCase() === category.toLowerCase())
+    );
+    if (!matches.length) continue;
+    entries.push([
+      category,
+      {
+        materials: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.material))),
+        styles: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.tags))),
+        useCases: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.compatibility))),
+        variants: mostCommonTerms(matches.flatMap((item) => splitProductRelationship(item.variants)), 8),
+        priceCoverage: priceCoverageForProducts(matches),
+        topSkus: topSkus(matches),
+      },
+    ]);
+  }
+  return Object.fromEntries(entries);
+}
+
+function mergeOfferingIntelligence(
+  base: CatalogOfferingIntelligence,
+  generated?: Partial<CatalogOfferingIntelligence>
+): CatalogOfferingIntelligence {
+  if (!generated) return base;
+  return {
+    ...base,
+    ...generated,
+    offeringMode: generated.offeringMode ?? base.offeringMode,
+    offeringTypes: generated.offeringTypes?.length ? generated.offeringTypes : base.offeringTypes,
+    useCaseProfiles: Object.keys(generated.useCaseProfiles ?? {}).length ? generated.useCaseProfiles! : base.useCaseProfiles,
+    audiences: generated.audiences?.length ? generated.audiences : base.audiences,
+    decisionFactors: generated.decisionFactors?.length ? generated.decisionFactors : base.decisionFactors,
+    starterIntents: generated.starterIntents?.length ? generated.starterIntents : base.starterIntents,
+  };
+}
+
+function parseOfferingIntelligenceJson(content: string): Partial<CatalogOfferingIntelligence> | undefined {
+  const jsonText = content.trim().match(/\{[\s\S]*\}/)?.[0] ?? content.trim();
+  try {
+    const parsed = JSON.parse(jsonText) as Partial<CatalogOfferingIntelligence>;
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const modes: CatalogOfferingMode[] = ["products", "services", "mixed", "unknown"];
+    return {
+      offeringMode: modes.includes(parsed.offeringMode as CatalogOfferingMode) ? parsed.offeringMode : undefined,
+      offeringTypes: Array.isArray(parsed.offeringTypes) ? parsed.offeringTypes.map(String).slice(0, 40) : undefined,
+      useCaseProfiles: parsed.useCaseProfiles && typeof parsed.useCaseProfiles === "object" ? parsed.useCaseProfiles : undefined,
+      audiences: Array.isArray(parsed.audiences) ? parsed.audiences.map(String).slice(0, 30) : undefined,
+      decisionFactors: Array.isArray(parsed.decisionFactors) ? parsed.decisionFactors.map(String).slice(0, 20) : undefined,
+      starterIntents: Array.isArray(parsed.starterIntents) ? parsed.starterIntents.map(String).slice(0, 10) : undefined,
+      confidence: typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : undefined,
+      sourceEvidence: Array.isArray(parsed.sourceEvidence) ? parsed.sourceEvidence.map(String).slice(0, 10) : undefined,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function readStoredOfferingIntelligence(
+  tenantId: string,
+  config: CoreConfig
+): Promise<Partial<CatalogOfferingIntelligence> | undefined> {
+  const db = getDocClient(config);
+  const res = await db.send(
+    new GetCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.catalogIntelligence() },
+    })
+  );
+  return res.Item?.intelligence as Partial<CatalogOfferingIntelligence> | undefined;
+}
+
+async function writeStoredOfferingIntelligence(
+  tenantId: string,
+  config: CoreConfig,
+  intelligence: CatalogOfferingIntelligence
+) {
+  const db = getDocClient(config);
+  await db.send(
+    new PutCommand({
+      TableName: config.tableName,
+      Item: {
+        PK: Keys.tenantPk(tenantId),
+        SK: Keys.catalogIntelligence(),
+        intelligence,
+        updatedAt: new Date().toISOString(),
+      },
+    })
+  );
+}
+
+async function generateOfferingIntelligenceWithModel(input: {
+  items: ProductRecord[];
+  base: CatalogOfferingIntelligence;
+  config: CoreConfig;
+  model?: string;
+}): Promise<Partial<CatalogOfferingIntelligence> | undefined> {
+  const llm = createLLMProvider(input.config);
+  const model = input.model ?? input.config.catalogIntelligenceModel ?? input.config.llmModel;
+  if (!llm || !model) return undefined;
+  const catalogSample = input.items.slice(0, 80).map((item) => ({
+    name: item.name,
+    description: item.description?.slice(0, 500),
+    categories: productCategoryList(item),
+    tags: splitProductRelationship(item.tags),
+    material: splitProductRelationship(item.material),
+    useCases: splitProductRelationship(item.compatibility),
+    audience: splitProductRelationship(item.recipient),
+    variants: splitProductRelationship(item.variants),
+    duration: item.duration,
+    location: item.location,
+    bookingType: item.bookingType,
+    packageIncludes: item.packageIncludes,
+    availability: item.availability,
+    staffRole: item.staffRole,
+    serviceArea: item.serviceArea,
+    price: item.price,
+    currency: item.currency,
+  }));
+  try {
+    const response = await llm.chat({
+      model,
+      temperature: 0.1,
+      maxOutputTokens: 900,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Generate tenant commerce intelligence from catalog/service data. Return ONLY compact JSON. " +
+            "Do not assume the tenant sells gifts or physical products. It may sell services, products, or both. " +
+            "Schema: {offeringMode,offeringTypes,useCaseProfiles,audiences,decisionFactors,starterIntents,confidence,sourceEvidence}. " +
+            "offeringMode must be products, services, mixed, or unknown. starterIntents must be clickable customer messages.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            deterministicBase: input.base,
+            catalogSample,
+          }),
+        },
+      ],
+    });
+    return {
+      ...parseOfferingIntelligenceJson(response.content),
+      model,
+      generatedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.warn("[catalog-intelligence] high-model generation failed", err instanceof Error ? err.message : err);
+    return undefined;
+  }
 }
 
 function buildCatalogAliases(items: ProductRecord[], materials: string[], categories: string[]): Record<string, string[]> {
@@ -710,14 +1304,35 @@ export async function listCatalogSearchHints(
 
   const categoryList = [...categories].sort((a, b) => a.localeCompare(b));
   const materialList = [...materials].sort((a, b) => a.localeCompare(b));
+  const recipientList = [...recipients].sort((a, b) => a.localeCompare(b));
+  const occasionList = [...occasions].sort((a, b) => a.localeCompare(b));
+  const useCaseList = [...useCases].sort((a, b) => a.localeCompare(b));
+  const productTypeHints = buildProductTypeHints({
+    items,
+    categories: categoryList,
+    materials: materialList,
+    occasions: occasionList,
+    useCases: useCaseList,
+  });
+  const deterministicIntelligence = deterministicOfferingIntelligence({
+    items,
+    categories: categoryList,
+    materials: materialList,
+    useCases: useCaseList,
+    recipients: recipientList,
+    productTypeHints,
+  });
+  const storedIntelligence = await readStoredOfferingIntelligence(tenantId, config).catch(() => undefined);
+  const offeringIntelligence = mergeOfferingIntelligence(deterministicIntelligence, storedIntelligence);
+  offeringIntelligence.quality = qualityScoreOfferingIntelligence(items, offeringIntelligence);
 
   return {
     categories: categoryList,
     tags: [...tags].sort((a, b) => a.localeCompare(b)),
     materials: materialList,
-    recipients: [...recipients].sort((a, b) => a.localeCompare(b)),
-    occasions: [...occasions].sort((a, b) => a.localeCompare(b)),
-    useCases: [...useCases].sort((a, b) => a.localeCompare(b)),
+    recipients: recipientList,
+    occasions: occasionList,
+    useCases: useCaseList,
     styles: [...styles].sort((a, b) => a.localeCompare(b)),
     priceBands: priceBandsForCatalog(items),
     priceBandsByCategory: priceBandsByTerm(items, categoryList, (item, term) => productCategoryList(item).some((category) => category.toLowerCase() === term.toLowerCase())),
@@ -730,6 +1345,20 @@ export async function listCatalogSearchHints(
       ])
     ),
     relatedByCategory: topSkusByCategory(items),
+    priceCoverageByCategory: priceCoverageByTerm(items, categoryList, (item, term) => productCategoryList(item).some((category) => category.toLowerCase() === term.toLowerCase())),
+    priceCoverageByMaterial: priceCoverageByTerm(items, materialList, (item, term) => splitProductRelationship(item.material).some((material) => material.toLowerCase() === term.toLowerCase())),
+    productTypeHints,
+    giftProfiles: buildGiftProfiles(items, occasionList),
+    attributeSummaries: buildAttributeSummaries(items, categoryList),
+    offeringMode: offeringIntelligence.offeringMode,
+    offeringTypes: offeringIntelligence.offeringTypes,
+    useCaseProfiles: offeringIntelligence.useCaseProfiles,
+    audiences: offeringIntelligence.audiences,
+    decisionFactors: offeringIntelligence.decisionFactors,
+    starterIntents: offeringIntelligence.starterIntents,
+    intelligenceQuality: offeringIntelligence.quality,
+    intelligenceGeneratedAt: offeringIntelligence.generatedAt,
+    intelligenceModel: offeringIntelligence.model,
   };
 }
 

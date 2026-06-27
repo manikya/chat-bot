@@ -326,6 +326,9 @@ function latestCatalogRefinementTerms(message: string, catalogHints?: CatalogSea
     for (const value of values) add(value);
   }
   for (const term of [
+    ...(catalogHints?.offeringTypes ?? []),
+    ...(catalogHints?.audiences ?? []),
+    ...(catalogHints?.decisionFactors ?? []),
     ...(catalogHints?.materials ?? []),
     ...(catalogHints?.categories ?? []),
     ...(catalogHints?.tags ?? []),

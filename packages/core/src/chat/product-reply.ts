@@ -31,7 +31,7 @@ export function extractSearchProducts(
 export function extractProductHitsFromTools(
   toolResults: Array<{ tool: string; success: boolean; result: unknown }>
 ): SearchProductHit[] {
-  for (const name of ["search_products", "compare_products", "get_related_products"] as const) {
+  for (const name of ["search_offerings", "search_products", "compare_products", "get_related_products"] as const) {
     const hit = toolResults.find((t) => t.tool === name && t.success);
     if (!hit) continue;
     const data = hit.result as { products?: SearchProductHit[] };
@@ -145,11 +145,41 @@ export function productSearchWasEmpty(
   toolResults: Array<{ tool: string; success: boolean; result: unknown }>
 ): boolean {
   return toolResults.some((t) => {
-    if (!["search_products", "compare_products", "get_related_products"].includes(t.tool)) return false;
+    if (!["search_offerings", "search_products", "compare_products", "get_related_products"].includes(t.tool)) return false;
     if (!t.success) return false;
     const data = t.result as { products?: unknown[]; totalFound?: number };
     return data.totalFound === 0 || (Array.isArray(data.products) && data.products.length === 0);
   });
+}
+
+function normalizeNoResultTerm(value?: string): string {
+  let output = "";
+  let previousWasSpace = true;
+  for (const char of (value ?? "").toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isWordChar = (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    if (isWordChar) {
+      output += char;
+      previousWasSpace = false;
+    } else if (!previousWasSpace) {
+      output += " ";
+      previousWasSpace = true;
+    }
+  }
+  return output.trim();
+}
+
+function isBroadNoResultTerm(value?: string): boolean {
+  return ["gift", "gifts", "gifting", "decor", "decoration", "decorative", "items", "options"].includes(
+    normalizeNoResultTerm(value)
+  );
+}
+
+function noResultItemPhrase(input: { category?: string; constraints?: string[] }): string {
+  const focused = (input.constraints ?? []).find((constraint) => !isBroadNoResultTerm(constraint));
+  if (focused) return focused;
+  if (input.category && !isBroadNoResultTerm(input.category)) return input.category;
+  return input.category ?? "that item";
 }
 
 export function buildNoProductResultsReply(input: {
@@ -181,7 +211,7 @@ export function buildNoProductResultsReply(input: {
   if (input.minPrice != null) parts.push(`from ${formatMoney(input.minPrice, input.currency)}`);
   const scope = parts.length ? ` matching ${parts.join(", ")}` : "";
   if (input.blockedBy === "budget" && input.relaxedPriceCoverage?.min != null) {
-    const item = input.category ?? (input.constraints ?? []).find(Boolean) ?? "that item";
+    const item = noResultItemPhrase(input);
     return `I found ${item} options, but not within that budget. Available options start around ${formatMoney(input.relaxedPriceCoverage.min, input.currency)}.`;
   }
   if (parts.length) {

@@ -18,6 +18,7 @@ export const Keys = {
   onboardingState: () => "ONBOARDING#STATE",
   source: (sourceId: string) => `SOURCE#${sourceId}`,
   job: (jobId: string) => `JOB#${jobId}`,
+  catalogIntelligence: () => "CATALOG#INTELLIGENCE",
   product: (sku: string) => `PRODUCT#${sku}`,
   conversation: (channel: string, externalUserId: string) => `CONV#${channel}#${externalUserId}`,
   message: (conversationId: string, timestamp: string) => `MSG#${conversationId}#${timestamp}`,

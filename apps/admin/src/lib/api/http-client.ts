@@ -48,6 +48,15 @@ export interface CommerceProductListItem {
   compatibility?: string[];
   bundles?: string[];
   variants?: string;
+  service?: {
+    duration?: string;
+    location?: string;
+    bookingType?: string;
+    packageIncludes?: string;
+    availability?: string;
+    staffRole?: string;
+    serviceArea?: string;
+  };
   sourceId?: string;
   updatedAt?: string;
 }
@@ -74,6 +83,55 @@ export interface CommerceCatalogData {
     styles?: string[];
     occasionRecipients?: Record<string, string[]>;
     relatedByCategory?: Record<string, string[]>;
+    priceCoverageByCategory?: Record<string, { min?: number; max?: number; count: number; inStockCount: number; currency: string }>;
+    priceCoverageByMaterial?: Record<string, { min?: number; max?: number; count: number; inStockCount: number; currency: string }>;
+    productTypeHints?: Array<{
+      term: string;
+      source: "category" | "material" | "occasion" | "use_case";
+      productCount: number;
+      inStockCount: number;
+      priceCoverage?: { min?: number; max?: number; count: number; inStockCount: number; currency: string };
+      topSkus: string[];
+    }>;
+    giftProfiles?: Record<
+      string,
+      {
+        recipients: string[];
+        styles: string[];
+        useCases: string[];
+        categories: string[];
+        priceCoverage?: { min?: number; max?: number; count: number; inStockCount: number; currency: string };
+      }
+    >;
+    attributeSummaries?: Record<
+      string,
+      {
+        materials: string[];
+        styles: string[];
+        useCases: string[];
+        variants: string[];
+        priceCoverage?: { min?: number; max?: number; count: number; inStockCount: number; currency: string };
+        topSkus: string[];
+      }
+    >;
+    offeringMode?: "products" | "services" | "mixed" | "unknown";
+    offeringTypes?: string[];
+    useCaseProfiles?: Record<
+      string,
+      {
+        terms: string[];
+        audiences: string[];
+        decisionFactors: string[];
+        offeringTypes: string[];
+        priceCoverage?: { min?: number; max?: number; count: number; inStockCount: number; currency: string };
+      }
+    >;
+    audiences?: string[];
+    decisionFactors?: string[];
+    starterIntents?: string[];
+    intelligenceQuality?: { score: number; warnings: string[] };
+    intelligenceGeneratedAt?: string;
+    intelligenceModel?: string;
   };
   sources?: Array<{ sourceId: string; productCount: number }>;
 }
