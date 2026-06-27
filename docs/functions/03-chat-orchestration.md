@@ -104,11 +104,12 @@ Numbered steps (spec):
 15. Build main LLM messages array (system + history + user + funnel hints)
 16. Call LLM via `createLLMProvider` (model per intent from tenant `llmConfig`)
 17. If `tool_calls` → execute tools → loop (max 3 rounds)
-18. Build `suggestedActions` (CTAs) for web channel
-19. Fallback reply if no LLM or empty response
-20. Persist outbound message(s) to DynamoDB (with `funnelStage`, `subIntent`)
-21. Increment usage counters (messages, tokens, including planner call)
-22. Return reply to channel handler (Meta send / widget SSE / JSON)
+18. For empty product searches, inspect tool observations for no-results diagnostics such as budget-blocked weak matches
+19. Build `suggestedActions` (CTAs) for web channel
+20. Fallback reply if no LLM or empty response
+21. Persist outbound message(s) to DynamoDB (with `funnelStage`, `subIntent`)
+22. Increment usage counters (messages, tokens, including planner call)
+23. Return reply to channel handler (Meta send / widget SSE / JSON)
 ```
 
 ---
@@ -348,6 +349,15 @@ See [06-ecommerce-tools.md](06-ecommerce-tools.md) for full specs.
 | `get_cart` | intent = checkout |
 | `create_checkout_link` | intent = checkout |
 | `get_order_status` | intent = checkout, faq |
+
+### Product search observations
+
+`search_products` returns structured observations in addition to product cards. The orchestrator and CTA layer use them to avoid weak or repetitive recommendations:
+
+- `visibleCount`, `hiddenResultCount`, and `excludedSkusApplied` drive compact top-card display and "show more" behavior.
+- `exactMatchStrength` and `weakResults` identify broad or unrelated candidates.
+- `emptyReason: "weak_match"` is used when concrete budget searches would otherwise surface unrelated cheap products.
+- `blockedBy: "budget"` plus `relaxedPriceCoverage` means matching products exist outside the requested budget. The no-results reply explains the starting price and CTAs offer price-aware recovery.
 
 ---
 

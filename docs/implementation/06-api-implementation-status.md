@@ -228,6 +228,7 @@ The admin UI calls all endpoints over HTTP. The local dev server routes matching
 - **Catalog debounce** — `packages/core/src/commerce/catalog-sync-trigger.ts` queues ingest when Shopify/Woo product webhooks fire
 - **LLM chat planner layer** — `packages/core/src/chat/sales-planner.ts` makes a low-temperature JSON LLM call before the main chat call. It outputs `confidence`, `intent`, `subIntent`, `funnelStage`, `action`, `gateProductSearch`, `searchQuery`, `ragQuery`, `toolPolicy`, `missingSlot`, `resetContext`, slot hints, language style, suggested actions, and recovery actions; trusted slots are grounded against the latest message/catalog aliases before merging.
 - **Tenant catalog intelligence** — `listCatalogSearchHints()` now includes contextual price bands by category/material and aliases such as `piththala` → `Brass`, `ridi`/`රිදී` → `Silver`, `aliya`/`අලියා` → `Elephant` when supported by catalog data.
+- **Price-aware product recovery** — `search_products` suppresses weak matches for concrete budget searches, runs a diagnostic no-budget pass, and returns `blockedBy: "budget"` with `relaxedPriceCoverage` so replies and CTAs can explain when matching products exist above the requested price.
 
 **Code locations:**
 

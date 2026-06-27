@@ -297,6 +297,7 @@ Current alias examples are generated only when supported by the tenant catalog:
 - If no planner recovery exists, deterministic recovery actions relax the latest constraint, broaden product type, or offer premium alternatives.
 - Budget actions use category/material-specific price bands when possible before falling back to global tenant price bands.
 - Engagement questions use result quality and product diversity to avoid unrelated generic questions.
+- Concrete budget searches have a precision gate: if budget-matching candidates are weak, the agent hides unrelated cards, runs a no-budget diagnostic search for the same product type, explains when relevant items start above the requested budget, and offers product-specific recovery chips.
 
 ### 6.6 Eval visibility
 
@@ -320,6 +321,7 @@ Current alias examples are generated only when supported by the tenant catalog:
 - [x] Context reset prevents stale filters after explicit topic changes
 - [x] Uncertainty phrases do not become constraints
 - [x] Singlish/Sinhala aliases improve searches like `piththala pahan`, `ridi aliya`
+- [x] Weak budget matches are converted into price-aware no-results recovery instead of unrelated product cards
 
 ---
 

@@ -183,8 +183,9 @@ Shared schema passed to all LLM providers via [04-llm-provider-router.md](04-llm
 |------|--------|
 | 1 | Query S3 Vectors with `source_type=catalog` filter |
 | 2 | Supplement with DynamoDB product table if connector synced |
-| 3 | Apply price/category filters |
-| 4 | Return top N products with sku, name, price, image_url, in_stock |
+| 3 | Apply category, price, stock, required-term, and recent-SKU exclusion filters |
+| 4 | Rank a larger recall set, return the visible top products, and expose hidden-result counts for "show more" |
+| 5 | For concrete budget searches with only weak matches, suppress unrelated cards and run a diagnostic no-budget pass to report whether the product exists outside the requested price |
 
 **Response to LLM:**
 ```json
@@ -198,9 +199,39 @@ Shared schema passed to all LLM providers via [04-llm-provider-router.md](04-llm
       "url": "https://store.com/products/blue-runner"
     }
   ],
-  "totalFound": 3
+  "totalFound": 3,
+  "observation": {
+    "kind": "product_search",
+    "resultCount": 12,
+    "visibleCount": 3,
+    "hiddenResultCount": 9,
+    "exactMatchStrength": "strong",
+    "categoryDiversity": 2,
+    "priceCoverage": { "min": 6900, "max": 19900 },
+    "excludedSkusApplied": 0,
+    "weakResults": false
+  }
 }
 ```
+
+When the shopper asks for a concrete product under a budget and the only budget-matching candidates are weak or unrelated, `search_products` returns no product cards and includes a diagnostic observation:
+
+```json
+{
+  "products": [],
+  "totalFound": 0,
+  "observation": {
+    "kind": "product_search",
+    "emptyReason": "weak_match",
+    "blockedBy": "budget",
+    "relaxedPriceCoverage": { "min": 6900, "max": 19900 },
+    "exactMatchStrength": "weak",
+    "weakResults": true
+  }
+}
+```
+
+The reply and CTA layers use this to explain that relevant products exist but start above the requested budget, then offer recovery actions such as `Show aircraft from LKR 6,900`, `All aircraft`, and `Different budget`.
 
 ### `add_to_cart`
 
