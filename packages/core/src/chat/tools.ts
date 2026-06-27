@@ -29,9 +29,11 @@ export interface ProductToolObservation {
   exactMatchStrength: "none" | "weak" | "strong";
   categoryDiversity: number;
   priceCoverage?: { min?: number; max?: number };
+  relaxedPriceCoverage?: { min?: number; max?: number };
+  blockedBy?: "budget" | "stock" | "constraints";
   excludedSkusApplied: number;
   weakResults: boolean;
-  emptyReason?: "no_match" | "filtered_by_price" | "filtered_by_stock" | "excluded_recent";
+  emptyReason?: "no_match" | "filtered_by_price" | "filtered_by_stock" | "excluded_recent" | "weak_match";
 }
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
@@ -331,6 +333,36 @@ function productObservation(input: {
   };
 }
 
+function hasConcreteBudgetIntent(input: {
+  categoryFilter?: string;
+  requiredTerms?: string[];
+  query: string;
+  maxPrice?: number;
+  minPrice?: number;
+}): boolean {
+  if (input.maxPrice == null && input.minPrice == null) return false;
+  if (input.categoryFilter?.trim()) return true;
+  if (input.requiredTerms?.length) return true;
+  const meaningful = meaningfulSearchQuery(input.query).split(/\s+/).filter((term) => term.length >= 3);
+  return meaningful.length > 0;
+}
+
+function weakMatchObservation(observation: ProductToolObservation): ProductToolObservation {
+  return {
+    ...observation,
+    resultCount: 0,
+    visibleCount: 0,
+    hiddenResultCount: 0,
+    weakResults: true,
+    emptyReason: "weak_match",
+  };
+}
+
+function priceCoverage(products: ProductRecord[]): { min?: number; max?: number } | undefined {
+  const prices = products.map((product) => product.price).filter((price) => Number.isFinite(price) && price > 0);
+  return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : undefined;
+}
+
 export interface ToolExecutionContext {
   auth: AuthContext;
   config: CoreConfig;
@@ -534,6 +566,45 @@ export async function executeTool(
       const vectorScores = new Map(
         vectorHits.map((hit) => [String(hit.chunk.metadata.sku ?? hit.chunk.id), hit.score])
       );
+      const observation = productObservation({
+        kind: "product_search",
+        products: visibleProducts,
+        totalFound: ranked.length,
+        widened: widenStrategy !== "exact",
+        widenStrategy,
+        query: searchQuery,
+        minPrice,
+        maxPrice,
+        excludeSkus,
+      });
+      const hideWeakConcreteMatches =
+        observation.exactMatchStrength === "weak" &&
+        hasConcreteBudgetIntent({ categoryFilter, requiredTerms, query: searchQuery, maxPrice, minPrice });
+      if (hideWeakConcreteMatches) {
+        const diagnostic = await runProductSearchPass({
+          ctx,
+          searchQuery: meaningfulSearchQuery(searchQuery, ctx.qualification),
+          recallLimit,
+          storeCurrency,
+          categoryFilter,
+          requiredTerms: [],
+          excludeSkus: [],
+        });
+        const diagnosticCoverage = priceCoverage(diagnostic.ranked);
+        return {
+          success: true,
+          result: {
+            query: searchQuery,
+            products: [],
+            totalFound: 0,
+            observation: {
+              ...weakMatchObservation(observation),
+              relaxedPriceCoverage: diagnosticCoverage,
+              blockedBy: diagnosticCoverage ? "budget" : "constraints",
+            },
+          },
+        };
+      }
       return {
         success: true,
         result: {
@@ -548,17 +619,7 @@ export async function executeTool(
             })
           ),
           totalFound: ranked.length,
-          observation: productObservation({
-            kind: "product_search",
-            products: visibleProducts,
-            totalFound: ranked.length,
-            widened: widenStrategy !== "exact",
-            widenStrategy,
-            query: searchQuery,
-            minPrice,
-            maxPrice,
-            excludeSkus,
-          }),
+          observation,
         },
       };
     }

@@ -290,6 +290,25 @@ function summarizeToolObservations(toolResults: Array<{ tool: string; success: b
     .filter((item): item is { tool: string; success: boolean } & Record<string, unknown> => Boolean(item));
 }
 
+function productSearchDiagnostic(toolResults: Array<{ tool: string; success: boolean; result: unknown }>): {
+  relaxedPriceCoverage?: { min?: number; max?: number };
+  blockedBy?: "budget" | "stock" | "constraints";
+} {
+  for (const item of toolResults) {
+    if (item.tool !== "search_products" || !item.success) continue;
+    const observation = (item.result as { observation?: unknown }).observation as
+      | { relaxedPriceCoverage?: { min?: number; max?: number }; blockedBy?: "budget" | "stock" | "constraints" }
+      | undefined;
+    if (observation?.relaxedPriceCoverage || observation?.blockedBy) {
+      return {
+        relaxedPriceCoverage: observation.relaxedPriceCoverage,
+        blockedBy: observation.blockedBy,
+      };
+    }
+  }
+  return {};
+}
+
 function messageContainsTerm(message: string, term: string): boolean {
   const cleaned = term.trim();
   if (cleaned.length < 3) return false;
@@ -858,12 +877,15 @@ export async function runChatOrchestrator(
     productSearchWasEmpty(toolResults) &&
     (intent === "product" || subIntent === "product_browse" || subIntent === "product_compare")
   ) {
+    const diagnostic = productSearchDiagnostic(toolResults);
     replyContent = buildNoProductResultsReply({
       query: text,
       category: qualification.category,
       constraints: qualification.constraints,
       maxPrice: searchBudget?.max,
       minPrice: searchBudget?.min,
+      relaxedPriceCoverage: diagnostic.relaxedPriceCoverage,
+      blockedBy: diagnostic.blockedBy,
       currency,
       channel: input.channel,
     });

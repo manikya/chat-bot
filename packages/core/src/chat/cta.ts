@@ -224,6 +224,8 @@ function productSearchMeta(toolResults: Array<{ tool: string; success: boolean; 
   visibleCount: number;
   totalFound: number;
   hiddenCount: number;
+  relaxedPriceCoverage?: { min?: number; max?: number };
+  blockedBy?: "budget" | "stock" | "constraints";
 } {
   const search = toolResults.find((item) => item.tool === "search_products" && item.success);
   const result = search?.result as
@@ -231,7 +233,13 @@ function productSearchMeta(toolResults: Array<{ tool: string; success: boolean; 
         query?: string;
         products?: unknown[];
         totalFound?: number;
-        observation?: { hiddenResultCount?: number; visibleCount?: number; resultCount?: number };
+        observation?: {
+          hiddenResultCount?: number;
+          visibleCount?: number;
+          resultCount?: number;
+          relaxedPriceCoverage?: { min?: number; max?: number };
+          blockedBy?: "budget" | "stock" | "constraints";
+        };
       }
     | undefined;
   const visibleCount = result?.observation?.visibleCount ?? result?.products?.length ?? 0;
@@ -241,6 +249,8 @@ function productSearchMeta(toolResults: Array<{ tool: string; success: boolean; 
     visibleCount,
     totalFound,
     hiddenCount: result?.observation?.hiddenResultCount ?? Math.max(0, totalFound - visibleCount),
+    relaxedPriceCoverage: result?.observation?.relaxedPriceCoverage,
+    blockedBy: result?.observation?.blockedBy,
   };
 }
 
@@ -305,8 +315,9 @@ function recoveryActions(input: {
   qualification?: QualificationState;
   catalogHints?: CatalogSearchHints;
   market?: "default" | "lk";
+  meta?: ReturnType<typeof productSearchMeta>;
 }): WidgetAction[] {
-  const { qualification, catalogHints, market = "default" } = input;
+  const { qualification, catalogHints, market = "default", meta } = input;
   const specificCategory =
     qualification?.category && !isBroadAnchorTerm(qualification.category) ? qualification.category : undefined;
   const focused = uniqueTerms([...focusedConstraintTerms(qualification), specificCategory]);
@@ -321,6 +332,18 @@ function recoveryActions(input: {
     const key = normalizeTerm(label);
     if (key && !actions.some((action) => normalizeTerm(action.label) === key)) actions.push(messageAction(label, message));
   };
+
+  if (meta?.blockedBy === "budget" && meta.relaxedPriceCoverage?.min != null && (premiumPhrase || focused[0])) {
+    const phrase = premiumPhrase || focused[0]!;
+    const currency = market === "lk" ? "LKR" : "USD";
+    add(
+      compactActionLabel(`Show ${phrase} from ${formatMoney(meta.relaxedPriceCoverage.min, currency)}`),
+      `Show ${phrase} from ${formatMoney(meta.relaxedPriceCoverage.min, currency)}`
+    );
+    add(compactActionLabel(`All ${phrase}`), `Show all ${phrase}`);
+    add("Different budget", "Show a different price range");
+    return actions.slice(0, 3);
+  }
 
   if (latest && anchorPhrase) {
     add(compactActionLabel(`All ${anchorPhrase}`), `Show ${anchorPhrase}${budget ? ` ${budget}` : ""} without ${latest}`);
@@ -371,6 +394,7 @@ export function buildSuggestedCtas(input: {
   const emptyProductSearch = productSearchWasEmpty(toolResults);
   const cartCount = cart?.items.length ?? 0;
   const moreActions = moreDiscoveryActions({ toolResults, qualification });
+  const searchMeta = productSearchMeta(toolResults);
 
   if (gateProductSearch) {
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
@@ -450,7 +474,10 @@ export function buildSuggestedCtas(input: {
     }
     if (emptyProductSearch && hasFocusedQualification(qualification)) {
       const plannerActions = plannerRecoveryActions(salesPlan ?? null);
-      return (plannerActions.length ? plannerActions : recoveryActions({ qualification, catalogHints, market })).slice(0, 3);
+      if (searchMeta.blockedBy === "budget") {
+        return recoveryActions({ qualification, catalogHints, market, meta: searchMeta }).slice(0, 3);
+      }
+      return (plannerActions.length ? plannerActions : recoveryActions({ qualification, catalogHints, market, meta: searchMeta })).slice(0, 3);
     }
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 3 });
     return hintActions.length ? hintActions : [];

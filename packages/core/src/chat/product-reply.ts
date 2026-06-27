@@ -158,6 +158,8 @@ export function buildNoProductResultsReply(input: {
   constraints?: string[];
   maxPrice?: number;
   minPrice?: number;
+  relaxedPriceCoverage?: { min?: number; max?: number };
+  blockedBy?: "budget" | "stock" | "constraints";
   currency: string;
   channel?: string;
 }): string {
@@ -178,6 +180,10 @@ export function buildNoProductResultsReply(input: {
   if (input.maxPrice != null) parts.push(`under ${formatMoney(input.maxPrice, input.currency)}`);
   if (input.minPrice != null) parts.push(`from ${formatMoney(input.minPrice, input.currency)}`);
   const scope = parts.length ? ` matching ${parts.join(", ")}` : "";
+  if (input.blockedBy === "budget" && input.relaxedPriceCoverage?.min != null) {
+    const item = input.category ?? (input.constraints ?? []).find(Boolean) ?? "that item";
+    return `I found ${item} options, but not within that budget. Available options start around ${formatMoney(input.relaxedPriceCoverage.min, input.currency)}.`;
+  }
   if (parts.length) {
     return `I couldn't find in-stock products${scope} for that search. I can adjust one preference or show higher-value options.`;
   }

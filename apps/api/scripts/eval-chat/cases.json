@@ -370,6 +370,7 @@
       "intent": "product",
       "toolsIncludes": ["search_products"],
       "maxProductCards": 0,
+      "replyIncludes": ["Available options start"],
       "replyExcludes": ["Cat Couple", "Christmas Colored Angel", "Bag Normal"],
       "suggestedActionIncludes": ["air"],
       "suggestedActionExcludes": ["Cat", "Christmas", "Bag"],
