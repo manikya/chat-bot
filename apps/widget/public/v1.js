@@ -957,6 +957,14 @@
     render();
   }
 
+  function clearMessageActions() {
+    state.messages.forEach(function (message) {
+      if (message && message.actions) {
+        message.actions = null;
+      }
+    });
+  }
+
   function addBotMessage(text, actions) {
     state.messages.push({ role: "bot", text: text, actions: actions || null, cards: null });
     render();
@@ -994,6 +1002,7 @@
 
   function addToCartDirect(sku, quantity) {
     if (!sku) return;
+    clearMessageActions();
     state.loading = true;
     render();
     fetch(apiBase + "/api/v1/widget/cart", {
@@ -1045,6 +1054,7 @@
   }
 
   function sendMessage(text) {
+    clearMessageActions();
     addUserMessage(text);
     state.loading = true;
     render();

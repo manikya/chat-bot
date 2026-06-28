@@ -14,6 +14,27 @@ import { defaultSuggestedQuestions, marketFromTimezone, suggestedQuestionsForCha
 import type { WidgetAction } from "@commercechat/shared";
 import { listCatalogSearchHints, type CatalogSearchHints } from "../catalog/products";
 import { createLLMProvider } from "../llm/provider";
+import type { ChatRequest, ResponseFormat } from "../llm/types";
+
+const INITIAL_SUGGESTIONS_RESPONSE_FORMAT: ResponseFormat = {
+  type: "json_schema",
+  jsonSchema: {
+    name: "initial_widget_suggestions",
+    strict: false,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        suggestedQuestions: {
+          type: "array",
+          items: {
+            type: "string",
+          },
+        },
+      },
+    },
+  },
+};
 
 function pageContext(pageUrl?: string): string[] {
   if (!pageUrl) return [];
@@ -127,7 +148,7 @@ async function generateInitialSuggestedQuestions(input: {
   const llm = createLLMProvider(config);
   if (!llm) return fallback;
   try {
-    const response = await llm.chat({
+    const suggestionRequest: Omit<ChatRequest, "responseFormat"> = {
       model: config.llmModel,
       temperature: 0.2,
       maxOutputTokens: 180,
@@ -170,7 +191,16 @@ async function generateInitialSuggestedQuestions(input: {
           }),
         },
       ],
-    });
+    };
+    let response;
+    try {
+      response = await llm.chat({
+        ...suggestionRequest,
+        responseFormat: INITIAL_SUGGESTIONS_RESPONSE_FORMAT,
+      });
+    } catch {
+      response = await llm.chat(suggestionRequest);
+    }
     const generated = parseSuggestedQuestions(response.content);
     return [...generated, ...fallback].slice(0, 3);
   } catch {

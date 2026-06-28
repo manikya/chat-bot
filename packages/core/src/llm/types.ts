@@ -4,6 +4,18 @@ export interface ToolDefinition {
   parameters: Record<string, unknown>;
 }
 
+export type ResponseFormat =
+  | { type: "text" }
+  | { type: "json_object" }
+  | {
+      type: "json_schema";
+      jsonSchema: {
+        name: string;
+        schema: Record<string, unknown>;
+        strict?: boolean;
+      };
+    };
+
 export interface ToolCall {
   id: string;
   name: string;
@@ -24,6 +36,7 @@ export interface ChatRequest {
   tools?: ToolDefinition[];
   temperature?: number;
   maxOutputTokens?: number;
+  responseFormat?: ResponseFormat;
 }
 
 export interface ChatResponse {

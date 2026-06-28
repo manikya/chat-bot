@@ -14,6 +14,19 @@ export class OpenAILLMProvider implements LLMProvider {
     return true;
   }
 
+  private responseFormat(request: ChatRequest) {
+    if (!request.responseFormat || request.responseFormat.type === "text") return undefined;
+    if (request.responseFormat.type === "json_object") return { type: "json_object" };
+    return {
+      type: "json_schema",
+      json_schema: {
+        name: request.responseFormat.jsonSchema.name,
+        schema: request.responseFormat.jsonSchema.schema,
+        strict: request.responseFormat.jsonSchema.strict ?? false,
+      },
+    };
+  }
+
   private requestBody(request: ChatRequest, options?: { stream?: boolean }) {
     return {
       model: request.model || this.defaultModel,
@@ -30,6 +43,7 @@ export class OpenAILLMProvider implements LLMProvider {
       })),
       temperature: request.temperature ?? 0.4,
       max_tokens: request.maxOutputTokens ?? 800,
+      ...(this.responseFormat(request) ? { response_format: this.responseFormat(request) } : {}),
       ...(request.tools?.length
         ? {
             tools: request.tools.map((t) => ({

@@ -126,6 +126,13 @@ function looksLikeLanguageMismatch(action: WidgetAction, replyLanguage?: AgentTu
   return false;
 }
 
+function looksLikeQuestionChip(action: WidgetAction): boolean {
+  const text = `${action.label} ${action.message ?? ""}`.trim().toLowerCase();
+  if (!text) return false;
+  if (text.includes("?")) return true;
+  return /^(who|what|which|when|where|why|how|for whom)\b/.test(text);
+}
+
 export function validateSuggestedActions(input: {
   actions: WidgetAction[];
   state: AgentTurnState;
@@ -154,6 +161,10 @@ export function validateSuggestedActions(input: {
     if (action.type === "message") {
       const labelKey = normalized(action.label);
       const messageKey = normalized(action.message);
+      if (input.state.planner?.missingSlot && input.state.planner.missingSlot !== "none" && looksLikeQuestionChip(action)) {
+        flags.push("removed_question_like_action");
+        return false;
+      }
       if (labelKey && recentLabels.has(labelKey) && messageKey && recentMessages.has(messageKey)) {
         flags.push("removed_recent_repeated_action");
         return false;

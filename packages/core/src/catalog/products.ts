@@ -5,6 +5,7 @@ import { Keys } from "../db/keys";
 import type { CatalogProduct } from "../ingest/parsers/catalog-csv";
 import { notifyWishlistRemindersForProducts } from "../chat/wishlist";
 import { createLLMProvider } from "../llm/provider";
+import type { ChatRequest, ResponseFormat } from "../llm/types";
 import {
   categoryFilterMatches,
   productCategoryList,
@@ -15,6 +16,76 @@ import {
   scoreProductRelevance,
   splitProductRelationship,
 } from "./product-search";
+
+const CATALOG_INTELLIGENCE_RESPONSE_FORMAT: ResponseFormat = {
+  type: "json_schema",
+  jsonSchema: {
+    name: "catalog_offering_intelligence",
+    strict: false,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        offeringMode: { enum: ["products", "services", "mixed", "unknown"] },
+        offeringTypes: {
+          type: "array",
+          items: { type: "string" },
+        },
+        useCaseProfiles: {
+          type: "object",
+          additionalProperties: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              terms: {
+                type: "array",
+                items: { type: "string" },
+              },
+              audiences: {
+                type: "array",
+                items: { type: "string" },
+              },
+              decisionFactors: {
+                type: "array",
+                items: { type: "string" },
+              },
+              offeringTypes: {
+                type: "array",
+                items: { type: "string" },
+              },
+              priceCoverage: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  min: { type: "number" },
+                  max: { type: "number" },
+                  currency: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        audiences: {
+          type: "array",
+          items: { type: "string" },
+        },
+        decisionFactors: {
+          type: "array",
+          items: { type: "string" },
+        },
+        starterIntents: {
+          type: "array",
+          items: { type: "string" },
+        },
+        confidence: { type: "number" },
+        sourceEvidence: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+    },
+  },
+};
 
 export async function getStoreCurrency(tenantId: string, config: CoreConfig): Promise<string> {
   const db = getDocClient(config);
@@ -1222,7 +1293,7 @@ async function generateOfferingIntelligenceWithModel(input: {
     currency: item.currency,
   }));
   try {
-    const response = await llm.chat({
+    const intelligenceRequest: Omit<ChatRequest, "responseFormat"> = {
       model,
       temperature: 0.1,
       maxOutputTokens: 900,
@@ -1246,7 +1317,16 @@ async function generateOfferingIntelligenceWithModel(input: {
           }),
         },
       ],
-    });
+    };
+    let response;
+    try {
+      response = await llm.chat({
+        ...intelligenceRequest,
+        responseFormat: CATALOG_INTELLIGENCE_RESPONSE_FORMAT,
+      });
+    } catch {
+      response = await llm.chat(intelligenceRequest);
+    }
     return {
       ...parseOfferingIntelligenceJson(response.content),
       model,

@@ -109,7 +109,11 @@ function contextualPriceBands(catalogHints?: CatalogSearchHints, qualification?:
   return catalogHints?.priceBands;
 }
 
-function budgetActions(catalogHints?: CatalogSearchHints, products: SearchProductHit[] = [], qualification?: QualificationState): WidgetAction[] {
+export function buildBudgetSuggestedActions(
+  catalogHints?: CatalogSearchHints,
+  products: SearchProductHit[] = [],
+  qualification?: QualificationState
+): WidgetAction[] {
   const contextualBands = contextualPriceBands(catalogHints, qualification);
   const bands = contextualBands?.length ? contextualBands : buildCatalogPriceBands(products);
   return bands.slice(0, 3).map((band) => messageAction(band.label, band.message));
@@ -407,7 +411,7 @@ export function buildSuggestedCtas(input: {
   const searchMeta = productSearchMeta(toolResults);
 
   if (gateProductSearch) {
-    const priceActions = budgetActions(catalogHints, products, qualification);
+    const priceActions = buildBudgetSuggestedActions(catalogHints, products, qualification);
     if (budgetQuestion) return priceActions.slice(0, 3);
     const hintActions = rankedHintActions({ catalogHints, pageUrl, qualification, max: 2 });
     return [...priceActions, ...hintActions].slice(0, 3);

@@ -1,6 +1,6 @@
 import type { ChatIntent, ChatSubIntent, FunnelStage, QualificationState, WidgetAction } from "@commercechat/shared";
 import type { CatalogPriceBand, CatalogSearchHints } from "../catalog/products";
-import type { LLMProvider } from "../llm/types";
+import type { ChatRequest, LLMProvider, ResponseFormat } from "../llm/types";
 import type { StoredMessage } from "./conversation";
 
 export const PLANNER_CONFIDENCE_THRESHOLD = 0.55;
@@ -117,6 +117,107 @@ export interface ChatPlan {
 }
 
 export type SalesPlan = ChatPlan;
+
+const SALES_PLAN_RESPONSE_FORMAT: ResponseFormat = {
+  type: "json_schema",
+  jsonSchema: {
+    name: "sales_plan",
+    strict: false,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        confidence: { type: "number" },
+        languageStyle: { enum: ["english", "sinhala", "tamil", "singlish", "mixed", "unknown"] },
+        replyLanguage: { enum: ["english", "sinhala", "tamil", "singlish", "mixed", "unknown"] },
+        userMove: { enum: USER_MOVES },
+        intent: { enum: [...CHAT_INTENTS, "product_search", "gift", "event"] },
+        subIntent: { enum: CHAT_SUB_INTENTS },
+        funnelStage: { enum: FUNNEL_STAGES },
+        action: { enum: PLAN_ACTIONS },
+        gateProductSearch: { type: "boolean" },
+        closeIntent: { enum: CLOSE_INTENTS },
+        closeTarget: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            sku: { type: "string" },
+            name: { type: "string" },
+            confidence: { type: "number" },
+          },
+        },
+        contextPolicy: { enum: ["continue", "reset", "show_more", "narrow", "recover"] },
+        resultPolicy: { enum: ["exact", "diversify", "exclude_seen", "relax_constraints", "ask_clarification"] },
+        responsePolicy: { enum: ["answer", "ask_one_question", "show_cards", "recover", "handoff"] },
+        searchQuery: { type: "string" },
+        ragQuery: { type: "string" },
+        toolPolicy: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            allowedTools: {
+              type: "array",
+              items: { enum: TOOL_NAMES },
+            },
+          },
+        },
+        missingSlot: { enum: ["budget", "recipient", "use_case", "style", "quantity", "none"] },
+        resetContext: { type: "boolean" },
+        productType: { type: "string" },
+        material: { type: "string" },
+        occasion: { type: "string" },
+        recipient: { type: "string" },
+        useCase: { type: "string" },
+        style: { type: "string" },
+        quantity: { type: "number" },
+        budget: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            min: { type: "number" },
+            max: { type: "number" },
+          },
+        },
+        attributeRequest: { enum: ATTRIBUTE_REQUESTS },
+        availabilityQuestion: { type: "boolean" },
+        nextQuestion: { type: "string" },
+        replyTone: { enum: ["concise", "consultative", "premium", "friendly"] },
+        suggestedActions: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              type: { enum: ["product", "checkout", "message"] },
+              label: { type: "string" },
+              sku: { type: "string" },
+              action: { enum: ["view", "add_to_cart", "checkout"] },
+              message: { type: "string" },
+            },
+          },
+        },
+        recoveryActions: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              label: { type: "string" },
+              message: { type: "string" },
+              strategy: {
+                enum: ["relax_budget", "relax_material", "premium_alternative", "closest_category", "ask_clarification"],
+              },
+            },
+          },
+        },
+        reasonCodes: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+    },
+  },
+};
 
 function isChatIntent(value: unknown): value is ChatIntent {
   return typeof value === "string" && CHAT_INTENTS.includes(value as ChatIntent);
@@ -555,14 +656,27 @@ export function plannerFallbackQuestion(plan: SalesPlan | null): string | undefi
 
 export function plannerSuggestedActions(plan: SalesPlan | null): WidgetAction[] {
   return (plan?.suggestedActions ?? [])
-    .filter((action) => cleanText(action.label) && (cleanText(action.message) || cleanText(action.sku) || action.action))
+    .filter((action) => {
+      const type = action.type ?? "message";
+      if (!cleanText(action.label)) return false;
+      if (type === "checkout" || action.action === "checkout") return true;
+      if (action.action === "add_to_cart") return Boolean(cleanText(action.sku));
+      if (type === "message") return Boolean(cleanText(action.message));
+      return Boolean(cleanText(action.sku));
+    })
     .slice(0, 4)
     .map((action) => ({
-      type: action.type ?? "message",
+      type: action.action === "checkout" ? "checkout" : action.type ?? "message",
       label: action.label.trim(),
       sku: cleanText(action.sku),
       action: action.action,
-      message: cleanText(action.message) ?? (action.type === "message" || !action.type ? action.label.trim() : undefined),
+      message:
+        cleanText(action.message) ??
+        (action.action === "checkout"
+          ? "I'm ready to checkout"
+          : action.type === "message" || !action.type
+            ? action.label.trim()
+            : undefined),
     }));
 }
 
@@ -648,7 +762,7 @@ export async function runSalesPlanner(input: {
   if (!llm) return { plan: null, usage: { inputTokens: 0, outputTokens: 0 } };
 
   try {
-    const response = await llm.chat({
+    const plannerRequest: Omit<ChatRequest, "responseFormat"> = {
       model,
       temperature: 0.1,
       maxOutputTokens: 320,
@@ -721,7 +835,16 @@ export async function runSalesPlanner(input: {
           }),
         },
       ],
-    });
+    };
+    let response;
+    try {
+      response = await llm.chat({
+        ...plannerRequest,
+        responseFormat: SALES_PLAN_RESPONSE_FORMAT,
+      });
+    } catch {
+      response = await llm.chat(plannerRequest);
+    }
     const parsed = parsePlanJson(response.content);
     if (parsed && !parsed.replyLanguage) parsed.replyLanguage = replyLanguageForLatestMessage(message, parsed.languageStyle);
     return { plan: normalizeChatPlan(parsed, fallback ?? {

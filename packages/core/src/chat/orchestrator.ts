@@ -32,7 +32,7 @@ import {
   productSearchWasEmpty,
   sanitizeReplyText,
 } from "./product-reply";
-import { appendCtaPromptLine, applyEngagementQuestion, buildSuggestedCtas } from "./cta";
+import { appendCtaPromptLine, applyEngagementQuestion, buildBudgetSuggestedActions, buildSuggestedCtas } from "./cta";
 import { buildProductResultsIntro } from "./conversation-policy";
 import { buildProductSearchQuery } from "./product-query";
 import {
@@ -375,8 +375,108 @@ function mergeWidgetActions(primary: WidgetAction[], fallback: WidgetAction[], l
   return merged;
 }
 
-function asksBudgetQuestion(_reply: string, plan: ReturnType<typeof trustedSalesPlan>): boolean {
-  return plan?.missingSlot === "budget";
+function asksBudgetQuestion(reply: string, plan: ReturnType<typeof trustedSalesPlan>): boolean {
+  if (plan?.missingSlot === "budget") return true;
+  const normalized = reply.toLowerCase();
+  return normalized.includes("?") && /\b(budget|price range|spend|stay within)\b/.test(normalized);
+}
+
+function asksRecipientQuestion(reply: string): boolean {
+  const normalized = reply.toLowerCase();
+  return normalized.includes("?") && /\b(who|whom)\b/.test(normalized) && /\b(for|buy|gift|recipient)\b/.test(normalized);
+}
+
+function asksAgeGroupQuestion(reply: string): boolean {
+  const normalized = reply.toLowerCase();
+  return normalized.includes("?") && /\b(age group|age range|ages|how old)\b/.test(normalized);
+}
+
+function messageAction(label: string, message: string): WidgetAction {
+  return { type: "message", label, message };
+}
+
+function uniqueLabels(values: Array<string | undefined>, max = 3): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of values) {
+    const label = value?.trim();
+    const key = label?.toLowerCase();
+    if (!label || !key || seen.has(key)) continue;
+    seen.add(key);
+    output.push(label);
+    if (output.length >= max) break;
+  }
+  return output;
+}
+
+function missingSlotAnswerActions(input: {
+  reply: string;
+  plan: ReturnType<typeof trustedSalesPlan>;
+  catalogHints?: CatalogSearchHints;
+  products?: ReturnType<typeof extractProductHitsFromTools>;
+  qualification?: QualificationState;
+  market?: "default" | "lk";
+}): WidgetAction[] {
+  const { reply, plan, catalogHints, products = [], qualification, market = "default" } = input;
+  if (asksBudgetQuestion(reply, plan)) {
+    const budgetActions = buildBudgetSuggestedActions(catalogHints, products, qualification);
+    if (budgetActions.length) return budgetActions;
+    return market === "lk"
+      ? [
+          messageAction("Under LKR 5,000", "Show options under LKR 5,000"),
+          messageAction("LKR 5,000-10,000", "Show options from LKR 5,000 to LKR 10,000"),
+          messageAction("Above LKR 10,000", "Show options above LKR 10,000"),
+        ]
+      : [
+          messageAction("Under $50", "Show options under $50"),
+          messageAction("$50-$100", "Show options from $50 to $100"),
+          messageAction("Above $100", "Show options above $100"),
+        ];
+  }
+
+  if (asksAgeGroupQuestion(reply)) {
+    return [
+      messageAction("Toddlers", "Show gifts for toddlers"),
+      messageAction("Kids", "Show gifts for kids"),
+      messageAction("Teens", "Show gifts for teens"),
+    ];
+  }
+
+  switch (plan?.missingSlot) {
+    case "recipient": {
+      const recipients = uniqueLabels([...(catalogHints?.audiences ?? []), ...(catalogHints?.recipients ?? [])]);
+      const fallback = ["kids", "adults", "someone special"];
+      return (recipients.length ? recipients : fallback).map((recipient) =>
+        messageAction(`For ${recipient}`, `It's for ${recipient}`)
+      );
+    }
+    case "use_case": {
+      const useCases = uniqueLabels([...(catalogHints?.useCases ?? []), ...Object.keys(catalogHints?.useCaseProfiles ?? {})]);
+      const fallback = ["Birthday gift", "Home decor", "Personal use"];
+      return (useCases.length ? useCases : fallback).map((useCase) => messageAction(useCase, `It's for ${useCase}`));
+    }
+    case "style": {
+      const styles = uniqueLabels([
+        ...(catalogHints?.styles ?? []),
+        ...(catalogHints?.decisionFactors ?? []).filter((factor) => factor.toLowerCase() !== "budget"),
+      ]);
+      const fallback = ["Classic", "Modern", "Premium"];
+      return (styles.length ? styles : fallback).map((style) => messageAction(style, `Narrow by ${style}`));
+    }
+    case "quantity":
+      return [
+        messageAction("1 item", "I need 1 item"),
+        messageAction("2 items", "I need 2 items"),
+        messageAction("Bulk order", "I need a bulk order"),
+      ];
+    default:
+      if (asksRecipientQuestion(reply)) {
+        return ["kids", "adults", "someone special"].map((recipient) =>
+          messageAction(`For ${recipient}`, `It's for ${recipient}`)
+        );
+      }
+      return [];
+  }
 }
 
 function purchaseConfirmationReply(productCount: number): string {
@@ -809,7 +909,7 @@ export async function runChatOrchestrator(
     if (staleOutcome.handled && staleOutcome.reply) {
       cart = staleOutcome.cart ?? cart;
       const replyContent = compactReplyText(staleOutcome.reply, { channel: input.channel, maxWords: 35 });
-      const suggestedActions =
+      const staleSuggestedActions =
         cart?.items.length && isCartContinuationReply(text)
           ? [
               {
@@ -828,11 +928,18 @@ export async function runChatOrchestrator(
           : [
               { type: "message" as const, label: "Show options", message: "Show me options" },
             ];
+      const actionValidation = validateSuggestedActions({
+        actions: staleSuggestedActions,
+        state: agentState,
+      });
+      const suggestedActions = actionValidation.actions;
       await trace.time("persist_stale_cart_outbound", () => persistMessage(auth.tenantId, conversation, "outbound", "assistant", replyContent, config, {
         intent,
         subIntent,
         funnelStage: cart?.items.length ? "cart" : "discover",
         staleCartCheck: true,
+        suggestedActionLabels: suggestedActions.map((action) => action.label).filter(Boolean),
+        suggestedActionMessages: suggestedActions.map((action) => action.message).filter(Boolean),
       }));
       await trace.time("increment_usage_stale_cart", () => incrementUsage(auth.tenantId, config, { inputTokens: 0, outputTokens: 0 }));
       const result: ChatResult = {
@@ -884,8 +991,8 @@ export async function runChatOrchestrator(
     policyFlags.push("recent_product_interest_override");
   }
   const plannerQuestion =
-    trustedPlan?.nextQuestion?.trim() ||
     (policyFlags.includes("recipient_answer_requires_budget") ? "What budget should I stay within?" : undefined) ||
+    trustedPlan?.nextQuestion?.trim() ||
     plannerFallbackQuestion(trustedPlan);
   const systemPrompt = buildSystemPrompt(storeName, tenantConfig, ragChunks, cart, {
     channel: input.channel,
@@ -1157,7 +1264,7 @@ export async function runChatOrchestrator(
       ? fallbackSuggestedActions
       : plannedActions.length
       ? shouldSupplementBudgetActions
-        ? mergeWidgetActions(plannedActions, fallbackSuggestedActions, 3)
+        ? fallbackSuggestedActions
         : !gateProductSearch && fallbackSuggestedActions.length
         ? mergeWidgetActions(plannedActions, fallbackSuggestedActions, 3)
         : plannedActions
@@ -1165,13 +1272,36 @@ export async function runChatOrchestrator(
       ? fallbackSuggestedActions
       : gateProductSearch && conversationPolicy.suggestedActions?.length
       ? shouldSupplementBudgetActions
-        ? mergeWidgetActions(conversationPolicy.suggestedActions, fallbackSuggestedActions, 3)
+        ? fallbackSuggestedActions
         : conversationPolicy.suggestedActions
       : fallbackSuggestedActions;
-  if (trustedPlan && !planAsksQuestion && !forcedSearchFromSelection && finalProducts.length) {
-    replyContent = appendPlannerQuestion(replyContent, trustedPlan.nextQuestion);
+  if (planAsksQuestion) {
+    const answerActions = missingSlotAnswerActions({
+      reply: replyContent,
+      plan: trustedPlan,
+      catalogHints,
+      products: finalProducts,
+      qualification,
+      market,
+    });
+    if (answerActions.length) suggestedActions = answerActions;
   }
+  const appendedPlannerQuestion =
+    trustedPlan && !planAsksQuestion && !forcedSearchFromSelection && finalProducts.length
+      ? trustedPlan.nextQuestion?.trim()
+      : undefined;
+  if (appendedPlannerQuestion) {
+    replyContent = appendPlannerQuestion(replyContent, appendedPlannerQuestion);
+    if (asksBudgetQuestion(appendedPlannerQuestion, trustedPlan)) {
+      suggestedActions = buildBudgetSuggestedActions(catalogHints, finalProducts, qualification);
+    } else {
+      suggestedActions = plannedActions;
+    }
+  }
+  let engagementBaseReply: string | undefined;
+  let engagementActionCount = 0;
   if (!trustedPlan) {
+    engagementBaseReply = replyContent;
     const engagement = applyEngagementQuestion(replyContent, {
       intent,
       subIntent,
@@ -1185,7 +1315,19 @@ export async function runChatOrchestrator(
     replyContent = engagement.reply;
     if (engagement.suggestedActions?.length) {
       suggestedActions = engagement.suggestedActions;
+      engagementActionCount = engagement.suggestedActions.length;
     }
+  }
+  const finalQuestionActions = missingSlotAnswerActions({
+    reply: replyContent,
+    plan: trustedPlan,
+    catalogHints,
+    products: finalProducts,
+    qualification,
+    market,
+  });
+  if (finalQuestionActions.length) {
+    suggestedActions = finalQuestionActions;
   }
   const actionValidation = validateSuggestedActions({
     actions: suggestedActions,
@@ -1193,6 +1335,14 @@ export async function runChatOrchestrator(
     currentProductSkus: finalProducts.map((product) => product.sku).filter(Boolean),
   });
   suggestedActions = actionValidation.actions;
+  if (finalQuestionActions.length && !suggestedActions.length) {
+    suggestedActions = finalQuestionActions;
+    policyFlags.push("restored_question_answer_actions");
+  }
+  if (engagementBaseReply && engagementActionCount && !suggestedActions.length) {
+    replyContent = engagementBaseReply;
+    policyFlags.push("removed_unactionable_engagement_question");
+  }
   policyFlags.push(...actionValidation.flags);
   replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
   replyContent = compactReplyText(replyContent, { channel: input.channel });
