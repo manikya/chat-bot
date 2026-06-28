@@ -12,8 +12,10 @@ import { loadCart } from "./cart";
 import {
   historyToChatMessages,
   loadMessageHistory,
+  markConversationContactRequestSent,
   persistMessage,
   resolveConversation,
+  setConversationHumanHandling,
   type StoredMessage,
   updateConversationFunnel,
 } from "./conversation";
@@ -66,6 +68,11 @@ import { applyAgentPolicy, filterToolsByAgentPolicy, validateSuggestedActions } 
 import { validateResponseQuality } from "./response-quality";
 
 const MAX_TOOL_ROUNDS = 3;
+
+function webManualContactRequestMessage(handoffMessage?: string) {
+  const intro = handoffMessage?.trim() || "Thanks — our team has been notified.";
+  return `${intro} Please share your phone number or email here, and our team will contact you shortly.`;
+}
 
 export interface OrchestratorInput {
   channel: string;
@@ -690,7 +697,7 @@ export async function runChatOrchestrator(
   });
 
   const { storeName, timezone, config: tenantConfig } = await trace.time("load_tenant_context", () => loadTenantContext(auth, config));
-  const conversation = await trace.time("resolve_conversation", () =>
+  let conversation = await trace.time("resolve_conversation", () =>
     resolveConversation(
       auth.tenantId,
       input.channel,
@@ -699,6 +706,15 @@ export async function runChatOrchestrator(
     )
   );
 
+  const handlingModeBeforeManualOverride = getHandlingMode(conversation);
+  const manualRepliesOnly = tenantConfig.featureFlags?.manualRepliesOnly === true;
+  const forcedManualThisTurn = manualRepliesOnly && handlingModeBeforeManualOverride !== "human";
+  if (forcedManualThisTurn) {
+    conversation = await trace.time("force_manual_handling", () =>
+      setConversationHumanHandling(auth.tenantId, conversation, config)
+    );
+  }
+
   const handlingMode = getHandlingMode(conversation);
   if (handlingMode === "human") {
     await trace.time("persist_human_inbound", () => persistMessage(auth.tenantId, conversation, "inbound", "user", text, config, {
@@ -706,10 +722,23 @@ export async function runChatOrchestrator(
     }));
     await trace.time("notify_agent", () => notifyAgentInboundMessage(auth.tenantId, conversation, text, config));
 
+    const shouldAskForContact =
+      (input.channel === "web" || input.channel === "test") && !conversation.contactRequestAt;
     const webAck =
-      input.channel === "web"
-        ? "Thanks — our team has been notified and will reply shortly."
+      shouldAskForContact
+        ? webManualContactRequestMessage(tenantConfig.prompts?.handoffMessage)
         : "";
+    if (webAck) {
+      await trace.time("persist_web_contact_request", () =>
+        persistMessage(auth.tenantId, conversation, "outbound", "assistant", webAck, config, {
+          handoff: true,
+          contactRequest: true,
+        })
+      );
+      conversation = await trace.time("mark_contact_request_sent", () =>
+        markConversationContactRequestSent(auth.tenantId, conversation, config)
+      );
+    }
 
     const result: ChatResult = {
       conversationId: conversation.conversationId,

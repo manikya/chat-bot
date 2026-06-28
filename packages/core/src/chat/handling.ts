@@ -204,11 +204,13 @@ export async function updateConversationHandling(
   if (mode === "human") {
     if (body.notifyCustomer) {
       const handoffText = await loadTenantHandoffMessage(auth, config);
-      await sendConversationOutbound(auth.tenantId, conv, handoffText, config);
-      await persistMessage(auth.tenantId, conv, "outbound", "assistant", handoffText, config, {
-        manual: false,
-        handoff: true,
-      });
+      if (conv.channel !== "web") {
+        await sendConversationOutbound(auth.tenantId, conv, handoffText, config);
+        await persistMessage(auth.tenantId, conv, "outbound", "assistant", handoffText, config, {
+          manual: false,
+          handoff: true,
+        });
+      }
     }
 
     updated = await patchConversationHandling(

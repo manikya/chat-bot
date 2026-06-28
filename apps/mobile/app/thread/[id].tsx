@@ -181,7 +181,7 @@ export default function ThreadScreen() {
             <Text style={styles.bannerText}>
               {manualSupported
                 ? "Take over this chat to reply manually"
-                : "Take over (view only — manual reply not supported on this channel)"}
+                : "Take over and ask for contact details"}
             </Text>
           </Pressable>
         )}
@@ -189,7 +189,7 @@ export default function ThreadScreen() {
         {canAct && isHuman && !manualSupported && (
           <View style={styles.infoBar}>
             <Text style={styles.infoText}>
-              Human mode — manual send is only available for WhatsApp, Messenger, and Instagram.
+              Web chat manual replies are not live yet. The customer is asked to share phone or email for follow-up.
             </Text>
           </View>
         )}

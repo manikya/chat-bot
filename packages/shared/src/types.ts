@@ -73,7 +73,9 @@ export interface TenantConfig {
     /** When false, widget is hidden and Shopify ScriptTag is removed. Default true. */
     widgetEnabled?: boolean;
   };
-  featureFlags: Record<string, boolean>;
+  featureFlags: Record<string, boolean> & {
+    manualRepliesOnly?: boolean;
+  };
 }
 
 export interface PlanLimits {

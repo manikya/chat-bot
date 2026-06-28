@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SplitPageSkeleton } from "@/components/layout/page-skeleton";
 import { IconFrame, MetricTile, PageIntro, SectionHeader } from "@/components/layout/admin-page";
@@ -45,14 +46,15 @@ export default function BotConfigPage() {
       <PageIntro
         eyebrow="Assistant behavior"
         title="Tune the voice shoppers hear before the bot takes action."
-        description="Prompt, greeting, channel coverage, widget suggestions, and simulator stay together so tone changes can be tested before going live."
+        description="Prompt, greeting, channel coverage, manual reply mode, widget suggestions, and simulator stay together so tone changes can be tested before going live."
         action={<Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricTile label="Primary LLM" value={config.llmConfig.primaryProvider} detail="router provider" icon={<Sparkles className="h-4 w-4" />} />
         <MetricTile label="Channels" value={config.enabledChannels.length} detail={config.enabledChannels.join(", ")} icon={<MessageSquare className="h-4 w-4" />} />
         <MetricTile label="Suggestions" value={config.widgetConfig.suggestedQuestions.length} detail="widget chips" icon={<Bot className="h-4 w-4" />} />
+        <MetricTile label="Reply mode" value={config.featureFlags?.manualRepliesOnly ? "Manual" : "AI"} detail={config.featureFlags?.manualRepliesOnly ? "agent replies only" : "auto replies on"} icon={<MessageSquare className="h-4 w-4" />} />
         <MetricTile label="Theme" value={config.widgetConfig.primaryColor} detail={config.widgetConfig.position} icon={<Palette className="h-4 w-4" />} />
       </div>
 
@@ -84,6 +86,24 @@ export default function BotConfigPage() {
               <Input
                 value={config.prompts.greeting}
                 onChange={(e) => setConfig({ ...config, prompts: { ...config.prompts, greeting: e.target.value } })}
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/60 p-3">
+              <div>
+                <Label htmlFor="manual-replies-only">Manual reply mode</Label>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Send all incoming messages to the agent queue and pause AI auto-replies until this is turned off.
+                </p>
+              </div>
+              <Switch
+                id="manual-replies-only"
+                checked={Boolean(config.featureFlags?.manualRepliesOnly)}
+                onCheckedChange={(checked) =>
+                  setConfig({
+                    ...config,
+                    featureFlags: { ...config.featureFlags, manualRepliesOnly: checked },
+                  })
+                }
               />
             </div>
           </CardContent>

@@ -35,6 +35,7 @@ export default function SettingsScreen() {
   const [handoffMessage, setHandoffMessage] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [suggestedQuestions, setSuggestedQuestions] = useState("");
+  const [manualRepliesOnly, setManualRepliesOnly] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [testMessage, setTestMessage] = useState("Do you have best sellers?");
@@ -70,6 +71,7 @@ export default function SettingsScreen() {
       setHandoffMessage(configRes.data.prompts.handoffMessage);
       setSystemPrompt(configRes.data.prompts.systemPrompt);
       setSuggestedQuestions(configRes.data.widgetConfig.suggestedQuestions.join("\n"));
+      setManualRepliesOnly(Boolean(configRes.data.featureFlags?.manualRepliesOnly));
     } catch (e) {
       setError((e as { message?: string }).message ?? "Failed to load settings");
     } finally {
@@ -115,6 +117,10 @@ export default function SettingsScreen() {
             .split("\n")
             .map((item) => item.trim())
             .filter(Boolean),
+        },
+        featureFlags: {
+          ...config.featureFlags,
+          manualRepliesOnly,
         },
       });
       await load();
@@ -264,6 +270,23 @@ export default function SettingsScreen() {
         <TextField label="Greeting" value={greeting} onChangeText={setGreeting} multiline />
         <TextField label="Handoff message" value={handoffMessage} onChangeText={setHandoffMessage} />
         <TextField label="System prompt" value={systemPrompt} onChangeText={setSystemPrompt} multiline />
+        <Pressable
+          style={[styles.toggleRow, manualRepliesOnly && styles.toggleRowActive]}
+          onPress={() => setManualRepliesOnly((value) => !value)}
+          disabled={!canManage || busy === "bot"}
+        >
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleTitle}>Manual reply mode</Text>
+            <Text style={styles.toggleDescription}>
+              {manualRepliesOnly
+                ? "AI auto-replies are paused. New messages go to agents."
+                : "AI replies automatically unless a thread is taken over."}
+            </Text>
+          </View>
+          <Text style={[styles.toggleBadge, manualRepliesOnly && styles.toggleBadgeActive]}>
+            {manualRepliesOnly ? "Manual" : "AI"}
+          </Text>
+        </Pressable>
         <TextField
           label="Suggested questions"
           value={suggestedQuestions}
@@ -401,6 +424,37 @@ const styles = StyleSheet.create({
   memberActions: { flexDirection: "row", gap: 12 },
   link: { color: colors.primary, fontWeight: "800", fontSize: 12 },
   dangerLink: { color: colors.danger, fontWeight: "800", fontSize: 12 },
+  toggleRow: {
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.listBg,
+  },
+  toggleRowActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.softSurface,
+  },
+  toggleText: { flex: 1, gap: 3 },
+  toggleTitle: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  toggleDescription: { color: colors.textMuted, fontSize: 11, lineHeight: 15 },
+  toggleBadge: {
+    color: colors.textMuted,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    overflow: "hidden",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  toggleBadgeActive: {
+    color: colors.headerText,
+    backgroundColor: colors.primary,
+  },
   reply: {
     backgroundColor: colors.softSurface,
     color: colors.text,

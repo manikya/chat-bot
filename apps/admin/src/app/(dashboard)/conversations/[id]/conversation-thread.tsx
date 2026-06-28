@@ -266,7 +266,8 @@ export default function ConversationThreadPage() {
               <div className="space-y-2 border-t pt-4">
                 {!manualSupported ? (
                   <p className="text-sm text-muted-foreground">
-                    Manual replies are not supported for the {detail.channel} channel yet.
+                    Manual replies are not supported for {detail.channel} yet. Web visitors are asked to share
+                    phone or email for follow-up when the chat is in human mode.
                   </p>
                 ) : (
                   <>

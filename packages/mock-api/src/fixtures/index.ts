@@ -70,6 +70,9 @@ export const DEMO_CONFIG: TenantConfig = {
     position: "bottom-right",
     suggestedQuestions: ["Shipping info", "Best sellers", "Return policy"],
   },
+  featureFlags: {
+    manualRepliesOnly: false,
+  },
 };
 
 export const DEMO_LIMITS: PlanLimits = {

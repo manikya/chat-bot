@@ -75,6 +75,10 @@ export interface TenantConfig {
     primaryColor: string;
     position: string;
     suggestedQuestions: string[];
+    widgetEnabled?: boolean;
+  };
+  featureFlags: Record<string, boolean> & {
+    manualRepliesOnly?: boolean;
   };
 }
 

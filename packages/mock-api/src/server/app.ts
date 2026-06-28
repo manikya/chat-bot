@@ -157,6 +157,7 @@ export function createMockServerApp() {
       ...patch,
       prompts: { ...session.config.prompts, ...patch.prompts },
       widgetConfig: { ...session.config.widgetConfig, ...patch.widgetConfig },
+      featureFlags: { ...session.config.featureFlags, ...patch.featureFlags },
     };
     return json(ok(session.config));
   });

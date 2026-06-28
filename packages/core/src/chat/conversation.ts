@@ -28,6 +28,7 @@ export interface ConversationState {
   handlingMode?: ConversationHandlingMode;
   assignedToUserId?: string;
   handoffAt?: string;
+  contactRequestAt?: string;
   funnelStage?: FunnelStage;
   lastIntent?: ChatIntent;
   lastSubIntent?: ChatSubIntent;
@@ -317,6 +318,57 @@ export async function updateConversationFunnel(
       ExpressionAttributeValues: values,
     })
   );
+}
+
+export async function setConversationHumanHandling(
+  tenantId: string,
+  conversation: ConversationState,
+  config: CoreConfig,
+  options?: { handoffAt?: string }
+): Promise<ConversationState> {
+  const now = new Date().toISOString();
+  const handoffAt = options?.handoffAt ?? conversation.handoffAt ?? now;
+  const db = getDocClient(config);
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: {
+        PK: Keys.tenantPk(tenantId),
+        SK: Keys.conversation(conversation.channel, conversation.externalUserId),
+      },
+      UpdateExpression: "SET handlingMode = :mode, handoffAt = :handoffAt, updatedAt = :u",
+      ExpressionAttributeValues: {
+        ":mode": "human",
+        ":handoffAt": handoffAt,
+        ":u": now,
+      },
+    })
+  );
+  return { ...conversation, handlingMode: "human", handoffAt, updatedAt: now };
+}
+
+export async function markConversationContactRequestSent(
+  tenantId: string,
+  conversation: ConversationState,
+  config: CoreConfig
+): Promise<ConversationState> {
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+  await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: {
+        PK: Keys.tenantPk(tenantId),
+        SK: Keys.conversation(conversation.channel, conversation.externalUserId),
+      },
+      UpdateExpression: "SET contactRequestAt = :contactRequestAt, updatedAt = :u",
+      ExpressionAttributeValues: {
+        ":contactRequestAt": now,
+        ":u": now,
+      },
+    })
+  );
+  return { ...conversation, contactRequestAt: now, updatedAt: now };
 }
 
 export async function listTenantConversations(

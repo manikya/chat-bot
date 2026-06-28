@@ -42,6 +42,7 @@ export function defaultTenantConfig(storeName: string, options?: { timezone?: st
       conversationIngest: false,
       socialIngest: false,
       humanHandoff: false,
+      manualRepliesOnly: false,
       mfaAvailable: false,
     },
   };

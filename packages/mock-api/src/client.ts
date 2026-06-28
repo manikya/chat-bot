@@ -246,6 +246,7 @@ export function createMockApi() {
           ...patch,
           prompts: { ...session.config.prompts, ...patch.prompts },
           widgetConfig: { ...session.config.widgetConfig, ...patch.widgetConfig },
+          featureFlags: { ...session.config.featureFlags, ...patch.featureFlags },
         };
         saveSession(session);
         return ok(session.config);
