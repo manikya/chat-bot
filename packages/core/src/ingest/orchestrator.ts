@@ -30,6 +30,45 @@ import { dispatchIngestJob } from "./dispatch";
 import { incrementIngestJobs } from "../chat/usage";
 import type { IngestJobKind } from "./run-job";
 
+class JobCancelledError extends Error {
+  constructor() {
+    super("Job cancelled");
+    this.name = "JobCancelledError";
+  }
+}
+
+async function throwIfJobCancelled(tenantId: string, jobId: string, config: CoreConfig) {
+  const item = await getJobItem(tenantId, jobId, config);
+  if (item.status === "cancelled") {
+    throw new JobCancelledError();
+  }
+}
+
+async function markJobCancelled(
+  tenantId: string,
+  jobId: string,
+  sourceId: string,
+  stats: IngestJobStats,
+  started: number,
+  config: CoreConfig
+) {
+  stats.durationSec = Math.round((Date.now() - started) / 1000);
+  await updateJob(
+    tenantId,
+    jobId,
+    {
+      status: "cancelled",
+      stats,
+      completedAt: new Date().toISOString(),
+      error: "Cancelled by user",
+    },
+    config
+  );
+  if (sourceId) {
+    await setSourceStatus(tenantId, sourceId, "active", config);
+  }
+}
+
 async function recordIngestJobCompleted(tenantId: string, config: CoreConfig) {
   try {
     await incrementIngestJobs(tenantId, config);
@@ -92,6 +131,7 @@ export async function runWebsiteIngestJob(
 
   try {
     const jobItem = await getJobItem(tenantId, jobId, config);
+    if (jobItem.status === "cancelled") return;
     sourceId = jobItem.sourceId as string;
 
     const source = await getSourceItem(tenantId, sourceId, config);
@@ -116,6 +156,7 @@ export async function runWebsiteIngestJob(
     const now = new Date().toISOString();
     await updateJob(tenantId, jobId, { status: "running", startedAt: now, progressPct: 5 }, config);
     await setSourceStatus(tenantId, sourceId, "syncing", config);
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     const vectorStore = createVectorStore(config);
     const embedder = createEmbeddingProvider(config);
@@ -137,6 +178,7 @@ export async function runWebsiteIngestJob(
 
     stats.pagesProcessed = pages.length;
     stats.errors = crawlErrors;
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     await saveWebsiteCrawl(config, tenantId, sourceId, pages);
 
@@ -165,10 +207,12 @@ export async function runWebsiteIngestJob(
       { stats: { ...stats, chunksCreated: allDrafts.length }, progressPct: 70 },
       config
     );
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     const texts = allDrafts.map((d) => d.text);
     const embeddings = await embedder.embed(texts);
     stats.tokensEmbedded = countTokens(texts);
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     const vectorChunks = toVectorChunks(sourceId, allDrafts, embeddings);
     await vectorStore.upsert(tenantId, vectorChunks);
@@ -217,6 +261,10 @@ export async function runWebsiteIngestJob(
       })
     );
   } catch (err) {
+    if (err instanceof JobCancelledError) {
+      await markJobCancelled(tenantId, jobId, sourceId, stats, started, config);
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     stats.durationSec = Math.round((Date.now() - started) / 1000);
     await updateJob(
@@ -267,6 +315,7 @@ export async function runCatalogIngestJob(
 
   try {
     const jobItem = await getJobItem(tenantId, jobId, config);
+    if (jobItem.status === "cancelled") return;
     sourceId = jobItem.sourceId as string;
 
     const source = await getSourceItem(tenantId, sourceId, config);
@@ -415,6 +464,7 @@ export async function runWordPressCatalogIngestJob(
 
   try {
     const jobItem = await getJobItem(tenantId, jobId, config);
+    if (jobItem.status === "cancelled") return;
     sourceId = jobItem.sourceId as string;
 
     const source = await getSourceItem(tenantId, sourceId, config);
@@ -429,13 +479,16 @@ export async function runWordPressCatalogIngestJob(
     const now = new Date().toISOString();
     await updateJob(tenantId, jobId, { status: "running", startedAt: now, progressPct: 10 }, config);
     await setSourceStatus(tenantId, sourceId, "syncing", config);
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     const sourceConfig = (source.config as Record<string, unknown>) ?? {};
     // Always full sync: we replace all vectors/products for this source each run.
     const products = await fetchWordPressCatalogProducts(tenantId, config);
     stats.pagesProcessed = products.length;
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     await updateJob(tenantId, jobId, { stats: { ...stats }, progressPct: 30 }, config);
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     if (products.length === 0) {
       throw new Error(
@@ -459,6 +512,7 @@ export async function runWordPressCatalogIngestJob(
     const texts = drafts.map((d) => d.text);
     const embeddings = await embedder.embed(texts);
     stats.tokensEmbedded = countTokens(texts);
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     await updateJob(
       tenantId,
@@ -466,11 +520,13 @@ export async function runWordPressCatalogIngestJob(
       { stats: { ...stats, chunksCreated: drafts.length }, progressPct: 70 },
       config
     );
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     const vectorChunks = toCatalogVectorChunks(sourceId, drafts, embeddings);
     await vectorStore.upsert(tenantId, vectorChunks);
     await upsertProductCache(tenantId, sourceId, products, config);
     await refreshCatalogIntelligenceAfterSync(tenantId, config);
+    await throwIfJobCancelled(tenantId, jobId, config);
 
     stats.chunksCreated = vectorChunks.length;
     stats.durationSec = Math.round((Date.now() - started) / 1000);
@@ -525,6 +581,10 @@ export async function runWordPressCatalogIngestJob(
 
     await touchWordPressSyncTimestamp({ tenantId } as AuthContext, config);
   } catch (err) {
+    if (err instanceof JobCancelledError) {
+      await markJobCancelled(tenantId, jobId, sourceId, stats, started, config);
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     stats.durationSec = Math.round((Date.now() - started) / 1000);
     await updateJob(

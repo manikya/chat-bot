@@ -29,6 +29,7 @@ export const IMPLEMENTED_ROUTES = [
   "POST /api/v1/knowledge/sources/:id/sync",
   "GET /api/v1/knowledge/jobs",
   "GET /api/v1/knowledge/jobs/:id",
+  "POST /api/v1/knowledge/jobs/:id/cancel",
   "GET /api/v1/knowledge/faq",
   "POST /api/v1/knowledge/faq",
   "GET /api/v1/knowledge/page-voice",

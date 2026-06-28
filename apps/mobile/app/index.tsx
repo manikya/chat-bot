@@ -15,5 +15,5 @@ export default function Index() {
   }
 
   if (!isAuthenticated) return <Redirect href="/login" />;
-  return <Redirect href="/inbox" />;
+  return <Redirect href="/(tabs)/home" />;
 }

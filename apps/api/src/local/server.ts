@@ -218,6 +218,12 @@ const PATTERN_ROUTES: Array<{
     handler: knowledgeJobsHandler,
   },
   {
+    method: "POST",
+    pattern: /^\/api\/v1\/knowledge\/jobs\/([^/]+)\/cancel$/,
+    paramNames: ["jobId"],
+    handler: knowledgeJobsHandler,
+  },
+  {
     method: "GET",
     pattern: /^\/api\/v1\/conversations\/([^/]+)\/messages$/,
     paramNames: ["conversationId"],

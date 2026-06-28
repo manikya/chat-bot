@@ -2,9 +2,14 @@ import { useEffect } from "react";
 import { useRouter, useRootNavigationState } from "expo-router";
 import * as Notifications from "expo-notifications";
 
-function conversationIdFromResponse(response: Notifications.NotificationResponse) {
-  const data = response.notification.request.content.data as { conversationId?: string };
-  return data.conversationId;
+function routeFromResponse(response: Notifications.NotificationResponse) {
+  const data = response.notification.request.content.data as {
+    conversationId?: string;
+    route?: string;
+  };
+  if (data.route?.startsWith("/")) return data.route;
+  if (data.conversationId) return `/thread/${data.conversationId}`;
+  return null;
 }
 
 /** Navigate to thread when user taps an agent inbound push notification. */
@@ -18,9 +23,9 @@ export function PushNotificationNavigator() {
 
     const open = (response: Notifications.NotificationResponse) => {
       try {
-        const conversationId = conversationIdFromResponse(response);
-        if (conversationId) {
-          router.push(`/thread/${conversationId}`);
+        const route = routeFromResponse(response);
+        if (route) {
+          router.push(route);
         }
       } catch (err) {
         console.warn("[push] navigation failed", err);

@@ -6,6 +6,8 @@ export const colors = {
   headerText: "#FFFFFF",
   chatBg: "#ECE5DD",
   listBg: "#FFFFFF",
+  surface: "#F6F8FA",
+  softSurface: "#F0F4F3",
   bubbleOut: "#DCF8C6",
   bubbleIn: "#FFFFFF",
   bubbleManual: "#FFE082",

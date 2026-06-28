@@ -19,6 +19,7 @@ import { assertVectorQuota } from "../chat/usage";
 import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import {
+  cancelJob,
   createQueuedJob,
   getJobItem,
   hasActiveJobForSource,
@@ -283,6 +284,27 @@ export async function syncKnowledgeSource(
 export async function getKnowledgeJob(auth: AuthContext, jobId: string, config: CoreConfig) {
   const item = await getJobItem(auth.tenantId, jobId, config);
   return ok(toJob(item));
+}
+
+export async function cancelKnowledgeJob(auth: AuthContext, jobId: string, config: CoreConfig) {
+  const job = await cancelJob(auth.tenantId, jobId, config);
+  const sourceId = job.sourceId;
+  if (sourceId && (job.status === "cancelled" || job.status === "running")) {
+    const db = getDocClient(config);
+    await db.send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { PK: Keys.tenantPk(auth.tenantId), SK: Keys.source(sourceId) },
+        UpdateExpression: "SET #status = :status, #updatedAt = :updatedAt",
+        ExpressionAttributeNames: { "#status": "status", "#updatedAt": "updatedAt" },
+        ExpressionAttributeValues: {
+          ":status": "active",
+          ":updatedAt": new Date().toISOString(),
+        },
+      })
+    );
+  }
+  return ok(job);
 }
 
 export async function getLatestJobForSource(

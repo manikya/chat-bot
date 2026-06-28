@@ -83,16 +83,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      const hasSession = await hasRefreshSession();
-      if (hasSession) {
-        const cached = await loadSessionProfile();
-        if (cached && !cancelled) {
-          setUser(cached.user);
-          setTenant(cached.tenant);
+      try {
+        const hasSession = await hasRefreshSession();
+        if (hasSession) {
+          const cached = await loadSessionProfile();
+          if (cached && !cancelled) {
+            setUser(cached.user);
+            setTenant(cached.tenant);
+          }
         }
+        await refreshMe();
+      } catch {
+        await clearSession();
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-      await refreshMe();
-      if (!cancelled) setIsLoading(false);
     })();
 
     return () => {

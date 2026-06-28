@@ -13,6 +13,12 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
+          <Stack.Screen name="signup" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
+          <Stack.Screen name="accept-invite" />
+          <Stack.Screen name="verify-email" />
+          <Stack.Screen name="(tabs)" />
           <Stack.Screen name="inbox" />
           <Stack.Screen name="thread/[id]" options={{ presentation: "card" }} />
         </Stack>

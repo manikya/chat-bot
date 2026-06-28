@@ -65,6 +65,7 @@ const BASE_ROUTES = [
   ["POST", "/api/v1/knowledge/sources/{sourceId}/sync", "knowledge-sync"],
   ["GET", "/api/v1/knowledge/jobs", "knowledge-jobs"],
   ["GET", "/api/v1/knowledge/jobs/{jobId}", "knowledge-jobs"],
+  ["POST", "/api/v1/knowledge/jobs/{jobId}/cancel", "knowledge-jobs"],
   ["GET", "/api/v1/knowledge/faq", "knowledge-faq"],
   ["POST", "/api/v1/knowledge/faq", "knowledge-faq"],
   ["GET", "/api/v1/knowledge/page-voice", "knowledge-page-voice"],

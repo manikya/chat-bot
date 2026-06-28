@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Redirect } from "expo-router";
+import { Link, Redirect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/lib/auth";
 import { colors } from "../src/theme/colors";
@@ -89,6 +89,18 @@ export default function LoginScreen() {
                 <Text style={styles.buttonText}>Sign in</Text>
               )}
             </Pressable>
+            <View style={styles.links}>
+              <Link href="/forgot-password" asChild>
+                <Pressable>
+                  <Text style={styles.link}>Forgot password?</Text>
+                </Pressable>
+              </Link>
+              <Link href="/signup" asChild>
+                <Pressable>
+                  <Text style={styles.link}>Create account</Text>
+                </Pressable>
+              </Link>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -130,4 +142,6 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.7 },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  links: { flexDirection: "row", justifyContent: "space-between", marginTop: 12 },
+  link: { color: colors.primary, fontWeight: "700" },
 });

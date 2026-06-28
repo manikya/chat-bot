@@ -141,6 +141,27 @@ export default function ThreadScreen() {
         </View>
       )}
 
+      {(detail.cart || detail.qualification || detail.assignedToUserId) && (
+        <View style={styles.contextCard}>
+          {detail.cart && (
+            <Text style={styles.contextLine}>
+              Cart: {detail.cart.itemCount} item(s) · {detail.cart.currency} {detail.cart.subtotal}
+              {detail.cart.abandoned ? " · abandoned" : ""}
+            </Text>
+          )}
+          {detail.qualification && (
+            <Text style={styles.contextLine} numberOfLines={2}>
+              Qualification: {[detail.qualification.category, detail.qualification.recipient]
+                .filter(Boolean)
+                .join(" · ") || "Captured"}
+            </Text>
+          )}
+          {detail.assignedToUserId && (
+            <Text style={styles.contextLine}>Assigned to: {detail.assignedToUserId}</Text>
+          )}
+        </View>
+      )}
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -217,6 +238,15 @@ const styles = StyleSheet.create({
   headerSub: { color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2 },
   errorBar: { backgroundColor: "#FDECEA", padding: 8 },
   errorText: { color: colors.danger, fontSize: 13, textAlign: "center" },
+  contextCard: {
+    backgroundColor: colors.listBg,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 3,
+  },
+  contextLine: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   list: { flex: 1 },
   listContent: { paddingVertical: 8 },
   banner: {

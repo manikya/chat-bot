@@ -21,10 +21,19 @@ export function ConversationRow({
 }) {
   const name = item.customerName ?? item.externalUserId;
   const isHuman = item.handlingMode === "human";
+  const context = [
+    item.channel,
+    item.funnelStage,
+    item.lastIntent,
+    item.cart?.firstItemName,
+    item.cart?.abandoned ? "abandoned cart" : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <Pressable style={styles.row} onPress={onPress}>
-      <Avatar name={name} />
+      <Avatar name={name} size={40} />
       <View style={styles.body}>
         <View style={styles.top}>
           <Text style={styles.name} numberOfLines={1}>
@@ -34,11 +43,16 @@ export function ConversationRow({
         </View>
         <View style={styles.bottom}>
           <Text style={styles.preview} numberOfLines={1}>
-            {item.channel} · {item.messageCount} messages
+            {context || `${item.messageCount} messages`}
           </Text>
           {isHuman && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>Agent</Text>
+            </View>
+          )}
+          {item.assignedToUserId && (
+            <View style={styles.assignmentBadge}>
+              <Text style={styles.assignmentText}>Assigned</Text>
             </View>
           )}
         </View>
@@ -51,24 +65,31 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     backgroundColor: colors.listBg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
-    gap: 14,
+    gap: 10,
   },
   body: { flex: 1 },
-  top: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  name: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
-  time: { fontSize: 12, color: colors.textMuted },
-  bottom: { flexDirection: "row", alignItems: "center", gap: 8 },
-  preview: { flex: 1, fontSize: 14, color: colors.textMuted },
+  top: { flexDirection: "row", justifyContent: "space-between", marginBottom: 2 },
+  name: { flex: 1, fontSize: 15, fontWeight: "700", color: colors.text },
+  time: { fontSize: 11, color: colors.textMuted },
+  bottom: { flexDirection: "row", alignItems: "center", gap: 6 },
+  preview: { flex: 1, fontSize: 12, color: colors.textMuted },
   badge: {
     backgroundColor: colors.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    borderRadius: 9,
   },
-  badgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  assignmentBadge: {
+    backgroundColor: colors.softSurface,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    borderRadius: 9,
+  },
+  assignmentText: { color: colors.primary, fontSize: 10, fontWeight: "700" },
 });

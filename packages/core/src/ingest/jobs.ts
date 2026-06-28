@@ -123,6 +123,40 @@ export async function updateJob(
   );
 }
 
+export async function cancelJob(tenantId: string, jobId: string, config: CoreConfig) {
+  const item = await getJobItem(tenantId, jobId, config);
+  if (["completed", "failed", "cancelled"].includes(String(item.status))) {
+    return toJob(item);
+  }
+
+  const now = new Date().toISOString();
+  const db = getDocClient(config);
+  const res = await db.send(
+    new UpdateCommand({
+      TableName: config.tableName,
+      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.job(jobId) },
+      UpdateExpression:
+        "SET #status = :cancelled, #completedAt = :completedAt, #error = :error",
+      ConditionExpression: "#status IN (:queued, :running)",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#completedAt": "completedAt",
+        "#error": "error",
+      },
+      ExpressionAttributeValues: {
+        ":cancelled": "cancelled",
+        ":completedAt": now,
+        ":error": "Cancelled by user",
+        ":queued": "queued",
+        ":running": "running",
+      },
+      ReturnValues: "ALL_NEW",
+    })
+  );
+
+  return toJob((res.Attributes ?? { ...item, status: "cancelled", completedAt: now }) as Record<string, unknown>);
+}
+
 const STALE_QUEUED_JOB_MS = 2 * 60 * 1000;
 
 export async function hasActiveJobForSource(tenantId: string, sourceId: string, config: CoreConfig) {
