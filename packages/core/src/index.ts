@@ -119,6 +119,11 @@ export * from "./widget/service";
 export type { WidgetChatBody } from "./widget/service";
 export { getDashboardStats } from "./dashboard/service";
 export { getConversationAnalytics } from "./analytics/service";
+export {
+  generateDailySocialContent,
+  getDailySocialContent,
+  runDailySocialContentCron,
+} from "./social-content/service";
 export { buildWidgetEmbedCode } from "./widget/embed";
 export { verifyMetaWebhookChallenge, verifyMetaWebhookSignature } from "./meta/webhook";
 export { parseWhatsAppWebhookPayload } from "./meta/whatsapp-inbound";

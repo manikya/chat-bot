@@ -19,6 +19,7 @@ export const Keys = {
   source: (sourceId: string) => `SOURCE#${sourceId}`,
   job: (jobId: string) => `JOB#${jobId}`,
   catalogIntelligence: () => "CATALOG#INTELLIGENCE",
+  socialContentDaily: (date: string) => `SOCIAL_CONTENT#${date}`,
   chatTrace: (conversationId: string, timestamp: string, traceId: string) => `TRACE#${conversationId}#${timestamp}#${traceId}`,
   product: (sku: string) => `PRODUCT#${sku}`,
   conversation: (channel: string, externalUserId: string) => `CONV#${channel}#${externalUserId}`,

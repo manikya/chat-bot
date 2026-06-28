@@ -84,6 +84,33 @@ export interface PlanLimits {
   enabledChannels: string[];
 }
 
+export interface SocialContentIdea {
+  id: string;
+  title: string;
+  captionIdea: string;
+  productAngle: string;
+  suggestedFormat: "reel" | "story" | "carousel" | "post" | "short" | string;
+  hashtags: string[];
+  whyToday: string;
+}
+
+export interface DailySocialContent {
+  tenantId: string;
+  date: string;
+  timezone: string;
+  generatedAt: string;
+  source: "ai" | "deterministic";
+  storeName?: string;
+  summary: string;
+  ideas: SocialContentIdea[];
+  signals: {
+    products: string[];
+    categories: string[];
+    tags: string[];
+    starterIntents: string[];
+  };
+}
+
 export type OnboardingStepStatus = "completed" | "in_progress" | "pending";
 
 export interface OnboardingState {

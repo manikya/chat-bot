@@ -1,5 +1,5 @@
 import { DeleteCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { ApiError, ErrorCodes, ok, type AuthContext } from "@commercechat/shared";
+import { ApiError, ErrorCodes, ok, type AuthContext, type UserRole } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 import { assertNotViewer } from "../auth/roles";
 import { getDocClient } from "../db/client";
@@ -106,6 +106,43 @@ export async function listTenantPushTokens(tenantId: string, config: CoreConfig)
     startKey = res.LastEvaluatedKey;
   } while (startKey);
 
+  return { tokens, keys };
+}
+
+export async function listTenantPushTokensForRoles(
+  tenantId: string,
+  roles: UserRole[],
+  config: CoreConfig
+) {
+  const db = getDocClient(config);
+  const allowed = new Set(roles);
+  const users = await db.send(
+    new QueryCommand({
+      TableName: config.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": Keys.tenantPk(tenantId),
+        ":sk": "USER#",
+      },
+    })
+  );
+  const allowedUsers = new Set(
+    (users.Items ?? [])
+      .filter((item) => allowed.has(item.role as UserRole) && item.status !== "deleted")
+      .map((item) => item.userId as string)
+      .filter(Boolean)
+  );
+
+  const devices = await listTenantPushTokens(tenantId, config);
+  const tokens: string[] = [];
+  const keys: Array<{ userId: string; deviceKey: string }> = [];
+  for (let i = 0; i < devices.tokens.length; i++) {
+    const key = devices.keys[i];
+    const token = devices.tokens[i];
+    if (!key || !token || !allowedUsers.has(key.userId)) continue;
+    tokens.push(token);
+    keys.push(key);
+  }
   return { tokens, keys };
 }
 

@@ -8,6 +8,7 @@ import type {
   ConversationDetail,
   ConversationAnalytics,
   DashboardStats,
+  DailySocialContent,
   IngestJob,
   KnowledgeSource,
   LoginResult,
@@ -629,6 +630,14 @@ export function createHttpApi() {
         const qs = search.toString();
         return request<ConversationAnalytics>(`/api/v1/analytics${qs ? `?${qs}` : ""}`);
       },
+    },
+    socialContent: {
+      getDaily: () => request<DailySocialContent | null>("/api/v1/social-content/daily"),
+      generateDaily: () =>
+        request<DailySocialContent>("/api/v1/social-content/daily/generate", {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
     },
     billing: {
       getPlans: () => request<{ plans: BillingPlan[] }>("/api/v1/billing/plans"),

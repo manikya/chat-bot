@@ -8,6 +8,7 @@ import type {
   ConversationAnalytics,
   ConversationDetail,
   DashboardStats,
+  DailySocialContent,
   IngestJob,
   KnowledgeSource,
   LoginResult,
@@ -542,6 +543,17 @@ export const api = {
       if (params?.to) search.set("to", params.to);
       const qs = search.toString();
       return request<ConversationAnalytics>(`/api/v1/analytics${qs ? `?${qs}` : ""}`);
+    },
+  },
+  socialContent: {
+    getDaily() {
+      return request<DailySocialContent | null>("/api/v1/social-content/daily");
+    },
+    generateDaily() {
+      return request<DailySocialContent>("/api/v1/social-content/daily/generate", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
     },
   },
   billing: {

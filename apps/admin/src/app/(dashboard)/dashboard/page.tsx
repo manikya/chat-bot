@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MessageSquare, ShoppingBag, Radio, ArrowRight } from "lucide-react";
+import { MessageSquare, ShoppingBag, Radio, ArrowRight, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DashboardStats } from "@commercechat/mock-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,12 +39,20 @@ export default function DashboardPage() {
             Overview of message volume, active conversations, commerce outcomes, quota pressure, and channel health.
           </p>
         </div>
-        <Button variant="default" asChild>
-          <Link href="/conversations">
-            Open live monitor
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/content-ideas">
+              <Sparkles className="h-3.5 w-3.5" />
+              Content ideas
+            </Link>
+          </Button>
+          <Button variant="default" asChild>
+            <Link href="/conversations">
+              Open live monitor
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

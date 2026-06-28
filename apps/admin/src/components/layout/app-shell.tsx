@@ -18,6 +18,7 @@ import {
   CreditCard,
   Code2,
   Search,
+  Sparkles,
   UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analytics", label: "Analytics", icon: LineChart },
+  { href: "/content-ideas", label: "Content ideas", icon: Sparkles },
   { href: "/conversations", label: "Conversations", icon: MessageSquare },
   { href: "/products", label: "Products", icon: PackageSearch },
   { href: "/knowledge", label: "Knowledge", icon: BookOpen },

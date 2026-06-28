@@ -63,6 +63,8 @@ import { handler as devicesHandler } from "../handlers/devices";
 import { handler as webhookMetaHandler } from "../handlers/webhook-meta";
 import { handler as cronMetaTokenRefreshHandler } from "../handlers/cron-meta-token-refresh";
 import { handler as cronBillingLifecycleHandler } from "../handlers/cron-billing-lifecycle";
+import { handler as socialContentDailyHandler } from "../handlers/social-content-daily";
+import { handler as cronSocialContentDailyHandler } from "../handlers/cron-social-content-daily";
 import {
   assertTenantOperational,
   assertWidgetChatRateLimit,
@@ -176,6 +178,8 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/knowledge/jobs", handler: knowledgeJobsHandler },
   { method: "GET", path: "/api/v1/dashboard/stats", handler: dashboardStatsHandler },
   { method: "GET", path: "/api/v1/analytics", handler: analyticsHandler },
+  { method: "GET", path: "/api/v1/social-content/daily", handler: socialContentDailyHandler },
+  { method: "POST", path: "/api/v1/social-content/daily/generate", handler: socialContentDailyHandler },
   { method: "POST", path: "/api/v1/devices/register", handler: devicesHandler },
   { method: "DELETE", path: "/api/v1/devices/register", handler: devicesHandler },
   { method: "GET", path: "/api/v1/channels", handler: channelsListHandler },
@@ -188,6 +192,7 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/channels/meta/health", handler: channelsHealthHandler },
   { method: "POST", path: "/internal/cron/meta-token-refresh", handler: cronMetaTokenRefreshHandler },
   { method: "POST", path: "/internal/cron/billing-lifecycle", handler: cronBillingLifecycleHandler },
+  { method: "POST", path: "/internal/cron/social-content-daily", handler: cronSocialContentDailyHandler },
 ];
 
 const WIDGET_JS_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../widget/public/v1.js");

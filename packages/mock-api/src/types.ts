@@ -96,6 +96,33 @@ export interface Usage {
   limits: { maxMessages: number; messagesRemaining: number };
 }
 
+export interface SocialContentIdea {
+  id: string;
+  title: string;
+  captionIdea: string;
+  productAngle: string;
+  suggestedFormat: "reel" | "story" | "carousel" | "post" | "short" | string;
+  hashtags: string[];
+  whyToday: string;
+}
+
+export interface DailySocialContent {
+  tenantId: string;
+  date: string;
+  timezone: string;
+  generatedAt: string;
+  source: "ai" | "deterministic";
+  storeName?: string;
+  summary: string;
+  ideas: SocialContentIdea[];
+  signals: {
+    products: string[];
+    categories: string[];
+    tags: string[];
+    starterIntents: string[];
+  };
+}
+
 export type TenantPlan = "trial" | "starter" | "pro" | "business" | "enterprise";
 
 export interface BillingPlan {

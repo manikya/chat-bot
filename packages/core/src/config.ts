@@ -50,6 +50,7 @@ export interface CoreConfig {
   metaSecretsPrefix: string;
   metaTokenRefreshCronSecret?: string;
   billingLifecycleCronSecret?: string;
+  socialContentCronSecret?: string;
   /** Template URL for Sri Lankan / external payment gateway redirect */
   paymentGatewayCheckoutUrl?: string;
   /** Shared secret for POST /webhooks/payment (gateway callback) */
@@ -119,6 +120,7 @@ export function loadConfig(): CoreConfig {
     metaSecretsPrefix: process.env.META_SECRETS_PREFIX ?? "commercechat",
     metaTokenRefreshCronSecret: process.env.META_TOKEN_REFRESH_CRON_SECRET,
     billingLifecycleCronSecret: process.env.BILLING_LIFECYCLE_CRON_SECRET,
+    socialContentCronSecret: process.env.SOCIAL_CONTENT_CRON_SECRET,
     paymentGatewayCheckoutUrl: process.env.PAYMENT_GATEWAY_CHECKOUT_URL,
     paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET,
     billingSkipPayment: process.env.BILLING_SKIP_PAYMENT === "true",

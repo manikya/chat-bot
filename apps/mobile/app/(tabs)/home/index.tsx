@@ -110,6 +110,7 @@ export default function HomeScreen() {
           {[
             ["Open chats", "/(tabs)/chats"],
             ["Analytics", "/(tabs)/home/analytics"],
+            ["Content ideas", "/(tabs)/home/content-ideas"],
             ["View catalog", "/(tabs)/catalog"],
             ["Sync knowledge", "/(tabs)/knowledge"],
             ["Settings", "/(tabs)/settings"],

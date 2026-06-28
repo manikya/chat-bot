@@ -109,6 +109,8 @@ const BASE_ROUTES = [
   ["PATCH", "/api/v1/team/{userId}", "team-member", "patchHandler"],
   ["GET", "/api/v1/dashboard/stats", "dashboard-stats"],
   ["GET", "/api/v1/analytics", "analytics"],
+  ["GET", "/api/v1/social-content/daily", "social-content-daily"],
+  ["POST", "/api/v1/social-content/daily/generate", "social-content-daily"],
   ["POST", "/api/v1/devices/register", "devices"],
   ["DELETE", "/api/v1/devices/register", "devices"],
   ["GET", "/api/v1/channels", "channels", "listHandler"],
@@ -122,6 +124,7 @@ const BASE_ROUTES = [
   ["DELETE", "/api/v1/channels/meta/{channel}", "channels", "disconnectHandler"],
   ["POST", "/internal/cron/meta-token-refresh", "cron-meta-token-refresh"],
   ["POST", "/internal/cron/billing-lifecycle", "cron-billing-lifecycle"],
+  ["POST", "/internal/cron/social-content-daily", "cron-social-content-daily"],
 ];
 
 function getDeployRoutes(widgetCdnUrl) {
@@ -519,6 +522,12 @@ function addCronSchedules(resources, env, handlerFiles) {
       cron: "cron(0 6 * * ? *)",
       description: "Trial expiry, subscription end, billing emails",
     },
+    {
+      id: "SocialContentDaily",
+      handler: "cron-social-content-daily",
+      cron: "cron(30 3 * * ? *)",
+      description: "Generate and push daily social content ideas",
+    },
   ];
 
   for (const schedule of schedules) {
@@ -836,6 +845,7 @@ function buildTemplate({
       handlerName === "chat-api" ||
       handlerName === "widget" ||
       handlerName === "ingest-worker" ||
+      handlerName === "cron-social-content-daily" ||
       handlerName === "shopify-app"
         ? 60
         : 20;
@@ -843,7 +853,8 @@ function buildTemplate({
       handlerName.includes("knowledge") ||
       handlerName === "chat-api" ||
       handlerName === "widget" ||
-      handlerName === "ingest-worker"
+      handlerName === "ingest-worker" ||
+      handlerName === "cron-social-content-daily"
         ? 1024
         : 512;
 
@@ -901,6 +912,7 @@ function buildTemplate({
             SKIP_EMAIL_VERIFICATION: { Ref: "SkipEmailVerification" },
             META_TOKEN_REFRESH_CRON_SECRET: { Ref: "MetaTokenRefreshCronSecret" },
             BILLING_LIFECYCLE_CRON_SECRET: { Ref: "BillingLifecycleCronSecret" },
+            SOCIAL_CONTENT_CRON_SECRET: { Ref: "SocialContentCronSecret" },
             SHOPIFY_API_KEY: { Ref: "ShopifyApiKey" },
             SHOPIFY_API_SECRET: { Ref: "ShopifyApiSecret" },
             SHOPIFY_APP_URL: { Ref: "ShopifyAppUrl" },
@@ -1051,6 +1063,7 @@ function buildTemplate({
       SkipEmailVerification: { Type: "String", AllowedValues: ["true", "false"], Default: env === "prod" ? "false" : "true" },
       MetaTokenRefreshCronSecret: { Type: "String", NoEcho: true, Default: "" },
       BillingLifecycleCronSecret: { Type: "String", NoEcho: true, Default: "" },
+      SocialContentCronSecret: { Type: "String", NoEcho: true, Default: "" },
       ShopifyApiKey: { Type: "String", Default: "" },
       ShopifyApiSecret: { Type: "String", NoEcho: true, Default: "" },
       ShopifyAppUrl: { Type: "String", Default: "" },
@@ -1295,6 +1308,9 @@ async function main() {
   const billingLifecycleCronSecret = hasArg("billing-lifecycle-cron-secret")
     ? arg("billing-lifecycle-cron-secret", "")
     : process.env.BILLING_LIFECYCLE_CRON_SECRET ?? deployedEnv?.BILLING_LIFECYCLE_CRON_SECRET ?? randomBytes(32).toString("hex");
+  const socialContentCronSecret = hasArg("social-content-cron-secret")
+    ? arg("social-content-cron-secret", "")
+    : process.env.SOCIAL_CONTENT_CRON_SECRET ?? deployedEnv?.SOCIAL_CONTENT_CRON_SECRET ?? randomBytes(32).toString("hex");
   const shopifyApiKey = hasArg("shopify-api-key")
     ? arg("shopify-api-key", "")
     : process.env.SHOPIFY_API_KEY ?? deployedEnv?.SHOPIFY_API_KEY ?? "";
@@ -1395,7 +1411,9 @@ async function main() {
     if (!withCronSchedules) {
       console.log("EventBridge cron schedules skipped (pass default or omit --no-cron-schedules).");
     } else {
-      console.log("EventBridge cron schedules enabled (meta token 03:00 UTC, billing lifecycle 06:00 UTC).");
+      console.log(
+        "EventBridge cron schedules enabled (meta token 03:00 UTC, social content 03:30 UTC, billing lifecycle 06:00 UTC)."
+      );
     }
     console.log(`Ensuring S3 Vectors bucket ${vectorBucketName}...`);
     try {
@@ -1499,6 +1517,7 @@ async function main() {
         `SkipEmailVerification=${skipEmailVerification}`,
         `MetaTokenRefreshCronSecret=${metaTokenRefreshCronSecret}`,
         `BillingLifecycleCronSecret=${billingLifecycleCronSecret}`,
+        `SocialContentCronSecret=${socialContentCronSecret}`,
         `ShopifyApiKey=${shopifyApiKey}`,
         `ShopifyApiSecret=${shopifyApiSecret}`,
         `ShopifyAppUrl=${shopifyAppUrl}`,
