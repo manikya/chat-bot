@@ -351,6 +351,10 @@ function shouldApplyLatestCatalogRefinement(plan: ReturnType<typeof trustedSales
   );
 }
 
+function productSearchLimit(plan: ReturnType<typeof trustedSalesPlan>): number {
+  return shouldApplyLatestCatalogRefinement(plan) ? 6 : 3;
+}
+
 function mergeSearchQueryTerms(query: string | undefined, terms: string[]): string | undefined {
   const parts = [...(query ? [query] : []), ...terms].map((part) => part.trim()).filter(Boolean);
   if (!parts.length) return query;
@@ -1045,7 +1049,7 @@ export async function runChatOrchestrator(
       "search_products",
       JSON.stringify({
         query: plannedSearchQuery ?? text,
-        limit: 3,
+        limit: productSearchLimit(trustedPlan),
         category: qualification.category,
         maxPrice: searchBudget?.max,
         minPrice: searchBudget?.min,
@@ -1120,7 +1124,7 @@ export async function runChatOrchestrator(
         "search_products",
         JSON.stringify({
           query: plannedSearchQuery ?? text,
-          limit: 3,
+          limit: productSearchLimit(trustedPlan),
           category: qualification.category,
           maxPrice: searchBudget?.max,
           minPrice: searchBudget?.min,
@@ -1150,7 +1154,7 @@ export async function runChatOrchestrator(
       "search_products",
       JSON.stringify({
         query: plannedSearchQuery ?? text,
-        limit: 3,
+        limit: productSearchLimit(trustedPlan),
         category: qualification.category,
         maxPrice: searchBudget?.max,
         minPrice: searchBudget?.min,
