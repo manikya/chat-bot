@@ -325,7 +325,7 @@ export function buildProductCards(toolResults?: ToolRow[]): WidgetProductCard[] 
         }>
       | undefined;
     if (!products?.length) continue;
-    return products.slice(0, 5).map((p) => ({
+    return products.slice(0, 6).map((p) => ({
       type: "product" as const,
       sku: p.sku,
       name: p.name,
