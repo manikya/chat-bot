@@ -67,6 +67,9 @@ export default function LoginPage() {
             <p className="text-center text-sm text-muted-foreground">
               No account? <Link href="/signup" className="text-primary hover:underline">Start free trial</Link>
             </p>
+            <p className="text-center text-xs text-muted-foreground">
+              Platform team? <Link href="/platform/login" className="text-primary hover:underline">Use platform sign in</Link>
+            </p>
           </form>
         </CardContent>
       </Card>

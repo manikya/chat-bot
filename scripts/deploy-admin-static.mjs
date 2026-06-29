@@ -265,6 +265,10 @@ async function main() {
     "meta-oauth-redirect-uri",
     metaOAuthRedirectForAdminUrl(adminUrlHint)
   );
+  const platformAdminEmails = arg(
+    "platform-admin-emails",
+    process.env.PLATFORM_ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS ?? ""
+  );
 
   if (!existsSync(credentialsCsv)) throw new Error(`Credentials CSV not found: ${credentialsCsv}`);
   if (!apiUrl) throw new Error("Pass --api-url= or deploy the API stack first (npm run deploy:aws)");
@@ -288,6 +292,7 @@ async function main() {
     NEXT_PUBLIC_API_URL: apiUrl,
     ...(metaAppId ? { NEXT_PUBLIC_META_APP_ID: metaAppId } : {}),
     ...(metaOauthRedirect ? { NEXT_PUBLIC_META_OAUTH_REDIRECT_URI: metaOauthRedirect } : {}),
+    ...(platformAdminEmails ? { NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS: platformAdminEmails } : {}),
   };
 
   console.log("Building static admin export...");

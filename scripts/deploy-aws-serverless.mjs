@@ -39,6 +39,8 @@ const BASE_ROUTES = [
   ["POST", "/auth/resend-verification", "auth-resend-verification"],
   ["POST", "/auth/invite", "auth-invite"],
   ["POST", "/auth/accept-invite", "auth-accept-invite"],
+  ["POST", "/platform/auth/login", "platform-auth", "loginHandler"],
+  ["GET", "/platform/auth/me", "platform-auth", "meHandler"],
   ["GET", "/api/v1/tenants/me", "tenant-me"],
   ["PATCH", "/api/v1/tenants/me", "tenant-me"],
   ["POST", "/api/v1/tenants/me/logo", "tenant-logo"],
@@ -49,6 +51,12 @@ const BASE_ROUTES = [
   ["GET", "/api/v1/tenants/me/limits", "tenant-limits"],
   ["GET", "/api/v1/tenants/me/usage", "tenant-usage"],
   ["POST", "/api/v1/tenants/me/widget/regenerate-key", "tenant-widget-key"],
+  ["GET", "/api/v1/platform/tenants", "platform-tenants", "listHandler"],
+  ["GET", "/api/v1/platform/tenants/{tenantId}", "platform-tenants", "getHandler"],
+  ["PATCH", "/api/v1/platform/tenants/{tenantId}", "platform-tenants", "patchHandler"],
+  ["GET", "/api/v1/platform/users", "platform-users", "listHandler"],
+  ["POST", "/api/v1/platform/users", "platform-users", "createUserHandler"],
+  ["PATCH", "/api/v1/platform/users/{email}", "platform-users", "patchHandler"],
   ["GET", "/api/v1/conversations", "conversations"],
   ["GET", "/api/v1/conversations/{conversationId}", "conversations"],
   ["GET", "/api/v1/conversations/{conversationId}/messages", "conversations"],
@@ -486,7 +494,7 @@ function resourceTags(env, component, costGroup, dataClass = "internal") {
 }
 
 function classifyHandler(handler) {
-  if (handler.startsWith("auth") || handler.startsWith("tenant") || handler === "team" || handler === "team-member") {
+  if (handler.startsWith("auth") || handler.startsWith("tenant") || handler.startsWith("platform") || handler === "team" || handler === "team-member") {
     return { component: "api", costGroup: "core-api", dataClass: "customer" };
   }
   if (handler.startsWith("knowledge") || handler.startsWith("commerce")) {
@@ -904,6 +912,7 @@ function buildTemplate({
             AI_WALLET_USD_TO_LKR: { Ref: "AiWalletUsdToLkr" },
             AI_WALLET_MARKUP_PCT: { Ref: "AiWalletMarkupPct" },
             AI_WALLET_LOW_BALANCE_MINOR: { Ref: "AiWalletLowBalanceMinor" },
+            PLATFORM_ADMIN_EMAILS: { Ref: "PlatformAdminEmails" },
             META_APP_ID: { Ref: "MetaAppId" },
             META_APP_SECRET: { Ref: "MetaAppSecret" },
             META_VERIFY_TOKEN: { Ref: "MetaVerifyToken" },
@@ -1060,6 +1069,7 @@ function buildTemplate({
       AiWalletUsdToLkr: { Type: "String", Default: "310" },
       AiWalletMarkupPct: { Type: "String", Default: "30" },
       AiWalletLowBalanceMinor: { Type: "String", Default: "50000" },
+      PlatformAdminEmails: { Type: "String", NoEcho: true, Default: "" },
       MetaAppId: { Type: "String", Default: "" },
       MetaAppSecret: { Type: "String", NoEcho: true, Default: "" },
       MetaVerifyToken: { Type: "String", NoEcho: true, Default: "" },
@@ -1334,6 +1344,9 @@ async function main() {
   const aiWalletLowBalanceMinor = hasArg("ai-wallet-low-balance-minor")
     ? arg("ai-wallet-low-balance-minor", "50000")
     : process.env.AI_WALLET_LOW_BALANCE_MINOR ?? deployedEnv?.AI_WALLET_LOW_BALANCE_MINOR ?? "50000";
+  const platformAdminEmails = hasArg("platform-admin-emails")
+    ? arg("platform-admin-emails", "")
+    : process.env.PLATFORM_ADMIN_EMAILS ?? deployedEnv?.PLATFORM_ADMIN_EMAILS ?? "";
   const shopifyApiKey = hasArg("shopify-api-key")
     ? arg("shopify-api-key", "")
     : process.env.SHOPIFY_API_KEY ?? deployedEnv?.SHOPIFY_API_KEY ?? "";
@@ -1530,6 +1543,7 @@ async function main() {
         `AiWalletUsdToLkr=${aiWalletUsdToLkr}`,
         `AiWalletMarkupPct=${aiWalletMarkupPct}`,
         `AiWalletLowBalanceMinor=${aiWalletLowBalanceMinor}`,
+        `PlatformAdminEmails=${platformAdminEmails}`,
         `MetaAppId=${metaAppId}`,
         `MetaAppSecret=${metaAppSecret}`,
         `MetaVerifyToken=${metaVerifyToken}`,

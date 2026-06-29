@@ -102,6 +102,18 @@ export {
   verifyPaymentWebhookSecret,
 } from "./billing/service";
 export { getAiWalletOverview, creditAiWallet, resumeAiWalletReplies } from "./billing/ai-wallet";
+export {
+  listPlatformTenants,
+  getPlatformTenant,
+  updatePlatformTenant,
+  listPlatformUsers,
+  createPlatformUser,
+  updatePlatformUser,
+  platformLogin,
+  getPlatformMe,
+  assertPlatformAdmin,
+  type PlatformTenantQuery,
+} from "./platform/service";
 export { createLLMProvider } from "./llm/provider";
 export {
   verifyWidgetApiKey,

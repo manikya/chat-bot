@@ -1,4 +1,6 @@
 export type UserRole = "owner" | "admin" | "viewer";
+export type PlatformUserRole = "owner" | "admin" | "support";
+export type PlatformUserStatus = "active" | "disabled";
 
 export type OnboardingStep =
   | "profile"
@@ -26,6 +28,17 @@ export interface User {
   role: UserRole;
   emailVerified: boolean;
   mfaEnabled: boolean;
+}
+
+export interface PlatformUser {
+  userId: string;
+  email: string;
+  name: string;
+  role: PlatformUserRole;
+  status: PlatformUserStatus;
+  createdAt: string;
+  updatedAt?: string;
+  lastLoginAt?: string;
 }
 
 export interface Tenant {
@@ -139,6 +152,48 @@ export interface Usage {
   ingestJobs: number;
   estimatedLlmCostUsd: number;
   limits: { maxMessages: number; messagesRemaining: number };
+}
+
+export interface PlatformTenantSummary {
+  tenantId: string;
+  storeName: string;
+  ownerEmail: string;
+  plan: string;
+  status: string;
+  timezone?: string;
+  websiteUrl?: string;
+  onboardingStep?: string;
+  logoUrl?: string;
+  widgetApiKeyPrefix?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  billingPeriodEnd?: string;
+  trialEndsAt?: string;
+  cancelAtPeriodEnd?: boolean;
+  usage: {
+    period: string;
+    messages: number;
+    inputTokens: number;
+    outputTokens: number;
+    ingestJobs: number;
+    maxMessages: number;
+  };
+  aiWallet?: AiWallet;
+}
+
+export interface PlatformTenantDetail extends PlatformTenantSummary {
+  config?: TenantConfig;
+  limits?: PlanLimits;
+}
+
+export interface PlatformTenantList {
+  items: PlatformTenantSummary[];
+  total: number;
+  nextCursor?: string;
+}
+
+export interface PlatformUserList {
+  items: PlatformUser[];
 }
 
 export interface SocialContentIdea {

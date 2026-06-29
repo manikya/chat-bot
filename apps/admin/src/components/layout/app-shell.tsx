@@ -17,6 +17,7 @@ import {
   BarChart3,
   CreditCard,
   Code2,
+  ShieldCheck,
   Search,
   Sparkles,
   UserPlus,
@@ -43,10 +44,28 @@ const nav = [
   { href: "/settings/profile", label: "Settings", icon: Settings },
 ];
 
+function isPlatformAdminEmail(email: string | undefined, tenantId: string | undefined) {
+  if (tenantId === "__platform__") return true;
+  const configured = process.env.NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS;
+  if (!configured) return false;
+  const allowed = configured
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  return !!email && allowed.includes(email.toLowerCase());
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, tenant, logout } = useAuth();
+  const visibleNav = isPlatformAdminEmail(user?.email, tenant?.tenantId)
+    ? [
+        { href: "/platform/tenants", label: "Platform tenants", icon: ShieldCheck },
+        { href: "/platform/users", label: "Platform users", icon: Users },
+        ...nav,
+      ]
+    : nav;
 
   const showOnboardingBanner =
     user?.role === "owner" &&
@@ -71,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Operate
           </p>
           <nav className="grid gap-[3px]">
-            {nav.map((item) => {
+            {visibleNav.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
               return (

@@ -14,6 +14,7 @@ import {
   generateId,
   normalizeEmail,
   ok,
+  type PlatformUserRole,
   type User,
 } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
@@ -401,7 +402,31 @@ async function resolveRefreshSession(refreshToken: string, deps: AuthDeps) {
     throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
   }
 
-  const { tenantId, sessionId } = lookup.Item as { tenantId: string; sessionId: string };
+  const { tenantId, sessionId, scope } = lookup.Item as { tenantId?: string; sessionId: string; scope?: string };
+  if (scope === "platform") {
+    const sessionRes = await db.send(
+      new GetCommand({
+        TableName: deps.config.tableName,
+        Key: { PK: Keys.platformPk(), SK: Keys.platformSession(sessionId) },
+      })
+    );
+    const session = sessionRes.Item;
+    if (!session || session.revoked) {
+      throw new ApiError(ErrorCodes.UNAUTHORIZED, "Session revoked", 401);
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    if ((session.expiresAt as number) < nowSec) {
+      throw new ApiError(ErrorCodes.TOKEN_EXPIRED, "Refresh token expired", 401);
+    }
+    const valid = await verifyPassword(session.refreshTokenHash as string, refreshToken);
+    if (!valid) {
+      throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
+    }
+    return { tenantId: "__platform__", sessionId, session, lookupHash, scope: "platform" as const };
+  }
+  if (!tenantId) {
+    throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
+  }
   const sessionRes = await db.send(
     new GetCommand({
       TableName: deps.config.tableName,
@@ -423,12 +448,42 @@ async function resolveRefreshSession(refreshToken: string, deps: AuthDeps) {
     throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
   }
 
-  return { tenantId, sessionId, session, lookupHash };
+  return { tenantId, sessionId, session, lookupHash, scope: "tenant" as const };
 }
 
 export async function refreshAccessToken(refreshToken: string, deps: AuthDeps) {
-  const { tenantId, session } = await resolveRefreshSession(refreshToken, deps);
+  const { tenantId, session, scope } = await resolveRefreshSession(refreshToken, deps);
   const db = getDocClient(deps.config);
+
+  if (scope === "platform") {
+    const userRes = await db.send(
+      new GetCommand({
+        TableName: deps.config.tableName,
+        Key: { PK: Keys.platformPk(), SK: Keys.platformUser(session.email as string) },
+      })
+    );
+    const userRecord = userRes.Item;
+    if (!userRecord || userRecord.status !== "active") {
+      throw new ApiError(ErrorCodes.UNAUTHORIZED, "Invalid refresh token", 401);
+    }
+    const accessToken = await signAccessToken(
+      {
+        sub: userRecord.userId as string,
+        tid: "__platform__",
+        role: "owner",
+        email: userRecord.email as string,
+        mfa: true,
+        scope: "platform",
+        platformRole: userRecord.role as PlatformUserRole,
+      },
+      deps.config
+    );
+    return ok({
+      accessToken,
+      expiresIn: deps.config.accessTokenTtlSec,
+      tokenType: "Bearer",
+    });
+  }
 
   const userRes = await db.send(
     new GetCommand({
@@ -460,13 +515,15 @@ export async function refreshAccessToken(refreshToken: string, deps: AuthDeps) {
 }
 
 export async function logout(refreshToken: string, deps: AuthDeps) {
-  const { tenantId, sessionId, lookupHash } = await resolveRefreshSession(refreshToken, deps);
+  const { tenantId, sessionId, lookupHash, scope } = await resolveRefreshSession(refreshToken, deps);
   const db = getDocClient(deps.config);
 
   await db.send(
     new UpdateCommand({
       TableName: deps.config.tableName,
-      Key: { PK: Keys.tenantPk(tenantId), SK: Keys.session(sessionId) },
+      Key: scope === "platform"
+        ? { PK: Keys.platformPk(), SK: Keys.platformSession(sessionId) }
+        : { PK: Keys.tenantPk(tenantId), SK: Keys.session(sessionId) },
       UpdateExpression: "SET revoked = :r",
       ExpressionAttributeValues: { ":r": true },
     })
@@ -739,8 +796,49 @@ export async function issueAuthSession(
   });
 }
 
-export async function getMe(auth: { tenantId: string; userId: string }, deps: AuthDeps) {
+export async function getMe(auth: { tenantId: string; userId: string; scope?: string; email?: string }, deps: AuthDeps) {
   const db = getDocClient(deps.config);
+  if (auth.scope === "platform") {
+    const userRes = await db.send(
+      new GetCommand({
+        TableName: deps.config.tableName,
+        Key: { PK: Keys.platformPk(), SK: Keys.platformUser(auth.email ?? "") },
+      })
+    );
+    const u = userRes.Item;
+    if (!u || u.status !== "active") {
+      throw new ApiError(ErrorCodes.NOT_FOUND, "User not found", 404);
+    }
+    return ok({
+      user: {
+        userId: u.userId,
+        tenantId: "__platform__",
+        email: u.email,
+        name: u.name,
+        role: "owner",
+        emailVerified: true,
+        mfaEnabled: false,
+      },
+      tenant: {
+        tenantId: "__platform__",
+        storeName: "CommerceChat Platform",
+        plan: "enterprise",
+        status: "active",
+        timezone: "UTC",
+        onboardingStep: "complete",
+      },
+      platformUser: {
+        userId: u.userId,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        status: u.status,
+        createdAt: u.createdAt,
+        updatedAt: u.updatedAt,
+        lastLoginAt: u.lastLoginAt,
+      },
+    });
+  }
   const [userRes, profileRes] = await Promise.all([
     db.send(
       new GetCommand({

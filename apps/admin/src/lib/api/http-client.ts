@@ -16,6 +16,10 @@ import type {
   Message,
   OnboardingState,
   PlanLimits,
+  PlatformTenantDetail,
+  PlatformTenantList,
+  PlatformUser,
+  PlatformUserList,
   TeamMember,
   Tenant,
   TenantConfig,
@@ -308,6 +312,14 @@ export function createHttpApi() {
         localStorage.removeItem(REFRESH_TOKEN_KEY);
         return { success: true, data: { loggedOut: true }, timestamp: new Date().toISOString() };
       },
+    },
+    platformAuth: {
+      login: async (email: string, password: string) =>
+        request<LoginResult>("/platform/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        }),
+      me: () => request<{ platformUser: PlatformUser }>("/platform/auth/me"),
     },
     tenant: {
       getMe: () => request<Tenant>("/api/v1/tenants/me"),
@@ -664,6 +676,36 @@ export function createHttpApi() {
         ),
       reactivate: () =>
         request<{ cancelAtPeriodEnd: boolean }>("/api/v1/billing/reactivate", { method: "POST" }),
+    },
+    platform: {
+      listTenants: (params?: { q?: string; status?: string; plan?: string; cursor?: string; limit?: number }) => {
+        const search = new URLSearchParams();
+        if (params?.q) search.set("q", params.q);
+        if (params?.status) search.set("status", params.status);
+        if (params?.plan) search.set("plan", params.plan);
+        if (params?.cursor) search.set("cursor", params.cursor);
+        if (params?.limit != null) search.set("limit", String(params.limit));
+        const qs = search.toString();
+        return request<PlatformTenantList>(`/api/v1/platform/tenants${qs ? `?${qs}` : ""}`);
+      },
+      getTenant: (tenantId: string) =>
+        request<PlatformTenantDetail>(`/api/v1/platform/tenants/${tenantId}`),
+      updateTenant: (tenantId: string, body: { status?: string; plan?: string }) =>
+        request<PlatformTenantDetail>(`/api/v1/platform/tenants/${tenantId}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        }),
+      listUsers: () => request<PlatformUserList>("/api/v1/platform/users"),
+      createUser: (body: { email: string; name: string; password: string; role?: string }) =>
+        request<PlatformUser>("/api/v1/platform/users", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      updateUser: (email: string, body: { name?: string; role?: string; status?: string }) =>
+        request<PlatformUser>(`/api/v1/platform/users/${encodeURIComponent(email)}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        }),
     },
     widget: {
       getConfig: () =>

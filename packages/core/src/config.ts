@@ -23,6 +23,7 @@ export interface CoreConfig {
   aiWalletUsdToLkr?: number;
   aiWalletMarkupPct?: number;
   aiWalletLowBalanceMinor?: number;
+  platformAdminEmails?: string;
   ingestMaxPages: number;
   apiPublicUrl: string;
   widgetCdnUrl?: string;
@@ -95,6 +96,7 @@ export function loadConfig(): CoreConfig {
     aiWalletUsdToLkr: Number(process.env.AI_WALLET_USD_TO_LKR ?? 310),
     aiWalletMarkupPct: Number(process.env.AI_WALLET_MARKUP_PCT ?? 30),
     aiWalletLowBalanceMinor: Number(process.env.AI_WALLET_LOW_BALANCE_MINOR ?? 50000),
+    platformAdminEmails: process.env.PLATFORM_ADMIN_EMAILS,
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
     apiPublicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",
     widgetCdnUrl: process.env.WIDGET_CDN_URL,

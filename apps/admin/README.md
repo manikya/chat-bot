@@ -38,6 +38,8 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
 Production static build (`npm run build:static`) bakes `NEXT_PUBLIC_API_URL` at build time.
+Set `NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS` to show the Platform links during bootstrap; the API still enforces platform access.
+Use `PLATFORM_ADMIN_EMAILS` on the API only to bootstrap the first platform owner, then create separate users at `/platform/users` and sign in at `/platform/login`.
 
 All requests go through the API server. Implemented routes hit Lambdas; others use mock fallback.
 
@@ -50,7 +52,8 @@ npm run deploy:admin -- \
   --credentials-csv="/path/to/accessKeys.csv" \
   --env=dev \
   --region=us-east-1 \
-  --api-url=https://YOUR_API_GATEWAY_URL
+  --api-url=https://YOUR_API_GATEWAY_URL \
+  --platform-admin-emails=owner@example.com
 ```
 
 `--api-url` defaults to the latest API deploy inventory in `infra/deployments/` if omitted.
@@ -84,6 +87,7 @@ packages/core/              → Real Lambda business logic + DynamoDB
 | Team list, invite, remove, role change | **Real** `GET/PATCH/DELETE /api/v1/team`, `POST /auth/invite` |
 | Accept team invite | **Real** `POST /auth/accept-invite` at `/accept-invite` |
 | Auth emails (verify, reset, invite) | **Real** Zoho SMTP when `SMTP_*` set in `apps/api/.env` |
+| Platform users and tenant operations | **Real** `/platform/auth/*`, `/api/v1/platform/users`, `/api/v1/platform/tenants` |
 | Commerce products (knowledge page) | **Real** `GET /api/v1/commerce/products` |
 | WooCommerce connect (Knowledge + onboarding) | **Real** `/api/v1/commerce/wordpress/*` + plugin zip |
 | Shopify connect (Knowledge + onboarding) | **Real** `/api/v1/commerce/shopify/*`, widget on/off toggle, `/shopify-app` OAuth Lambda |

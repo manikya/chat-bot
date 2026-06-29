@@ -55,6 +55,20 @@ import { presignHandler as logoPresignHandler, completeHandler as logoCompleteHa
 import { handler as chatApiHandler } from "../handlers/chat-api";
 import { handler as tenantUsageHandler } from "../handlers/tenant-usage";
 import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key";
+import {
+  getHandler as platformTenantGetHandler,
+  listHandler as platformTenantListHandler,
+  patchHandler as platformTenantPatchHandler,
+} from "../handlers/platform-tenants";
+import {
+  loginHandler as platformLoginHandler,
+  meHandler as platformMeHandler,
+} from "../handlers/platform-auth";
+import {
+  createUserHandler as platformUserCreateHandler,
+  listHandler as platformUserListHandler,
+  patchHandler as platformUserPatchHandler,
+} from "../handlers/platform-users";
 import { handler as conversationsHandler } from "../handlers/conversations";
 import { configHandler as widgetConfigHandler, chatHandler as widgetChatHandler, cartHandler as widgetCartHandler, streamHandler as widgetStreamHandler } from "../handlers/widget";
 import { handler as dashboardStatsHandler } from "../handlers/dashboard-stats";
@@ -134,6 +148,8 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/auth/resend-verification", handler: resendVerificationHandler },
   { method: "POST", path: "/auth/invite", handler: authInviteHandler },
   { method: "POST", path: "/auth/accept-invite", handler: authAcceptInviteHandler },
+  { method: "POST", path: "/platform/auth/login", handler: platformLoginHandler },
+  { method: "GET", path: "/platform/auth/me", handler: platformMeHandler },
   { method: "GET", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "PATCH", path: "/api/v1/tenants/me", handler: tenantMeHandler },
   { method: "POST", path: "/api/v1/tenants/me/logo", handler: tenantLogoHandler },
@@ -144,6 +160,9 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/tenants/me/limits", handler: tenantLimitsHandler },
   { method: "GET", path: "/api/v1/tenants/me/usage", handler: tenantUsageHandler },
   { method: "POST", path: "/api/v1/tenants/me/widget/regenerate-key", handler: tenantWidgetKeyHandler },
+  { method: "GET", path: "/api/v1/platform/tenants", handler: platformTenantListHandler },
+  { method: "GET", path: "/api/v1/platform/users", handler: platformUserListHandler },
+  { method: "POST", path: "/api/v1/platform/users", handler: platformUserCreateHandler },
   { method: "GET", path: "/api/v1/conversations", handler: conversationsHandler },
   { method: "GET", path: "/api/v1/widget/config", handler: widgetConfigHandler },
   { method: "POST", path: "/api/v1/widget/chat", handler: widgetChatHandler },
@@ -269,6 +288,24 @@ const PATTERN_ROUTES: Array<{
     pattern: /^\/api\/v1\/team\/([^/]+)$/,
     paramNames: ["userId"],
     handler: teamDeleteHandler,
+  },
+  {
+    method: "GET",
+    pattern: /^\/api\/v1\/platform\/tenants\/([^/]+)$/,
+    paramNames: ["tenantId"],
+    handler: platformTenantGetHandler,
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/platform\/tenants\/([^/]+)$/,
+    paramNames: ["tenantId"],
+    handler: platformTenantPatchHandler,
+  },
+  {
+    method: "PATCH",
+    pattern: /^\/api\/v1\/platform\/users\/([^/]+)$/,
+    paramNames: ["email"],
+    handler: platformUserPatchHandler,
   },
   {
     method: "PATCH",

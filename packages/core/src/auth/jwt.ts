@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import type { AuthContext, UserRole } from "@commercechat/shared";
+import type { AuthContext, PlatformUserRole, UserRole } from "@commercechat/shared";
 import type { CoreConfig } from "../config";
 
 export interface AccessTokenClaims {
@@ -8,6 +8,8 @@ export interface AccessTokenClaims {
   role: UserRole;
   email: string;
   mfa: boolean;
+  scope?: "tenant" | "platform";
+  platformRole?: PlatformUserRole;
 }
 
 function secretKey(config: CoreConfig) {
@@ -40,6 +42,8 @@ export async function verifyAccessToken(
     role: payload.role as UserRole,
     email: payload.email as string,
     mfa: Boolean(payload.mfa),
+    scope: (payload.scope as "tenant" | "platform" | undefined) ?? "tenant",
+    platformRole: payload.platformRole as PlatformUserRole | undefined,
   };
 }
 
@@ -49,5 +53,7 @@ export function toAuthContext(claims: AccessTokenClaims): AuthContext {
     userId: claims.sub,
     role: claims.role,
     email: claims.email,
+    scope: claims.scope ?? "tenant",
+    platformRole: claims.platformRole,
   };
 }

@@ -24,6 +24,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   sessionExpired: boolean;
   login: (email: string, password: string) => Promise<void>;
+  platformLogin: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   setSession: (data: LoginResult) => void;
@@ -86,6 +87,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [setSession]
   );
 
+  const platformLogin = useCallback(
+    async (email: string, password: string) => {
+      const res = await api.platformAuth.login(email, password);
+      setSession(res.data);
+    },
+    [setSession]
+  );
+
   const logout = useCallback(async () => {
     try {
       await api.auth.logout();
@@ -105,12 +114,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!user,
       sessionExpired,
       login,
+      platformLogin,
       logout,
       refreshMe,
       setSession,
       dismissSessionExpired,
     }),
-    [user, tenant, isLoading, sessionExpired, login, logout, refreshMe, setSession, dismissSessionExpired]
+    [user, tenant, isLoading, sessionExpired, login, platformLogin, logout, refreshMe, setSession, dismissSessionExpired]
   );
 
   return (
