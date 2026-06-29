@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import type {
+  AiWalletOverview,
   BillingOverview,
   ChannelInfo,
   OnboardingState,
@@ -28,6 +29,7 @@ export default function SettingsScreen() {
   const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [billing, setBilling] = useState<BillingOverview | null>(null);
+  const [aiWallet, setAiWallet] = useState<AiWalletOverview | null>(null);
   const [storeName, setStoreName] = useState(tenant?.storeName ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(tenant?.websiteUrl ?? "");
   const [timezone, setTimezone] = useState(tenant?.timezone ?? "");
@@ -50,13 +52,14 @@ export default function SettingsScreen() {
   async function load() {
     setError(null);
     try {
-      const [channelsRes, configRes, teamRes, onboardingRes, usageRes, billingRes] = await Promise.all([
+      const [channelsRes, configRes, teamRes, onboardingRes, usageRes, billingRes, aiWalletRes] = await Promise.all([
         api.channels.list(),
         api.tenant.getConfig(),
         api.team.list(),
         api.onboarding.getState(),
         api.tenant.getUsage(),
         api.billing.getOverview(),
+        api.billing.getAiWallet().catch(() => null),
       ]);
       setChannels(channelsRes.data.channels);
       setConfig(configRes.data);
@@ -64,6 +67,7 @@ export default function SettingsScreen() {
       setOnboarding(onboardingRes.data);
       setUsage(usageRes.data);
       setBilling(billingRes.data);
+      setAiWallet(aiWalletRes?.data ?? null);
       setStoreName(tenant?.storeName ?? "");
       setWebsiteUrl(tenant?.websiteUrl ?? "");
       setTimezone(tenant?.timezone ?? "");
@@ -126,6 +130,30 @@ export default function SettingsScreen() {
       await load();
     } catch (e) {
       setError((e as { message?: string }).message ?? "Could not save bot settings");
+      setBusy(null);
+    }
+  }
+
+  async function topUpAiWallet() {
+    setBusy("ai-wallet");
+    try {
+      const res = await api.billing.topUpAiWallet({ amountMinor: 100000, currency: "LKR" });
+      setAiWallet(res.data);
+    } catch (e) {
+      setError((e as { message?: string }).message ?? "Could not top up AI wallet");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resumeAiWallet() {
+    setBusy("ai-wallet-resume");
+    try {
+      const res = await api.billing.resumeAiWallet();
+      setAiWallet(res.data);
+    } catch (e) {
+      setError((e as { message?: string }).message ?? "Could not resume AI replies");
+    } finally {
       setBusy(null);
     }
   }
@@ -358,6 +386,32 @@ export default function SettingsScreen() {
         <InfoRow label="Messages this period" value={usage?.messages} />
         <InfoRow label="Messages remaining" value={billing?.resources.messagesRemaining ?? usage?.limits.messagesRemaining} />
         <InfoRow label="Estimated cost" value={usage ? `$${usage.estimatedLlmCostUsd.toFixed(2)}` : undefined} />
+        <InfoRow
+          label="AI wallet"
+          value={
+            aiWallet
+              ? `LKR ${(aiWallet.wallet.balanceMinor / 100).toLocaleString()} · ${aiWallet.wallet.status}`
+              : "Not enabled"
+          }
+          tone={aiWallet?.wallet.status === "empty" ? "warn" : aiWallet?.wallet.status === "active" ? "good" : "default"}
+        />
+        <PrimaryButton
+          label="Add LKR 1,000 AI credit"
+          onPress={topUpAiWallet}
+          disabled={!canBill || busy === "ai-wallet"}
+        />
+        {aiWallet?.wallet.prepaidAiEnabled && aiWallet.wallet.balanceMinor > 0 ? (
+          <PrimaryButton
+            label="Resume AI replies"
+            onPress={resumeAiWallet}
+            disabled={!canBill || busy === "ai-wallet-resume"}
+          />
+        ) : null}
+        {aiWallet?.wallet.status === "empty" ? (
+          <Text style={styles.reply}>AI credit is empty. New messages are routed to manual reply mode.</Text>
+        ) : aiWallet?.wallet.status === "low" ? (
+          <Text style={styles.reply}>AI credit is low. Top up soon to keep auto-replies running.</Text>
+        ) : null}
         {billing?.subscription.cancelAtPeriodEnd ? (
           <PrimaryButton
             label="Reactivate plan"

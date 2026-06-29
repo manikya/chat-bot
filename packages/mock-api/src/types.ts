@@ -85,7 +85,42 @@ export interface TenantConfig {
   };
   featureFlags: Record<string, boolean> & {
     manualRepliesOnly?: boolean;
+    prepaidAiEnabled?: boolean;
+    prepaidAiPaused?: boolean;
   };
+}
+
+export interface AiWallet {
+  tenantId: string;
+  currency: string;
+  balanceMinor: number;
+  status: "inactive" | "active" | "low" | "empty";
+  lowBalanceThresholdMinor: number;
+  prepaidAiEnabled: boolean;
+  lowBalanceNotifiedAt?: string;
+  emptyBalanceNotifiedAt?: string;
+  updatedAt: string;
+}
+
+export interface AiWalletLedgerEntry {
+  id: string;
+  tenantId: string;
+  type: "credit" | "debit" | "adjustment";
+  amountMinor: number;
+  currency: string;
+  reason: "topup" | "chat_turn" | "manual_adjustment" | "test_chat";
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  conversationId?: string;
+  balanceAfterMinor?: number;
+  idempotencyKey?: string;
+  createdAt: string;
+}
+
+export interface AiWalletOverview {
+  wallet: AiWallet;
+  ledger: AiWalletLedgerEntry[];
 }
 
 export interface PlanLimits {
@@ -323,6 +358,12 @@ export interface ConversationAnalytics {
     conversations: number;
     withCart: number;
     checkoutLinks: number;
+  };
+  aiWallet?: {
+    debitedMinor: number;
+    chargedTurns: number;
+    exhaustedTurns: number;
+    lowOrEmptyTurns: number;
   };
 }
 

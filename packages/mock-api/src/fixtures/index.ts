@@ -72,6 +72,8 @@ export const DEMO_CONFIG: TenantConfig = {
   },
   featureFlags: {
     manualRepliesOnly: false,
+    prepaidAiEnabled: false,
+    prepaidAiPaused: false,
   },
 };
 

@@ -66,6 +66,7 @@ import { marketFromTimezone } from "./locale";
 import { buildAgentMemory, buildAgentTurnState } from "./agent-state";
 import { applyAgentPolicy, filterToolsByAgentPolicy, validateSuggestedActions } from "./agent-policy";
 import { validateResponseQuality } from "./response-quality";
+import { aiWalletAllowsAi, debitAiWalletForUsage } from "../billing/ai-wallet";
 
 const MAX_TOOL_ROUNDS = 3;
 
@@ -125,7 +126,18 @@ function selectResponseModel(input: {
   if (input.intent === "checkout" || input.subIntent === "checkout_ready" || input.subIntent === "cart_review") {
     reasons.push("checkout_or_cart");
   }
-  if (input.cartItemCount > 0 && messageHasRiskTerms(input.message)) reasons.push("cart_with_risk_terms");
+  if (messageHasRiskTerms(input.message)) {
+    if (
+      input.cartItemCount > 0 ||
+      input.intent === "faq" ||
+      input.intent === "checkout" ||
+      input.subIntent === "faq_policy" ||
+      input.subIntent === "checkout_ready" ||
+      input.subIntent === "cart_review"
+    ) {
+      reasons.push(input.cartItemCount > 0 ? "cart_with_risk_terms" : "policy_risk_terms");
+    }
+  }
   if (input.plan?.responsePolicy === "recover" || input.plan?.resultPolicy === "relax_constraints") {
     reasons.push("planner_recovery");
   }
@@ -785,7 +797,19 @@ export async function runChatOrchestrator(
   );
 
   const handlingModeBeforeManualOverride = getHandlingMode(conversation);
-  const manualRepliesOnly = tenantConfig.featureFlags?.manualRepliesOnly === true;
+  let prepaidWalletStatus: string | undefined;
+  let prepaidWalletBalanceMinor: number | undefined;
+  let prepaidWalletBlocked = false;
+  if (input.channel !== "test") {
+    const walletCheck = await trace.time("ai_wallet_check", () => aiWalletAllowsAi(auth.tenantId, config));
+    prepaidWalletStatus = walletCheck.wallet.status;
+    prepaidWalletBalanceMinor = walletCheck.wallet.balanceMinor;
+    prepaidWalletBlocked = !walletCheck.allowed;
+    trace.mark("ai_wallet_status", prepaidWalletStatus);
+    trace.mark("ai_wallet_balance_minor", prepaidWalletBalanceMinor);
+    trace.mark("ai_wallet_blocked", prepaidWalletBlocked);
+  }
+  const manualRepliesOnly = tenantConfig.featureFlags?.manualRepliesOnly === true || prepaidWalletBlocked;
   const forcedManualThisTurn = manualRepliesOnly && handlingModeBeforeManualOverride !== "human";
   if (forcedManualThisTurn) {
     conversation = await trace.time("force_manual_handling", () =>
@@ -1580,6 +1604,28 @@ export async function runChatOrchestrator(
   trace.mark("product_count", finalProducts.length);
   trace.mark("input_tokens", totalInputTokens);
   trace.mark("output_tokens", totalOutputTokens);
+  let aiWalletDebit:
+    | Awaited<ReturnType<typeof debitAiWalletForUsage>>
+    | null = null;
+  if (input.channel !== "test" && (totalInputTokens > 0 || totalOutputTokens > 0)) {
+    aiWalletDebit = await trace.time("ai_wallet_debit", () =>
+      debitAiWalletForUsage(
+        auth.tenantId,
+        {
+          model: answerRoute?.model ?? plannerModel,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          conversationId: conversation.conversationId,
+        },
+        config
+      )
+    );
+    if (aiWalletDebit.enabled) {
+      trace.mark("ai_wallet_debited_minor", aiWalletDebit.debitedMinor);
+      trace.mark("ai_wallet_balance_after_minor", aiWalletDebit.wallet.balanceMinor);
+      trace.mark("ai_wallet_status_after", aiWalletDebit.wallet.status);
+    }
+  }
   const agentTrace = {
     userMove: agentState.userMove,
     replyLanguage: agentState.replyLanguage,
@@ -1593,6 +1639,10 @@ export async function runChatOrchestrator(
     responseModel: answerRoute?.model ?? null,
     responseModelEscalated: answerRoute?.escalated ?? false,
     responseModelRouteReasons: answerRoute?.reasons ?? [],
+    aiWalletStatus: aiWalletDebit?.wallet.status ?? prepaidWalletStatus,
+    aiWalletDebitedMinor: aiWalletDebit?.debitedMinor ?? 0,
+    aiWalletBalanceAfterMinor: aiWalletDebit?.wallet.balanceMinor ?? prepaidWalletBalanceMinor,
+    aiWalletExhausted: aiWalletDebit?.wallet.status === "empty" || prepaidWalletBlocked,
     toolObservations,
     excludeSkus,
     surfacedProductSkus: finalProductSkus,
@@ -1611,6 +1661,9 @@ export async function runChatOrchestrator(
     llmProvider: llm?.name ?? "fallback",
     llmModel: answerRoute?.model,
     llmModelRouteReasons: answerRoute?.reasons,
+    aiWalletDebitedMinor: aiWalletDebit?.debitedMinor ?? 0,
+    aiWalletBalanceAfterMinor: aiWalletDebit?.wallet.balanceMinor ?? prepaidWalletBalanceMinor,
+    aiWalletStatus: aiWalletDebit?.wallet.status ?? prepaidWalletStatus,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     toolCalls: finalToolResults.map((t) => t.tool),

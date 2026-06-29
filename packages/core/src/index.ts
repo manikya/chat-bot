@@ -101,6 +101,7 @@ export {
   reactivateBillingSubscription,
   verifyPaymentWebhookSecret,
 } from "./billing/service";
+export { getAiWalletOverview, creditAiWallet, resumeAiWalletReplies } from "./billing/ai-wallet";
 export { createLLMProvider } from "./llm/provider";
 export {
   verifyWidgetApiKey,

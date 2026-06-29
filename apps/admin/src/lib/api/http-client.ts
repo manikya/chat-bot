@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  AiWalletOverview,
   BillingCheckoutSession,
   BillingOverview,
   BillingPlan,
@@ -643,6 +644,14 @@ export function createHttpApi() {
       getPlans: () => request<{ plans: BillingPlan[] }>("/api/v1/billing/plans"),
       getSubscription: () => request<BillingOverview["subscription"]>("/api/v1/billing/subscription"),
       getOverview: () => request<BillingOverview>("/api/v1/billing/overview"),
+      getAiWallet: () => request<AiWalletOverview>("/api/v1/billing/ai-wallet"),
+      topUpAiWallet: (body: { amountMinor: number; currency?: string; resumeAi?: boolean }) =>
+        request<AiWalletOverview>("/api/v1/billing/ai-wallet/topup", {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      resumeAiWallet: () =>
+        request<AiWalletOverview>("/api/v1/billing/ai-wallet/resume", { method: "POST" }),
       checkout: (body: { plan: string; successUrl?: string; cancelUrl?: string }) =>
         request<BillingCheckoutSession>("/api/v1/billing/checkout", {
           method: "POST",

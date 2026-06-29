@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  AiWalletOverview,
   BillingCheckoutSession,
   BillingOverview,
   BillingPlan,
@@ -565,6 +566,20 @@ export const api = {
     },
     getSubscription() {
       return request<BillingOverview["subscription"]>("/api/v1/billing/subscription");
+    },
+    getAiWallet() {
+      return request<AiWalletOverview>("/api/v1/billing/ai-wallet");
+    },
+    topUpAiWallet(body: { amountMinor: number; currency?: string; resumeAi?: boolean }) {
+      return request<AiWalletOverview>("/api/v1/billing/ai-wallet/topup", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    },
+    resumeAiWallet() {
+      return request<AiWalletOverview>("/api/v1/billing/ai-wallet/resume", {
+        method: "POST",
+      });
     },
     checkout(body: { plan: string; successUrl?: string; cancelUrl?: string }) {
       return request<BillingCheckoutSession>("/api/v1/billing/checkout", {

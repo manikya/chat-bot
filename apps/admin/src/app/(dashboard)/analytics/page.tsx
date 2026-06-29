@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Link2, MessageSquare, Radio, ShoppingCart } from "lucide-react";
+import { BarChart3, CreditCard, Link2, MessageSquare, Radio, ShoppingCart } from "lucide-react";
 import { api } from "@/lib/api";
 import type { ConversationAnalytics } from "@commercechat/mock-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,18 +55,29 @@ function MessagesChart({ data }: { data: ConversationAnalytics["messagesByDay"] 
   );
 }
 
+function formatLkr(amount: number) {
+  return new Intl.NumberFormat("en-LK", {
+    style: "currency",
+    currency: "LKR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export default function AnalyticsPage() {
   const [range, setRange] = useState(defaultRange);
   const [data, setData] = useState<ConversationAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    api.analytics
-      .get(range)
+    const query = { from: range.from, to: range.to };
+    void Promise.resolve()
+      .then(() => {
+        setLoading(true);
+        return api.analytics.get(query);
+      })
       .then((r) => setData(r.data))
       .finally(() => setLoading(false));
-  }, [range.from, range.to]);
+  }, [range]);
 
   const channelMax = useMemo(
     () => Math.max(...(data?.channelBreakdown.map((c) => c.count) ?? [1])),
@@ -181,6 +192,32 @@ export default function AnalyticsPage() {
             ))}
           </CardContent>
         </Card>
+
+        {data.aiWallet ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-muted text-muted-foreground">
+                  <CreditCard className="h-4 w-4" />
+                </span>
+                AI wallet usage
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {[
+                { label: "AI cost", value: formatLkr(data.aiWallet.debitedMinor / 100) },
+                { label: "Charged replies", value: data.aiWallet.chargedTurns },
+                { label: "Low/empty turns", value: data.aiWallet.lowOrEmptyTurns },
+                { label: "Paused by empty wallet", value: data.aiWallet.exhaustedTurns },
+              ].map((metric) => (
+                <div key={metric.label} className="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2.5 text-sm">
+                  <span className="font-medium">{metric.label}</span>
+                  <Badge variant="secondary">{metric.value}</Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

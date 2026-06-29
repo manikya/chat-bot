@@ -77,6 +77,8 @@ export interface TenantConfig {
   };
   featureFlags: Record<string, boolean> & {
     manualRepliesOnly?: boolean;
+    prepaidAiEnabled?: boolean;
+    prepaidAiPaused?: boolean;
   };
 }
 
@@ -86,6 +88,39 @@ export interface PlanLimits {
   maxVectors: number;
   maxTeamMembers: number;
   enabledChannels: string[];
+}
+
+export interface AiWallet {
+  tenantId: string;
+  currency: "LKR" | "USD" | string;
+  balanceMinor: number;
+  status: "inactive" | "active" | "low" | "empty";
+  lowBalanceThresholdMinor: number;
+  prepaidAiEnabled: boolean;
+  lowBalanceNotifiedAt?: string;
+  emptyBalanceNotifiedAt?: string;
+  updatedAt: string;
+}
+
+export interface AiWalletLedgerEntry {
+  id: string;
+  tenantId: string;
+  type: "credit" | "debit" | "adjustment";
+  amountMinor: number;
+  currency: string;
+  reason: "topup" | "chat_turn" | "manual_adjustment" | "test_chat";
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  conversationId?: string;
+  balanceAfterMinor?: number;
+  idempotencyKey?: string;
+  createdAt: string;
+}
+
+export interface AiWalletOverview {
+  wallet: AiWallet;
+  ledger: AiWalletLedgerEntry[];
 }
 
 export interface SocialContentIdea {

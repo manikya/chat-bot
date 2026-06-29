@@ -20,6 +20,9 @@ export interface CoreConfig {
   plannerModel?: string;
   catalogIntelligenceModel?: string;
   escalationModel?: string;
+  aiWalletUsdToLkr?: number;
+  aiWalletMarkupPct?: number;
+  aiWalletLowBalanceMinor?: number;
   ingestMaxPages: number;
   apiPublicUrl: string;
   widgetCdnUrl?: string;
@@ -89,6 +92,9 @@ export function loadConfig(): CoreConfig {
     plannerModel: process.env.PLANNER_MODEL,
     catalogIntelligenceModel: process.env.CATALOG_INTELLIGENCE_MODEL,
     escalationModel: process.env.ESCALATION_MODEL,
+    aiWalletUsdToLkr: Number(process.env.AI_WALLET_USD_TO_LKR ?? 310),
+    aiWalletMarkupPct: Number(process.env.AI_WALLET_MARKUP_PCT ?? 30),
+    aiWalletLowBalanceMinor: Number(process.env.AI_WALLET_LOW_BALANCE_MINOR ?? 50000),
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
     apiPublicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",
     widgetCdnUrl: process.env.WIDGET_CDN_URL,

@@ -83,6 +83,9 @@ import {
   checkoutHandler as billingCheckoutHandler,
   cancelHandler as billingCancelHandler,
   reactivateHandler as billingReactivateHandler,
+  aiWalletHandler as billingAiWalletHandler,
+  aiWalletTopupHandler as billingAiWalletTopupHandler,
+  aiWalletResumeHandler as billingAiWalletResumeHandler,
 } from "../handlers/billing";
 import {
   listHandler as channelsListHandler,
@@ -114,6 +117,9 @@ const REAL_ROUTES: Array<{
   { method: "GET", path: "/api/v1/billing/plans", handler: billingPlansHandler },
   { method: "GET", path: "/api/v1/billing/subscription", handler: billingSubscriptionHandler },
   { method: "GET", path: "/api/v1/billing/overview", handler: billingOverviewHandler },
+  { method: "GET", path: "/api/v1/billing/ai-wallet", handler: billingAiWalletHandler },
+  { method: "POST", path: "/api/v1/billing/ai-wallet/topup", handler: billingAiWalletTopupHandler },
+  { method: "POST", path: "/api/v1/billing/ai-wallet/resume", handler: billingAiWalletResumeHandler },
   { method: "POST", path: "/api/v1/billing/checkout", handler: billingCheckoutHandler },
   { method: "POST", path: "/api/v1/billing/cancel", handler: billingCancelHandler },
   { method: "POST", path: "/api/v1/billing/reactivate", handler: billingReactivateHandler },

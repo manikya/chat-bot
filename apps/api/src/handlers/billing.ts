@@ -1,11 +1,14 @@
 import {
   cancelBillingSubscription,
+  creditAiWallet,
   createBillingCheckout,
+  getAiWalletOverview,
   getBillingOverview,
   getBillingSubscription,
   listBillingPlans,
   loadConfig,
   reactivateBillingSubscription,
+  resumeAiWalletReplies,
 } from "@commercechat/core";
 import type { TenantPlan } from "@commercechat/shared";
 import { createHandler } from "../lib/handler";
@@ -21,6 +24,29 @@ export const subscriptionHandler = createHandler(
 export const overviewHandler = createHandler(
   async (_event, auth) => getBillingOverview(auth!, loadConfig()),
   { requireAuth: true }
+);
+
+export const aiWalletHandler = createHandler(
+  async (_event, auth) => getAiWalletOverview(auth!, loadConfig()),
+  { requireAuth: true }
+);
+
+export const aiWalletTopupHandler = createHandler(
+  async (event, auth) => {
+    const body = parseBody<{
+      amountMinor: number;
+      currency?: string;
+      reason?: "topup" | "manual_adjustment";
+      resumeAi?: boolean;
+    }>(event);
+    return creditAiWallet(auth!, body, loadConfig());
+  },
+  { requireAuth: true, minRole: "owner" }
+);
+
+export const aiWalletResumeHandler = createHandler(
+  async (_event, auth) => resumeAiWalletReplies(auth!, loadConfig()),
+  { requireAuth: true, minRole: "owner" }
 );
 
 export const checkoutHandler = createHandler(

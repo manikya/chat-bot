@@ -63,6 +63,12 @@ export async function getConversationAnalytics(
     policyInterventions: 0,
     weakProductResults: 0,
   };
+  const aiWallet = {
+    debitedMinor: 0,
+    chargedTurns: 0,
+    exhaustedTurns: 0,
+    lowOrEmptyTurns: 0,
+  };
 
   let conversationsTotal = 0;
   let conversationsActive = 0;
@@ -154,6 +160,18 @@ export async function getConversationAnalytics(
       if (observations.some((observation) => Boolean((observation as Record<string, unknown>).weakResults))) {
         agentReliability.weakProductResults += 1;
       }
+      const debitedMinor = Number(metadata.aiWalletDebitedMinor ?? agentTrace.aiWalletDebitedMinor ?? 0);
+      if (debitedMinor > 0) {
+        aiWallet.debitedMinor += debitedMinor;
+        aiWallet.chargedTurns += 1;
+      }
+      const walletStatus = String(metadata.aiWalletStatus ?? agentTrace.aiWalletStatus ?? "");
+      if (walletStatus === "low" || walletStatus === "empty") {
+        aiWallet.lowOrEmptyTurns += 1;
+      }
+      if (Boolean(agentTrace.aiWalletExhausted)) {
+        aiWallet.exhaustedTurns += 1;
+      }
     }
 
     startKey = res.LastEvaluatedKey;
@@ -218,5 +236,6 @@ export async function getConversationAnalytics(
       checkoutLinks,
     },
     agentReliability,
+    aiWallet,
   });
 }

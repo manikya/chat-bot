@@ -22,6 +22,9 @@ const BASE_ROUTES = [
   ["GET", "/api/v1/billing/plans", "billing", "plansHandler"],
   ["GET", "/api/v1/billing/subscription", "billing", "subscriptionHandler"],
   ["GET", "/api/v1/billing/overview", "billing", "overviewHandler"],
+  ["GET", "/api/v1/billing/ai-wallet", "billing", "aiWalletHandler"],
+  ["POST", "/api/v1/billing/ai-wallet/topup", "billing", "aiWalletTopupHandler"],
+  ["POST", "/api/v1/billing/ai-wallet/resume", "billing", "aiWalletResumeHandler"],
   ["POST", "/api/v1/billing/checkout", "billing", "checkoutHandler"],
   ["POST", "/api/v1/billing/cancel", "billing", "cancelHandler"],
   ["POST", "/api/v1/billing/reactivate", "billing", "reactivateHandler"],
@@ -898,6 +901,9 @@ function buildTemplate({
             S3_PUBLIC_URL: { Ref: "AssetsPublicUrl" },
             OPENAI_API_KEY: { Ref: "OpenAIApiKey" },
             ESCALATION_MODEL: { Ref: "EscalationModel" },
+            AI_WALLET_USD_TO_LKR: { Ref: "AiWalletUsdToLkr" },
+            AI_WALLET_MARKUP_PCT: { Ref: "AiWalletMarkupPct" },
+            AI_WALLET_LOW_BALANCE_MINOR: { Ref: "AiWalletLowBalanceMinor" },
             META_APP_ID: { Ref: "MetaAppId" },
             META_APP_SECRET: { Ref: "MetaAppSecret" },
             META_VERIFY_TOKEN: { Ref: "MetaVerifyToken" },
@@ -1051,6 +1057,9 @@ function buildTemplate({
       AssetsPublicUrl: { Type: "String", Default: "" },
       OpenAIApiKey: { Type: "String", NoEcho: true, Default: "" },
       EscalationModel: { Type: "String", Default: "" },
+      AiWalletUsdToLkr: { Type: "String", Default: "310" },
+      AiWalletMarkupPct: { Type: "String", Default: "30" },
+      AiWalletLowBalanceMinor: { Type: "String", Default: "50000" },
       MetaAppId: { Type: "String", Default: "" },
       MetaAppSecret: { Type: "String", NoEcho: true, Default: "" },
       MetaVerifyToken: { Type: "String", NoEcho: true, Default: "" },
@@ -1316,6 +1325,15 @@ async function main() {
   const escalationModel = hasArg("escalation-model")
     ? arg("escalation-model", "")
     : process.env.ESCALATION_MODEL ?? deployedEnv?.ESCALATION_MODEL ?? "";
+  const aiWalletUsdToLkr = hasArg("ai-wallet-usd-to-lkr")
+    ? arg("ai-wallet-usd-to-lkr", "310")
+    : process.env.AI_WALLET_USD_TO_LKR ?? deployedEnv?.AI_WALLET_USD_TO_LKR ?? "310";
+  const aiWalletMarkupPct = hasArg("ai-wallet-markup-pct")
+    ? arg("ai-wallet-markup-pct", "30")
+    : process.env.AI_WALLET_MARKUP_PCT ?? deployedEnv?.AI_WALLET_MARKUP_PCT ?? "30";
+  const aiWalletLowBalanceMinor = hasArg("ai-wallet-low-balance-minor")
+    ? arg("ai-wallet-low-balance-minor", "50000")
+    : process.env.AI_WALLET_LOW_BALANCE_MINOR ?? deployedEnv?.AI_WALLET_LOW_BALANCE_MINOR ?? "50000";
   const shopifyApiKey = hasArg("shopify-api-key")
     ? arg("shopify-api-key", "")
     : process.env.SHOPIFY_API_KEY ?? deployedEnv?.SHOPIFY_API_KEY ?? "";
@@ -1509,6 +1527,9 @@ async function main() {
         "AssetsPublicUrl=",
         `OpenAIApiKey=${openaiApiKey}`,
         `EscalationModel=${escalationModel}`,
+        `AiWalletUsdToLkr=${aiWalletUsdToLkr}`,
+        `AiWalletMarkupPct=${aiWalletMarkupPct}`,
+        `AiWalletLowBalanceMinor=${aiWalletLowBalanceMinor}`,
         `MetaAppId=${metaAppId}`,
         `MetaAppSecret=${metaAppSecret}`,
         `MetaVerifyToken=${metaVerifyToken}`,

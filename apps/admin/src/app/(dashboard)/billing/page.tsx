@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check, Clock, CreditCard, Loader2, MessageSquare, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { Check, Clock, CreditCard, Loader2, MessageSquare, ShieldCheck, Sparkles, Users, Wallet } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth/context";
-import type { BillingOverview, BillingPlan, TenantPlan } from "@commercechat/mock-api";
+import type { AiWalletOverview, BillingOverview, BillingPlan, TenantPlan } from "@commercechat/mock-api";
 import { UsageMeters } from "@/components/billing/usage-meters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,8 +46,10 @@ export default function BillingPage() {
   const searchParams = useSearchParams();
   const [overview, setOverview] = useState<BillingOverview | null>(null);
   const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [aiWallet, setAiWallet] = useState<AiWalletOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<TenantPlan | null>(null);
+  const [toppingUp, setToppingUp] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -71,24 +73,28 @@ export default function BillingPage() {
       ]);
       setOverview(overviewRes.data ?? null);
       setPlans(plansRes.data?.plans ?? []);
+      const walletRes = await api.billing.getAiWallet().catch(() => null);
+      setAiWallet(walletRes?.data ?? null);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
   }, [load]);
 
   useEffect(() => {
-    const checkout = searchParams.get("checkout");
-    if (checkout === "success") {
-      setNotice("Payment completed — your plan should be active shortly.");
-      refreshMe();
-      load();
-    } else if (checkout === "cancelled") {
-      setNotice("Checkout was cancelled.");
-    }
+    void Promise.resolve().then(() => {
+      const checkout = searchParams.get("checkout");
+      if (checkout === "success") {
+        setNotice("Payment completed — your plan should be active shortly.");
+        refreshMe();
+        load();
+      } else if (checkout === "cancelled") {
+        setNotice("Checkout was cancelled.");
+      }
+    });
   }, [searchParams, refreshMe, load]);
 
   async function handleUpgrade(planId: TenantPlan) {
@@ -102,7 +108,7 @@ export default function BillingPage() {
       if (!session) throw new Error("No checkout session returned");
 
       if (session.redirectUrl) {
-        window.location.href = session.redirectUrl;
+        window.location.assign(session.redirectUrl);
         return;
       }
       if (session.status === "paid") {
@@ -123,6 +129,46 @@ export default function BillingPage() {
       setError(msg);
     } finally {
       setUpgrading(null);
+    }
+  }
+
+  async function handleWalletTopup(amountMinor: number) {
+    if (!isOwner) return;
+    setError(null);
+    setNotice(null);
+    setToppingUp(amountMinor);
+    try {
+      const res = await api.billing.topUpAiWallet({ amountMinor, currency: "LKR", resumeAi: false });
+      setAiWallet(res.data ?? null);
+      setNotice(`Added ${formatLkr(amountMinor / 100)} to AI wallet.`);
+    } catch (e) {
+      const msg =
+        typeof e === "object" && e && "message" in e
+          ? String((e as { message: string }).message)
+          : "AI wallet top-up failed";
+      setError(msg);
+    } finally {
+      setToppingUp(null);
+    }
+  }
+
+  async function handleWalletResume() {
+    if (!isOwner) return;
+    setError(null);
+    setNotice(null);
+    setToppingUp(0);
+    try {
+      const res = await api.billing.resumeAiWallet();
+      setAiWallet(res.data ?? null);
+      setNotice("AI replies resumed. Manual reply mode was turned off.");
+    } catch (e) {
+      const msg =
+        typeof e === "object" && e && "message" in e
+          ? String((e as { message: string }).message)
+          : "Could not resume AI replies";
+      setError(msg);
+    } finally {
+      setToppingUp(null);
     }
   }
 
@@ -206,6 +252,87 @@ export default function BillingPage() {
           <MetricTile label="Team" value={overview.resources.teamMembers.toLocaleString()} detail={`${overview.limits.maxTeamMembers} seats`} icon={<Users className="h-4 w-4" />} />
           <MetricTile label="Vectors" value={overview.resources.vectors.toLocaleString()} detail={`${overview.utilization.vectorsPct}% used`} icon={<Sparkles className="h-4 w-4" />} />
         </div>
+      )}
+
+      {aiWallet && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <IconFrame>
+                <Wallet className="h-4 w-4" />
+              </IconFrame>
+              <div>
+                <CardTitle className="text-lg">Prepaid AI wallet</CardTitle>
+                <CardDescription className="mt-1">
+                  AI replies spend from this balance. When it reaches zero, new messages switch to manual reply mode.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant={aiWallet.wallet.status === "active" ? "success" : aiWallet.wallet.status === "low" ? "warning" : "secondary"}>
+              {aiWallet.wallet.status}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <MetricTile
+                label="AI balance"
+                value={formatLkr(aiWallet.wallet.balanceMinor / 100)}
+                detail={aiWallet.wallet.prepaidAiEnabled ? "prepaid enabled" : "not enforced yet"}
+                icon={<Wallet className="h-4 w-4" />}
+              />
+              <MetricTile
+                label="Low threshold"
+                value={formatLkr(aiWallet.wallet.lowBalanceThresholdMinor / 100)}
+                detail="warning level"
+                icon={<ShieldCheck className="h-4 w-4" />}
+              />
+              <MetricTile
+                label="Recent entries"
+                value={aiWallet.ledger.length}
+                detail="latest ledger rows"
+                icon={<Clock className="h-4 w-4" />}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[100000, 500000, 1000000].map((amount) => (
+                <Button key={amount} variant="outline" disabled={!isOwner || toppingUp === amount} onClick={() => handleWalletTopup(amount)}>
+                  {toppingUp === amount ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                  Add {formatLkr(amount / 100)}
+                </Button>
+              ))}
+              {aiWallet.wallet.prepaidAiEnabled && aiWallet.wallet.balanceMinor > 0 && (
+                <Button disabled={!isOwner || toppingUp === 0} onClick={handleWalletResume}>
+                  {toppingUp === 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  Resume AI replies
+                </Button>
+              )}
+            </div>
+            {aiWallet.wallet.status === "empty" ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                AI replies are paused. Customer messages continue to arrive in manual reply mode.
+              </div>
+            ) : aiWallet.wallet.status === "low" ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                AI credit is low. Top up soon to avoid automatic manual mode.
+              </div>
+            ) : null}
+            {aiWallet.ledger.length ? (
+              <div className="space-y-2">
+                {aiWallet.ledger.slice(0, 5).map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2 text-sm">
+                    <span className="font-medium">{entry.reason.replace("_", " ")}</span>
+                    <span className={entry.amountMinor >= 0 ? "text-emerald-700" : "text-muted-foreground"}>
+                      {entry.amountMinor >= 0 ? "+" : "-"}
+                      {formatLkr(Math.abs(entry.amountMinor) / 100)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No AI wallet ledger entries yet.</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {overview && (
