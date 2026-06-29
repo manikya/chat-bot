@@ -59,6 +59,12 @@ export interface TenantConfig {
   llmConfig: {
     primaryProvider: string;
     models: { faq: string; product: string; checkout: string };
+    plannerModel?: string;
+    catalogIntelligenceModel?: string;
+    escalationModel?: string;
+    embeddingModel?: string;
+    temperature?: number;
+    maxOutputTokens?: number;
   };
   prompts: {
     systemPrompt: string;

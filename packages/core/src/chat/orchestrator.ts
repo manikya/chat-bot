@@ -74,6 +74,84 @@ function webManualContactRequestMessage(handoffMessage?: string) {
   return `${intro} Please share your phone number or email here, and our team will contact you shortly.`;
 }
 
+interface ResponseModelRoute {
+  model: string;
+  baseModel: string;
+  escalationModel: string;
+  escalated: boolean;
+  reasons: string[];
+}
+
+function modelForIntent(tenantConfig: TenantConfig, intent: ChatIntent, fallbackModel: string) {
+  return (
+    tenantConfig.llmConfig.models[intent === "faq" ? "faq" : intent === "checkout" ? "checkout" : "product"] ??
+    fallbackModel
+  );
+}
+
+function escalationModel(tenantConfig: TenantConfig, config: CoreConfig, baseModel: string) {
+  return (
+    tenantConfig.llmConfig.escalationModel ??
+    config.escalationModel ??
+    tenantConfig.llmConfig.models.checkout ??
+    baseModel
+  );
+}
+
+function messageHasRiskTerms(message: string) {
+  return /\b(?:payment|pay|paid|refund|return|exchange|warranty|guarantee|delivery|shipping|ship|address|cancel|order|checkout|invoice|price|discount|coupon|damaged|broken)\b/i.test(
+    message
+  );
+}
+
+function selectResponseModel(input: {
+  intent: ChatIntent;
+  subIntent: ChatSubIntent;
+  plan?: SalesPlan;
+  cartItemCount: number;
+  gateProductSearch: boolean;
+  productSearchEmpty: boolean;
+  message: string;
+  tenantConfig: TenantConfig;
+  config: CoreConfig;
+}): ResponseModelRoute {
+  const baseModel = modelForIntent(input.tenantConfig, input.intent, input.config.llmModel);
+  const highModel = escalationModel(input.tenantConfig, input.config, baseModel);
+  const reasons: string[] = [];
+
+  const confidence = typeof input.plan?.confidence === "number" ? input.plan.confidence : undefined;
+  if (confidence !== undefined && confidence < 0.55) reasons.push("low_planner_confidence");
+  if (input.intent === "unknown") reasons.push("unknown_intent");
+  if (input.intent === "checkout" || input.subIntent === "checkout_ready" || input.subIntent === "cart_review") {
+    reasons.push("checkout_or_cart");
+  }
+  if (input.cartItemCount > 0 && messageHasRiskTerms(input.message)) reasons.push("cart_with_risk_terms");
+  if (input.plan?.responsePolicy === "recover" || input.plan?.resultPolicy === "relax_constraints") {
+    reasons.push("planner_recovery");
+  }
+  if (input.productSearchEmpty && !input.gateProductSearch) reasons.push("empty_product_search");
+
+  const escalated = reasons.length > 0 && highModel !== baseModel;
+  return {
+    model: escalated ? highModel : baseModel,
+    baseModel,
+    escalationModel: highModel,
+    escalated,
+    reasons: reasons.length ? reasons : ["default_intent_model"],
+  };
+}
+
+function shouldRetryResponseQuality(flags: string[]) {
+  return flags.some((flag) =>
+    [
+      "language_mismatch",
+      "used_quality_fallback",
+      "repaired_unfinished_sentence",
+      "repaired_artifacts",
+    ].includes(flag)
+  );
+}
+
 export interface OrchestratorInput {
   channel: string;
   externalUserId: string;
@@ -1088,10 +1166,29 @@ export async function runChatOrchestrator(
     toolResults.push({ tool: "search_products", success, result });
   }
 
+  let answerRoute: ResponseModelRoute | null = null;
+  let answerGeneratedByLlm = false;
   if (!replyContent && !directPlannerProductSearch && llm) {
-    const model =
-      tenantConfig.llmConfig.models[intent === "faq" ? "faq" : intent === "checkout" ? "checkout" : "product"] ??
-      config.llmModel;
+    answerRoute = selectResponseModel({
+      intent,
+      subIntent,
+      plan: trustedPlan ?? undefined,
+      cartItemCount: cart?.items.length ?? 0,
+      gateProductSearch,
+      productSearchEmpty: productSearchWasEmpty(toolResults),
+      message: text,
+      tenantConfig,
+      config,
+    });
+    const model = answerRoute.model;
+    trace.record("response_model_route", 0, true, {
+      model,
+      baseModel: answerRoute.baseModel,
+      escalationModel: answerRoute.escalationModel,
+      escalated: answerRoute.escalated,
+      reasons: answerRoute.reasons,
+      plannerConfidence: trustedPlan?.confidence,
+    });
     const temperature = tenantConfig.llmConfig.temperature ?? 0.4;
     const maxOutputTokens = Math.min(tenantConfig.llmConfig.maxOutputTokens ?? 800, gateProductSearch ? 200 : 500);
 
@@ -1136,6 +1233,7 @@ export async function runChatOrchestrator(
       }
 
       replyContent = response.content;
+      answerGeneratedByLlm = true;
       break;
     }
 
@@ -1379,7 +1477,7 @@ export async function runChatOrchestrator(
   policyFlags.push(...actionValidation.flags);
   replyContent = appendCtaPromptLine(replyContent, suggestedActions, { gateProductSearch });
   replyContent = compactReplyText(replyContent, { channel: input.channel });
-  const responseQuality = validateResponseQuality({
+  let responseQuality = validateResponseQuality({
     reply: replyContent,
     state: agentState,
     fallbackReply: finalProducts.length
@@ -1387,6 +1485,88 @@ export async function runChatOrchestrator(
       : "I can help narrow this down. What kind of item should I look for?",
   });
   replyContent = responseQuality.reply;
+  if (
+    llm &&
+    answerRoute &&
+    answerGeneratedByLlm &&
+    !options?.onToken &&
+    answerRoute.escalationModel !== answerRoute.model &&
+    shouldRetryResponseQuality(responseQuality.flags)
+  ) {
+    const retryModel = answerRoute.escalationModel;
+    const productContext = finalProducts
+      .slice(0, 5)
+      .map((product) => `${product.name}${product.price ? ` (${currency} ${product.price})` : ""}`)
+      .join("; ");
+    const retryMessages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...historyToChatMessages(history).map((m) => ({ role: m.role, content: m.content })),
+      {
+        role: "user",
+        content: [
+          text,
+          "",
+          "Rewrite the assistant reply for the customer. Keep it concise, accurate, and in the customer's language.",
+          `Quality issues to fix: ${responseQuality.flags.join(", ")}`,
+          productContext ? `Relevant products: ${productContext}` : "",
+          suggestedActions.length
+            ? `Available next actions: ${suggestedActions.map((action) => action.label).join(", ")}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      },
+    ];
+    const retry = await trace.time(
+      "llm_answer_quality_retry",
+      () =>
+        llm.chat({
+          model: retryModel,
+          messages: retryMessages,
+          temperature: Math.min(tenantConfig.llmConfig.temperature ?? 0.4, 0.3),
+          maxOutputTokens: Math.min(tenantConfig.llmConfig.maxOutputTokens ?? 800, 400),
+        }),
+      { model: retryModel, previousModel: answerRoute.model, flags: responseQuality.flags }
+    );
+    totalInputTokens += retry.usage.inputTokens;
+    totalOutputTokens += retry.usage.outputTokens;
+    const retryReply = compactReplyText(
+      appendCtaPromptLine(
+        compactReplyText(sanitizeReplyText(retry.content, input.channel), { channel: input.channel }),
+        suggestedActions,
+        { gateProductSearch }
+      ),
+      { channel: input.channel }
+    );
+    const retryQuality = validateResponseQuality({
+      reply: retryReply,
+      state: agentState,
+      fallbackReply: responseQuality.reply,
+    });
+    if (!shouldRetryResponseQuality(retryQuality.flags)) {
+      replyContent = retryQuality.reply;
+      responseQuality = {
+        reply: retryQuality.reply,
+        flags: [...responseQuality.flags, "retried_with_escalation_model", ...retryQuality.flags],
+      };
+      policyFlags.push("quality_retry_escalated");
+      trace.record("response_quality_retry", 0, true, {
+        retryModel,
+        previousModel: answerRoute.model,
+        previousFlags: responseQuality.flags,
+      });
+    } else {
+      responseQuality = {
+        reply: responseQuality.reply,
+        flags: [...responseQuality.flags, "quality_retry_rejected", ...retryQuality.flags],
+      };
+      trace.record("response_quality_retry", 0, false, {
+        retryModel,
+        previousModel: answerRoute.model,
+        retryFlags: retryQuality.flags,
+      });
+    }
+  }
   const finalProductSkus = finalProducts.map((product) => product.sku).filter(Boolean);
   const finalProductNames = finalProducts.map((product) => product.name).filter(Boolean);
   const recentProductSet = new Set(agentState.memory.recentProductSkus.map((sku) => sku.toUpperCase()));
@@ -1410,6 +1590,9 @@ export async function runChatOrchestrator(
     planAction,
     policyFlags,
     responseQualityFlags: responseQuality.flags,
+    responseModel: answerRoute?.model ?? null,
+    responseModelEscalated: answerRoute?.escalated ?? false,
+    responseModelRouteReasons: answerRoute?.reasons ?? [],
     toolObservations,
     excludeSkus,
     surfacedProductSkus: finalProductSkus,
@@ -1426,6 +1609,8 @@ export async function runChatOrchestrator(
     subIntent,
     funnelStage: finalFunnel.stage,
     llmProvider: llm?.name ?? "fallback",
+    llmModel: answerRoute?.model,
+    llmModelRouteReasons: answerRoute?.reasons,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     toolCalls: finalToolResults.map((t) => t.tool),

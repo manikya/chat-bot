@@ -45,6 +45,8 @@ export interface TenantConfig {
     plannerModel?: string;
     /** Higher-quality model used for offline/admin catalog intelligence generation. */
     catalogIntelligenceModel?: string;
+    /** Higher-quality model used when a reply is high-risk or a quality retry is needed. */
+    escalationModel?: string;
     embeddingModel: string;
     /** LLM sampling temperature (0–1). Default 0.4 when unset. */
     temperature?: number;

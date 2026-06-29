@@ -19,6 +19,7 @@ export interface CoreConfig {
   llmModel: string;
   plannerModel?: string;
   catalogIntelligenceModel?: string;
+  escalationModel?: string;
   ingestMaxPages: number;
   apiPublicUrl: string;
   widgetCdnUrl?: string;
@@ -87,6 +88,7 @@ export function loadConfig(): CoreConfig {
     llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
     plannerModel: process.env.PLANNER_MODEL,
     catalogIntelligenceModel: process.env.CATALOG_INTELLIGENCE_MODEL,
+    escalationModel: process.env.ESCALATION_MODEL,
     ingestMaxPages: Number(process.env.INGEST_MAX_PAGES ?? 50),
     apiPublicUrl: process.env.API_PUBLIC_URL ?? "http://localhost:3001",
     widgetCdnUrl: process.env.WIDGET_CDN_URL,

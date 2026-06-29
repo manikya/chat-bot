@@ -897,6 +897,7 @@ function buildTemplate({
             S3_DATA_BUCKET: { Ref: "DataBucket" },
             S3_PUBLIC_URL: { Ref: "AssetsPublicUrl" },
             OPENAI_API_KEY: { Ref: "OpenAIApiKey" },
+            ESCALATION_MODEL: { Ref: "EscalationModel" },
             META_APP_ID: { Ref: "MetaAppId" },
             META_APP_SECRET: { Ref: "MetaAppSecret" },
             META_VERIFY_TOKEN: { Ref: "MetaVerifyToken" },
@@ -1049,6 +1050,7 @@ function buildTemplate({
       WidgetCdnUrl: { Type: "String", Default: "" },
       AssetsPublicUrl: { Type: "String", Default: "" },
       OpenAIApiKey: { Type: "String", NoEcho: true, Default: "" },
+      EscalationModel: { Type: "String", Default: "" },
       MetaAppId: { Type: "String", Default: "" },
       MetaAppSecret: { Type: "String", NoEcho: true, Default: "" },
       MetaVerifyToken: { Type: "String", NoEcho: true, Default: "" },
@@ -1311,6 +1313,9 @@ async function main() {
   const socialContentCronSecret = hasArg("social-content-cron-secret")
     ? arg("social-content-cron-secret", "")
     : process.env.SOCIAL_CONTENT_CRON_SECRET ?? deployedEnv?.SOCIAL_CONTENT_CRON_SECRET ?? randomBytes(32).toString("hex");
+  const escalationModel = hasArg("escalation-model")
+    ? arg("escalation-model", "")
+    : process.env.ESCALATION_MODEL ?? deployedEnv?.ESCALATION_MODEL ?? "";
   const shopifyApiKey = hasArg("shopify-api-key")
     ? arg("shopify-api-key", "")
     : process.env.SHOPIFY_API_KEY ?? deployedEnv?.SHOPIFY_API_KEY ?? "";
@@ -1503,6 +1508,7 @@ async function main() {
         `WidgetCdnUrl=${widgetCdnUrl}`,
         "AssetsPublicUrl=",
         `OpenAIApiKey=${openaiApiKey}`,
+        `EscalationModel=${escalationModel}`,
         `MetaAppId=${metaAppId}`,
         `MetaAppSecret=${metaAppSecret}`,
         `MetaVerifyToken=${metaVerifyToken}`,
