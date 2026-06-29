@@ -56,6 +56,7 @@ import { handler as chatApiHandler } from "../handlers/chat-api";
 import { handler as tenantUsageHandler } from "../handlers/tenant-usage";
 import { handler as tenantWidgetKeyHandler } from "../handlers/tenant-widget-key";
 import {
+  aiWalletTopupHandler as platformTenantAiWalletTopupHandler,
   getHandler as platformTenantGetHandler,
   listHandler as platformTenantListHandler,
   patchHandler as platformTenantPatchHandler,
@@ -300,6 +301,12 @@ const PATTERN_ROUTES: Array<{
     pattern: /^\/api\/v1\/platform\/tenants\/([^/]+)$/,
     paramNames: ["tenantId"],
     handler: platformTenantPatchHandler,
+  },
+  {
+    method: "POST",
+    pattern: /^\/api\/v1\/platform\/tenants\/([^/]+)\/ai-wallet\/topup$/,
+    paramNames: ["tenantId"],
+    handler: platformTenantAiWalletTopupHandler,
   },
   {
     method: "PATCH",

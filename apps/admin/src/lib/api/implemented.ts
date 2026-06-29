@@ -66,6 +66,7 @@ export const IMPLEMENTED_ROUTES = [
   "GET /api/v1/platform/tenants",
   "GET /api/v1/platform/tenants/:tenantId",
   "PATCH /api/v1/platform/tenants/:tenantId",
+  "POST /api/v1/platform/tenants/:tenantId/ai-wallet/topup",
   "GET /api/v1/platform/users",
   "POST /api/v1/platform/users",
   "PATCH /api/v1/platform/users/:email",

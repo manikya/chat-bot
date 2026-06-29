@@ -54,6 +54,7 @@ const BASE_ROUTES = [
   ["GET", "/api/v1/platform/tenants", "platform-tenants", "listHandler"],
   ["GET", "/api/v1/platform/tenants/{tenantId}", "platform-tenants", "getHandler"],
   ["PATCH", "/api/v1/platform/tenants/{tenantId}", "platform-tenants", "patchHandler"],
+  ["POST", "/api/v1/platform/tenants/{tenantId}/ai-wallet/topup", "platform-tenants", "aiWalletTopupHandler"],
   ["GET", "/api/v1/platform/users", "platform-users", "listHandler"],
   ["POST", "/api/v1/platform/users", "platform-users", "createUserHandler"],
   ["PATCH", "/api/v1/platform/users/{email}", "platform-users", "patchHandler"],

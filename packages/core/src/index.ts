@@ -106,6 +106,7 @@ export {
   listPlatformTenants,
   getPlatformTenant,
   updatePlatformTenant,
+  topUpPlatformTenantAiWallet,
   listPlatformUsers,
   createPlatformUser,
   updatePlatformUser,

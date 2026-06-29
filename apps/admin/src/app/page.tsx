@@ -15,6 +15,10 @@ export default function HomePage() {
       router.replace("/login");
       return;
     }
+    if (tenant?.tenantId === "__platform__") {
+      router.replace("/platform/tenants");
+      return;
+    }
     if (
       user?.role === "owner" &&
       tenant?.onboardingStep &&

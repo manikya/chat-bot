@@ -1,23 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { PlatformTenantDetail, PlatformTenantSummary } from "@commercechat/mock-api";
+import { useRouter } from "next/navigation";
+import type { PlatformTenantSummary } from "@commercechat/mock-api";
 import {
   AlertTriangle,
   Building2,
   CheckCircle2,
   CirclePause,
-  CreditCard,
   MessageSquareText,
   RefreshCw,
   Search,
-  ShieldCheck,
-  WalletCards,
 } from "lucide-react";
 import { PageIntro, MetricTile, SectionHeader } from "@/components/layout/admin-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -36,42 +34,15 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-const STATUS_OPTIONS = ["trial", "active", "suspended", "cancelled"] as const;
-const PLAN_OPTIONS = ["trial", "starter", "pro", "business", "enterprise"] as const;
-
-function moneyMinor(value: number | undefined, currency = "LKR") {
-  return `${currency} ${((value ?? 0) / 100).toLocaleString(undefined, {
-    maximumFractionDigits: 0,
-  })}`;
-}
-
-function shortDate(value: string | undefined) {
-  if (!value) return "Not set";
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(
-    new Date(value)
-  );
-}
-
-function statusVariant(status: string) {
-  if (status === "active" || status === "trial") return "success";
-  if (status === "suspended" || status === "cancelled") return "warning";
-  return "secondary";
-}
-
-function usagePct(tenant: PlatformTenantSummary) {
-  const max = tenant.usage.maxMessages || 1;
-  return Math.min(100, Math.round((tenant.usage.messages / max) * 100));
-}
+import { moneyMinor, PLAN_OPTIONS, shortDate, STATUS_OPTIONS, statusVariant, usagePct } from "./tenant-ui";
 
 export default function PlatformTenantsPage() {
+  const router = useRouter();
   const [items, setItems] = useState<PlatformTenantSummary[]>([]);
-  const [selected, setSelected] = useState<PlatformTenantDetail | null>(null);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
   const [plan, setPlan] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -85,10 +56,6 @@ export default function PlatformTenantsPage() {
         limit: 75,
       });
       setItems(res.data.items);
-      if (selected) {
-        const fresh = res.data.items.find((item) => item.tenantId === selected.tenantId);
-        if (!fresh) setSelected(null);
-      }
     } catch (err) {
       const message =
         err && typeof err === "object" && "message" in err
@@ -112,41 +79,6 @@ export default function PlatformTenantsPage() {
     const lowWallets = items.filter((item) => item.aiWallet?.status === "low" || item.aiWallet?.status === "empty").length;
     return { active, suspended, messages, lowWallets };
   }, [items]);
-
-  const openTenant = async (tenant: PlatformTenantSummary) => {
-    setError(null);
-    setSelected({ ...tenant });
-    try {
-      const res = await api.platform.getTenant(tenant.tenantId);
-      setSelected(res.data);
-    } catch (err) {
-      const message =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message?: string }).message)
-          : "Could not load tenant details";
-      setError(message);
-    }
-  };
-
-  const updateTenant = async (tenantId: string, patch: { status?: string; plan?: string }) => {
-    setIsSaving(true);
-    setError(null);
-    try {
-      const res = await api.platform.updateTenant(tenantId, patch);
-      setSelected(res.data);
-      setItems((current) =>
-        current.map((item) => (item.tenantId === tenantId ? { ...item, ...res.data } : item))
-      );
-    } catch (err) {
-      const message =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message?: string }).message)
-          : "Could not update tenant";
-      setError(message);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -253,11 +185,8 @@ export default function PlatformTenantsPage() {
                 items.map((tenant) => (
                   <TableRow
                     key={tenant.tenantId}
-                    className={cn(
-                      "cursor-pointer",
-                      selected?.tenantId === tenant.tenantId && "bg-teal-50 hover:bg-teal-50"
-                    )}
-                    onClick={() => void openTenant(tenant)}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/platform/tenants/${encodeURIComponent(tenant.tenantId)}`)}
                   >
                     <TableCell>
                       <div className="font-semibold">{tenant.storeName}</div>
@@ -283,8 +212,13 @@ export default function PlatformTenantsPage() {
                       <div className="font-medium">{moneyMinor(tenant.aiWallet?.balanceMinor, tenant.aiWallet?.currency)}</div>
                       <div className="mt-1 text-xs text-muted-foreground">{tenant.aiWallet?.status ?? "inactive"}</div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {shortDate(tenant.billingPeriodEnd ?? tenant.trialEndsAt)}
+                    <TableCell>
+                      <div className="text-sm text-muted-foreground">
+                        {shortDate(tenant.billingPeriodEnd ?? tenant.trialEndsAt)}
+                      </div>
+                      <Button variant="ghost" size="sm" className="mt-1 px-0 text-primary">
+                        View details
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
@@ -299,94 +233,6 @@ export default function PlatformTenantsPage() {
           </Table>
         </CardContent>
       </Card>
-
-      {selected ? (
-        <Card>
-          <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <CardTitle className="text-lg">{selected.storeName}</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">{selected.ownerEmail}</p>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{selected.tenantId}</p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Select
-                value={selected.status}
-                disabled={isSaving}
-                onValueChange={(value) => void updateTenant(selected.tenantId, { status: value })}
-              >
-                <SelectTrigger className="min-w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((item) => (
-                    <SelectItem key={item} value={item}>{item}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={selected.plan}
-                disabled={isSaving}
-                onValueChange={(value) => void updateTenant(selected.tenantId, { plan: value })}
-              >
-                <SelectTrigger className="min-w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PLAN_OPTIONS.map((item) => (
-                    <SelectItem key={item} value={item}>{item}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-4 lg:grid-cols-4">
-            <div className="rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Account
-              </div>
-              <dl className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Onboarding</dt><dd>{selected.onboardingStep ?? "unknown"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Timezone</dt><dd>{selected.timezone ?? "Not set"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Created</dt><dd>{shortDate(selected.createdAt)}</dd></div>
-              </dl>
-            </div>
-            <div className="rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <CreditCard className="h-4 w-4 text-primary" />
-                Billing
-              </div>
-              <dl className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Plan</dt><dd>{selected.plan}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Period end</dt><dd>{shortDate(selected.billingPeriodEnd)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Cancels</dt><dd>{selected.cancelAtPeriodEnd ? "Yes" : "No"}</dd></div>
-              </dl>
-            </div>
-            <div className="rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <MessageSquareText className="h-4 w-4 text-primary" />
-                Usage
-              </div>
-              <dl className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Period</dt><dd>{selected.usage.period}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Messages</dt><dd>{selected.usage.messages.toLocaleString()}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Ingest jobs</dt><dd>{selected.usage.ingestJobs.toLocaleString()}</dd></div>
-              </dl>
-            </div>
-            <div className="rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <WalletCards className="h-4 w-4 text-primary" />
-                AI wallet
-              </div>
-              <dl className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Balance</dt><dd>{moneyMinor(selected.aiWallet?.balanceMinor, selected.aiWallet?.currency)}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Status</dt><dd>{selected.aiWallet?.status ?? "inactive"}</dd></div>
-                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Prepaid</dt><dd>{selected.aiWallet?.prepaidAiEnabled ? "On" : "Off"}</dd></div>
-              </dl>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
     </div>
   );
 }

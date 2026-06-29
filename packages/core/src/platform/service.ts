@@ -21,6 +21,7 @@ import { getDocClient } from "../db/client";
 import { Keys } from "../db/keys";
 import { getUsageForPeriod } from "../chat/usage";
 import { getAiWalletRaw } from "../billing/ai-wallet";
+import { creditAiWallet } from "../billing/ai-wallet";
 import { hashPassword, validatePassword, verifyPassword } from "../auth/password";
 import { signAccessToken } from "../auth/jwt";
 
@@ -275,6 +276,33 @@ export async function updatePlatformTenant(
   }
 
   return getPlatformTenant(auth, tenantId, config);
+}
+
+export async function topUpPlatformTenantAiWallet(
+  auth: AuthContext,
+  tenantId: string,
+  body: { amountMinor: number; currency?: string; resumeAi?: boolean },
+  config: CoreConfig
+) {
+  await assertPlatformAdmin(auth, config);
+  await getPlatformTenant(auth, tenantId, config);
+  return creditAiWallet(
+    {
+      tenantId,
+      userId: auth.userId,
+      role: "owner",
+      email: auth.email,
+      scope: "platform",
+      platformRole: auth.platformRole,
+    },
+    {
+      amountMinor: body.amountMinor,
+      currency: body.currency,
+      reason: "topup",
+      resumeAi: body.resumeAi,
+    },
+    config
+  );
 }
 
 function assertPlatformOwner(user: PlatformUser) {

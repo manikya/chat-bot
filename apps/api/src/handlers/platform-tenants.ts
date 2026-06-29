@@ -2,6 +2,7 @@ import {
   getPlatformTenant,
   listPlatformTenants,
   loadConfig,
+  topUpPlatformTenantAiWallet,
   updatePlatformTenant,
 } from "@commercechat/core";
 import type { TenantPlan, TenantStatus } from "@commercechat/shared";
@@ -33,6 +34,14 @@ export const patchHandler = createHandler(
   async (event, auth) => {
     const body = parseBody<{ status?: TenantStatus; plan?: TenantPlan }>(event);
     return updatePlatformTenant(auth!, pathParam(event, "tenantId")!, body, loadConfig());
+  },
+  { requireAuth: true }
+);
+
+export const aiWalletTopupHandler = createHandler(
+  async (event, auth) => {
+    const body = parseBody<{ amountMinor: number; currency?: string; resumeAi?: boolean }>(event);
+    return topUpPlatformTenantAiWallet(auth!, pathParam(event, "tenantId")!, body, loadConfig());
   },
   { requireAuth: true }
 );

@@ -15,6 +15,10 @@ const ROUTING_FUNCTION_CODE = `function handler(event) {
     request.uri = "/conversations/_/index.html";
     return request;
   }
+  if (uri.indexOf("/platform/tenants/") === 0 && uri.indexOf("/platform/tenants/_/") !== 0) {
+    request.uri = "/platform/tenants/_/index.html";
+    return request;
+  }
   if (uri.endsWith("/")) {
     request.uri = uri + "index.html";
   } else if (uri.indexOf(".") === -1) {

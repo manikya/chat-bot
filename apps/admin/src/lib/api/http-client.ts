@@ -695,6 +695,11 @@ export function createHttpApi() {
           method: "PATCH",
           body: JSON.stringify(body),
         }),
+      topUpTenantAiWallet: (tenantId: string, body: { amountMinor: number; currency?: string; resumeAi?: boolean }) =>
+        request<AiWalletOverview>(`/api/v1/platform/tenants/${tenantId}/ai-wallet/topup`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
       listUsers: () => request<PlatformUserList>("/api/v1/platform/users"),
       createUser: (body: { email: string; name: string; password: string; role?: string }) =>
         request<PlatformUser>("/api/v1/platform/users", {

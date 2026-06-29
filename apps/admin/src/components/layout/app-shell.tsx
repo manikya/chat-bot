@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -59,18 +60,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, tenant, logout } = useAuth();
-  const visibleNav = isPlatformAdminEmail(user?.email, tenant?.tenantId)
-    ? [
-        { href: "/platform/tenants", label: "Platform tenants", icon: ShieldCheck },
-        { href: "/platform/users", label: "Platform users", icon: Users },
-        ...nav,
-      ]
-    : nav;
+  const isPlatformAdmin = isPlatformAdminEmail(user?.email, tenant?.tenantId);
+  const isPlatformSession = tenant?.tenantId === "__platform__";
+  const platformNav = [
+    { href: "/platform/tenants", label: "Tenants", icon: ShieldCheck },
+    { href: "/platform/users", label: "Users", icon: Users },
+  ];
+  const visibleNav = isPlatformAdmin ? platformNav : nav;
 
   const showOnboardingBanner =
+    !isPlatformAdmin &&
     user?.role === "owner" &&
     tenant?.onboardingStep &&
     tenant.onboardingStep !== "complete";
+
+  useEffect(() => {
+    if (isPlatformAdmin && !pathname.startsWith("/platform")) {
+      router.replace("/platform/tenants");
+    }
+  }, [isPlatformAdmin, pathname, router]);
 
   return (
     <div className="grid min-h-screen bg-transparent md:grid-cols-[264px_minmax(0,1fr)]">
@@ -81,13 +89,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
           <div>
             <p className="text-sm font-semibold tracking-normal text-white">CommerceChat</p>
-            <p className="max-w-[150px] truncate text-[11px] text-white/50">{tenant?.storeName ?? "Precision admin"}</p>
+            <p className="max-w-[150px] truncate text-[11px] text-white/50">
+              {isPlatformAdmin ? "Platform operations" : tenant?.storeName ?? "Precision admin"}
+            </p>
           </div>
         </div>
 
         <div>
           <p className="px-2 pb-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.075em] text-white/40">
-            Operate
+            {isPlatformAdmin ? "Platform" : "Operate"}
           </p>
           <nav className="grid gap-[3px]">
             {visibleNav.map((item) => {
@@ -134,6 +144,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="block h-full w-[72%] rounded-full bg-primary" />
             </span>
           </button>
+        ) : isPlatformAdmin ? (
+          <div className="mt-auto rounded-[10px] border border-white/[0.08] bg-white/[0.055] p-3">
+            <strong className="block text-[13px] font-semibold text-white">Platform mode</strong>
+            <p className="mt-1 text-xs leading-relaxed text-white/60">
+              Manage tenants and platform users without entering merchant workspaces.
+            </p>
+          </div>
         ) : (
           <div className="mt-auto rounded-[10px] border border-white/[0.08] bg-white/[0.055] p-3">
             <strong className="block text-[13px] font-semibold text-white">Setup progress</strong>
@@ -153,22 +170,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Search className="h-4 w-4" />
             <input
               className="h-full w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-              placeholder="Find conversations, SKUs, sources, API keys"
+              placeholder={isPlatformAdmin ? "Find tenants, owners, platform users" : "Find conversations, SKUs, sources, API keys"}
               aria-label="Search admin"
             />
           </label>
           <div className="ml-auto flex items-center gap-2.5">
-            <Badge variant="secondary">{tenant?.plan ?? "trial"} plan</Badge>
+            <Badge variant="secondary">{isPlatformAdmin ? "platform" : tenant?.plan ?? "trial"}</Badge>
             <span className="hidden rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground sm:inline-flex">
-              Owner: {user?.name ?? "Admin"}
+              {isPlatformAdmin ? "Admin" : "Owner"}: {user?.name ?? "Admin"}
             </span>
-            <Button variant="outline" size="sm" asChild className="hidden md:inline-flex">
-              <Link href="/settings/team">
-                <UserPlus className="h-3.5 w-3.5" />
-                Invite teammate
-              </Link>
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => logout().then(() => router.push("/login"))}>
+            {!isPlatformAdmin && (
+              <Button variant="outline" size="sm" asChild className="hidden md:inline-flex">
+                <Link href="/settings/team">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Invite teammate
+                </Link>
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => logout().then(() => router.push(isPlatformSession ? "/platform/login" : "/login"))}
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
