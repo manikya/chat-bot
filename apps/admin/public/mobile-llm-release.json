@@ -1,12 +1,13 @@
 {
-  "id": "gemma-local",
-  "version": "pending",
-  "displayName": "Gemma local model",
-  "fileName": "gemma-local-pending.task",
-  "downloadUrl": "",
-  "sizeBytes": 0,
+  "id": "gemma-4-e2b-it-litert",
+  "version": "2026-06-30",
+  "displayName": "Gemma 4 E2B IT LiteRT",
+  "fileName": "gemma-4-E2B-it-web.task",
+  "downloadUrl": "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.task",
+  "sizeBytes": 2003697664,
   "md5": "",
   "notes": [
-    "Upload the approved Gemma .task artifact, then update this manifest with its URL, size, version, file name, and checksum."
+    "Official public LiteRT Community Gemma model hosted on Hugging Face.",
+    "Download size is about 1.9 GB; use Wi-Fi and sufficient device storage."
   ]
 }
