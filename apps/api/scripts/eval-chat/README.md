@@ -14,6 +14,8 @@ Use these scripts to test chat quality before changing prompts, model settings, 
 
 Each case in `cases.json` still uses `expect` fields. The assertions produce both a pass/fail result and a weighted score from `0` to `100`.
 
+For multi-turn quality, `conversation-cases.json` uses `turns`, where each turn can carry its own `expect`. The runner scores each asserted turn plus the final `expect`, so a conversation can fail when the bot asks the same question twice, forgets the recipient/budget, repeats products, or gives a good final answer after a bad earlier turn.
+
 ## Run The Golden Eval
 
 Start the API, then run:
@@ -27,6 +29,39 @@ Useful thresholds:
 ```sh
 EVAL_MIN_PASS_PCT=90 EVAL_MIN_SCORE=88 npm run eval:chat
 ```
+
+## Run Conversation Evals
+
+These cases evaluate the whole customer journey, not only the final response:
+
+```sh
+API_URL=http://localhost:3001 WIDGET_API_KEY=pk_live_... npm run eval:conversation
+```
+
+Case shape:
+
+```json
+{
+  "id": "gift-qualification-stays-progressive",
+  "turns": [
+    { "user": "I need a gift", "expect": { "replyIncludes": ["who is it for"] } },
+    { "user": "for a client", "expect": { "replyIncludes": ["budget"] } },
+    { "user": "mid range", "expect": { "toolsIncludes": ["search_products"] } }
+  ],
+  "expect": {
+    "noRepeatedQuestionsInConversation": true,
+    "conversationExcludes": ["undefined", "null"]
+  }
+}
+```
+
+Useful conversation-level assertions:
+
+- `minConversationTurns`
+- `maxConversationQuestions`
+- `noRepeatedQuestionsInConversation`
+- `conversationIncludes`
+- `conversationExcludes`
 
 ## Run Retrieval-Focused Evals
 

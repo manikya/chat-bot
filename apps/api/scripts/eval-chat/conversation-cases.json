@@ -1,0 +1,160 @@
+[
+  {
+    "id": "gift-qualification-stays-progressive",
+    "turns": [
+      {
+        "user": "I need a gift",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "maxProductCards": 0,
+          "replyIncludes": ["who is it for"],
+          "maxReplyWords": 35,
+          "maxQuestions": 1,
+          "replyNoArtifacts": true
+        }
+      },
+      {
+        "user": "for a client",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "maxProductCards": 0,
+          "replyIncludes": ["budget"],
+          "replyExcludes": ["who is it for"],
+          "maxReplyWords": 40,
+          "maxQuestions": 1,
+          "noRepeatedQuestionsAcrossConversation": true,
+          "replyNoArtifacts": true
+        }
+      },
+      {
+        "user": "mid range",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "toolsIncludes": ["search_products"],
+          "maxProductCards": 3,
+          "replyExcludes": ["who is it for", "what is your budget"],
+          "maxQuestions": 1,
+          "noRepeatedQuestionsAcrossConversation": true,
+          "replyNoArtifacts": true
+        }
+      }
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "minConversationTurns": 3,
+      "noRepeatedQuestionsInConversation": true,
+      "maxConversationQuestions": 3,
+      "conversationIncludes": ["client"],
+      "conversationExcludes": ["undefined", "null"],
+      "noDuplicateSuggestedActions": true,
+      "replyNoArtifacts": true
+    }
+  },
+  {
+    "id": "show-more-changes-products",
+    "turns": [
+      {
+        "user": "What unique gifts do you have for birthdays?",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "maxProductCards": 0,
+          "replyIncludes": ["budget"],
+          "maxQuestions": 1,
+          "replyNoArtifacts": true
+        }
+      },
+      {
+        "user": "Show mid range options",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "toolsIncludes": ["search_products"],
+          "minProductCards": 1,
+          "maxProductCards": 3,
+          "noDuplicateProductSkus": true,
+          "maxQuestions": 1,
+          "replyNoArtifacts": true
+        }
+      },
+      {
+        "user": "what else do you have",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "toolsIncludes": ["search_products"],
+          "salesPlanUserMove": "show_more",
+          "minProductCards": 1,
+          "noRepeatedProductSkusFromPreviousTurn": true,
+          "noRepeatedProductSkusAcrossConversation": true,
+          "noDuplicateProductSkus": true,
+          "maxQuestions": 1,
+          "replyNoArtifacts": true
+        }
+      }
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "minConversationTurns": 3,
+      "noRepeatedQuestionsInConversation": true,
+      "noDuplicateSuggestedActions": true,
+      "replyNoArtifacts": true
+    }
+  },
+  {
+    "id": "specific-interest-after-results-does-not-downsell",
+    "turns": [
+      {
+        "user": "i m looking for a gift for mom",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "maxProductCards": 0,
+          "replyIncludes": ["budget"],
+          "maxQuestions": 1,
+          "replyNoArtifacts": true
+        }
+      },
+      {
+        "user": "Show premium options above LKR 7,000",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "toolsIncludes": ["search_products"],
+          "minProductCards": 1,
+          "minProductPrice": 7000,
+          "maxQuestions": 1,
+          "replyNoArtifacts": true
+        }
+      },
+      {
+        "user": "can i get the ribbon flowers",
+        "expect": {
+          "nonEmptyReply": true,
+          "intent": "product",
+          "toolsIncludes": ["search_products"],
+          "salesPlanCloseIntent": ["product_interest", "add_to_cart", "checkout_ready"],
+          "salesPlanCloseTargetIncludes": ["ribbon"],
+          "productNameIncludesAny": ["Ribbon Flower"],
+          "replyIncludes": ["in stock"],
+          "replyExcludes": ["below LKR 7,000", "budget friendly", "mid range", "Ready to checkout", "checkout link"],
+          "suggestedActionExcludes": ["checkout"],
+          "minProductPrice": 7000,
+          "maxQuestions": 1,
+          "replyNoArtifacts": true
+        }
+      }
+    ],
+    "expect": {
+      "nonEmptyReply": true,
+      "minConversationTurns": 3,
+      "noRepeatedQuestionsInConversation": true,
+      "conversationIncludes": ["mom", "ribbon"],
+      "conversationExcludes": ["undefined", "null", "tool_call"],
+      "replyNoArtifacts": true
+    }
+  }
+]

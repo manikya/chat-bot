@@ -20,6 +20,10 @@ function questions(text) {
   return String(text || "").match(/[^.!?]*\?/g)?.map((q) => q.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()).filter(Boolean) ?? [];
 }
 
+function normalizeText(text) {
+  return String(text || "").toLowerCase();
+}
+
 function duplicates(values) {
   const seen = new Set();
   const dupes = new Set();
@@ -107,7 +111,7 @@ const CHECKS = [
     dimension: "response",
     applies: (expect) => expect.replyIncludes,
     run: (out, expect) => {
-      const reply = String(out.reply || "").toLowerCase();
+      const reply = normalizeText(out.reply);
       const missing = expect.replyIncludes.filter((text) => !reply.includes(String(text).toLowerCase()));
       return missing.length ? `reply missing ${missing.map((text) => `"${text}"`).join(", ")}` : null;
     },
@@ -117,9 +121,29 @@ const CHECKS = [
     dimension: "response",
     applies: (expect) => expect.replyExcludes,
     run: (out, expect) => {
-      const reply = String(out.reply || "").toLowerCase();
+      const reply = normalizeText(out.reply);
       const present = expect.replyExcludes.filter((text) => reply.includes(String(text).toLowerCase()));
       return present.length ? `reply should not include ${present.map((text) => `"${text}"`).join(", ")}` : null;
+    },
+  },
+  {
+    id: "conversationIncludes",
+    dimension: "response",
+    applies: (expect) => expect.conversationIncludes,
+    run: (out, expect) => {
+      const text = normalizeText(out.conversationText);
+      const missing = expect.conversationIncludes.filter((term) => !text.includes(String(term).toLowerCase()));
+      return missing.length ? `conversation missing ${missing.map((term) => `"${term}"`).join(", ")}` : null;
+    },
+  },
+  {
+    id: "conversationExcludes",
+    dimension: "response",
+    applies: (expect) => expect.conversationExcludes,
+    run: (out, expect) => {
+      const text = normalizeText(out.conversationText);
+      const present = expect.conversationExcludes.filter((term) => text.includes(String(term).toLowerCase()));
+      return present.length ? `conversation should not include ${present.map((term) => `"${term}"`).join(", ")}` : null;
     },
   },
   {
@@ -279,6 +303,37 @@ const CHECKS = [
       const prior = new Set((out.previousReplies ?? []).flatMap(questions));
       const repeated = questions(out.reply).filter((question) => prior.has(question));
       return repeated.length ? `repeated assistant question ${repeated.join(", ")}` : null;
+    },
+  },
+  {
+    id: "noRepeatedQuestionsInConversation",
+    dimension: "engagement",
+    applies: (expect) => expect.noRepeatedQuestionsInConversation,
+    run: (out) => {
+      const repeated = duplicates((out.conversationOutputs ?? []).flatMap((item) => questions(item.reply)));
+      return repeated.length ? `repeated assistant question in conversation ${repeated.join(", ")}` : null;
+    },
+  },
+  {
+    id: "maxConversationQuestions",
+    dimension: "engagement",
+    applies: (expect) => expect.maxConversationQuestions != null,
+    run: (out, expect) => {
+      const count = (out.conversationOutputs ?? []).reduce((sum, item) => sum + questionCount(item.reply), 0);
+      return count <= expect.maxConversationQuestions
+        ? null
+        : `conversation expected <= ${expect.maxConversationQuestions} questions, got ${count}`;
+    },
+  },
+  {
+    id: "minConversationTurns",
+    dimension: "reliability",
+    applies: (expect) => expect.minConversationTurns != null,
+    run: (out, expect) => {
+      const turns = out.conversationOutputs?.length ?? 0;
+      return turns >= expect.minConversationTurns
+        ? null
+        : `conversation expected >= ${expect.minConversationTurns} assistant turns, got ${turns}`;
     },
   },
   {

@@ -19,6 +19,82 @@ const casesPath = process.env.EVAL_CASES_PATH
 const cases = JSON.parse(readFileSync(casesPath, "utf8"));
 const criteria = JSON.parse(readFileSync(join(__dirname, "criteria.json"), "utf8"));
 
+function normalizeTurns(c) {
+  if (Array.isArray(c.turns)) {
+    return c.turns.map((turn) =>
+      typeof turn === "string" ? { user: turn } : { user: turn.user ?? turn.message, expect: turn.expect }
+    );
+  }
+  return (c.messages ?? [c.message]).map((message, index) => ({
+    user: message,
+    expect: c.turnExpectations?.[index],
+  }));
+}
+
+function attachConversationContext(outputs) {
+  return outputs.map((out, index) => ({
+    ...out,
+    turnIndex: index + 1,
+    previousProductSkus: outputs[index - 1]?.productSkus ?? [],
+    allPreviousProductSkus: outputs.slice(0, index).flatMap((item) => item.productSkus ?? []),
+    previousReplies: outputs.slice(0, index).map((item) => item.reply).filter(Boolean),
+    previousSuggestedActionMessages: outputs
+      .slice(0, index)
+      .flatMap((item) => item.suggestedActionMessages ?? []),
+    conversationOutputs: outputs,
+    conversationText: outputs.map((item) => item.reply).filter(Boolean).join("\n"),
+  }));
+}
+
+function printOutput(c, out, evaluation, prefix = "") {
+  const failures = evaluation.failures;
+  const preview = String(out.reply).replace(/\s+/g, " ").slice(0, 140);
+  console.log(
+    `${prefix}[${c.id}] intent=${out.intent ?? "?"} sub=${out.subIntent ?? "?"} funnel=${out.funnelStage ?? "?"} ` +
+      `score=${evaluation.score} cards=${out.productCards} skus=${out.productSkus.join("|") || "-"} ` +
+      `actions=${out.suggestedActions} tools=${out.tools || "-"}`
+  );
+  if (out.salesPlan) {
+    console.log(
+      `  plan trusted=${out.salesPlan.trusted ?? "?"} confidence=${out.salesPlan.confidence ?? "?"} ` +
+        `intent=${out.salesPlan.intent ?? "?"} sub=${out.salesPlan.subIntent ?? "?"} stage=${out.salesPlan.funnelStage ?? "?"} ` +
+        `action=${out.salesPlan.action ?? "?"} gate=${out.salesPlan.gateProductSearch ?? "?"} ` +
+        `move=${out.salesPlan.userMove ?? "?"} close=${out.salesPlan.closeIntent ?? "?"} lang=${out.salesPlan.languageStyle ?? "?"} query=${out.salesPlan.searchQuery ?? "-"} slot=${out.salesPlan.missingSlot ?? "-"}`
+    );
+  }
+  console.log(`  -> ${preview}${String(out.reply).length > 140 ? "..." : ""}`);
+  if (out.retrievedChunks.length) {
+    for (const chunk of out.retrievedChunks.slice(0, 5)) {
+      const label = [
+        chunk.sourceType,
+        chunk.sku,
+        chunk.title ?? chunk.section,
+        chunk.score != null ? `score=${chunk.score}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const contextPreview = String(chunk.textPreview ?? "").replace(/\s+/g, " ").slice(0, 120);
+      console.log(`  RAG ${label}: ${contextPreview}${contextPreview.length >= 120 ? "..." : ""}`);
+    }
+  } else {
+    console.log("  RAG -");
+  }
+
+  if (failures.length) {
+    console.error(`  FAIL: ${failures.join("; ")}`);
+  } else {
+    console.log("  OK");
+  }
+}
+
+function combineEvaluations(evaluations) {
+  const failures = evaluations.flatMap((item) => item.evaluation.failures.map((failure) => `${item.label}: ${failure}`));
+  const score = evaluations.length
+    ? Math.round(evaluations.reduce((sum, item) => sum + item.evaluation.score, 0) / evaluations.length)
+    : 100;
+  return { failures, score };
+}
+
 async function chat(message, sessionId) {
   const path = API_KEY ? "/api/v1/widget/chat" : "/api/v1/chat";
   const headers = { "Content-Type": "application/json" };
@@ -74,69 +150,51 @@ async function main() {
   for (const c of cases) {
     try {
       const sessionId = `eval-${Date.now()}-${c.id}`;
-      const messages = c.messages ?? [c.message];
-      let out;
+      const turns = normalizeTurns(c);
       const outputs = [];
-      for (const message of messages) {
-        out = await chat(message, sessionId);
+      for (const turn of turns) {
+        const out = await chat(turn.user, sessionId);
         outputs.push(out);
       }
-      if (out && outputs.length > 1) {
-        out.previousProductSkus = outputs.at(-2)?.productSkus ?? [];
-        out.allPreviousProductSkus = outputs.slice(0, -1).flatMap((item) => item.productSkus ?? []);
-        out.previousReplies = outputs.slice(0, -1).map((item) => item.reply).filter(Boolean);
-        out.previousSuggestedActionMessages = outputs.slice(0, -1).flatMap((item) => item.suggestedActionMessages ?? []);
-      }
-      if (out) {
-        out.conversationOutputs = outputs;
-      }
-      const evaluation = evaluateCase(out, c.expect ?? {}, criteria);
-      const failures = evaluation.failures;
-      const preview = String(out.reply).replace(/\s+/g, " ").slice(0, 140);
-      totalScore += evaluation.score;
-      for (const dim of Object.values(evaluation.dimensions)) {
-        if (!dim.applicable) continue;
-        const current = dimensionTotals.get(dim.id) ?? { label: dim.label, score: 0, count: 0 };
-        current.score += Math.round((dim.passed / dim.applicable) * 100);
-        current.count += 1;
-        dimensionTotals.set(dim.id, current);
-      }
-      console.log(
-        `[${c.id}] intent=${out.intent ?? "?"} sub=${out.subIntent ?? "?"} funnel=${out.funnelStage ?? "?"} ` +
-          `score=${evaluation.score} cards=${out.productCards} skus=${out.productSkus.join("|") || "-"} ` +
-          `actions=${out.suggestedActions} tools=${out.tools || "-"}`
-      );
-      if (out.salesPlan) {
-        console.log(
-          `  plan trusted=${out.salesPlan.trusted ?? "?"} confidence=${out.salesPlan.confidence ?? "?"} ` +
-            `intent=${out.salesPlan.intent ?? "?"} sub=${out.salesPlan.subIntent ?? "?"} stage=${out.salesPlan.funnelStage ?? "?"} ` +
-            `action=${out.salesPlan.action ?? "?"} gate=${out.salesPlan.gateProductSearch ?? "?"} ` +
-            `move=${out.salesPlan.userMove ?? "?"} close=${out.salesPlan.closeIntent ?? "?"} lang=${out.salesPlan.languageStyle ?? "?"} query=${out.salesPlan.searchQuery ?? "-"} slot=${out.salesPlan.missingSlot ?? "-"}`
-        );
-      }
-      console.log(`  → ${preview}${String(out.reply).length > 140 ? "…" : ""}`);
-      if (out.retrievedChunks.length) {
-        for (const chunk of out.retrievedChunks.slice(0, 5)) {
-          const label = [
-            chunk.sourceType,
-            chunk.sku,
-            chunk.title ?? chunk.section,
-            chunk.score != null ? `score=${chunk.score}` : undefined,
-          ]
-            .filter(Boolean)
-            .join(" ");
-          const contextPreview = String(chunk.textPreview ?? "").replace(/\s+/g, " ").slice(0, 120);
-          console.log(`  RAG ${label}: ${contextPreview}${contextPreview.length >= 120 ? "…" : ""}`);
-        }
-      } else {
-        console.log("  RAG -");
+      const contextualOutputs = attachConversationContext(outputs);
+      const out = contextualOutputs.at(-1);
+      const turnEvaluations = [];
+      for (let i = 0; i < turns.length; i++) {
+        if (!turns[i].expect) continue;
+        turnEvaluations.push({
+          label: `turn ${i + 1}`,
+          evaluation: evaluateCase(contextualOutputs[i], turns[i].expect, criteria),
+          out: contextualOutputs[i],
+          turn: turns[i],
+        });
       }
 
-      if (failures.length) {
-        console.error(`  FAIL: ${failures.join("; ")}\n`);
+      const finalEvaluation = evaluateCase(out, c.expect ?? {}, criteria);
+      const evaluations = [
+        ...turnEvaluations,
+        { label: "final", evaluation: finalEvaluation },
+      ];
+      const combined = combineEvaluations(evaluations);
+      totalScore += combined.score;
+      for (const { evaluation } of evaluations) {
+        for (const dim of Object.values(evaluation.dimensions)) {
+          if (!dim.applicable) continue;
+          const current = dimensionTotals.get(dim.id) ?? { label: dim.label, score: 0, count: 0 };
+          current.score += Math.round((dim.passed / dim.applicable) * 100);
+          current.count += 1;
+          dimensionTotals.set(dim.id, current);
+        }
+      }
+      for (const item of turnEvaluations) {
+        printOutput(c, item.out, item.evaluation, `turn ${item.out.turnIndex} `);
+      }
+      printOutput(c, out, finalEvaluation);
+
+      if (combined.failures.length) {
+        console.error(`  CASE FAIL: ${combined.failures.join("; ")}\n`);
         failed++;
       } else {
-        console.log("  OK\n");
+        console.log(`  CASE OK score=${combined.score}\n`);
         passed++;
       }
     } catch (e) {
