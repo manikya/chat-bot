@@ -22,6 +22,10 @@ import type {
   Usage,
   User,
 } from "@commercechat/mock-api";
+import type {
+  MobileAiSnapshotDelta,
+  MobileAiSnapshotManifest,
+} from "@commercechat/shared/types";
 import * as SecureStore from "expo-secure-store";
 import {
   clearSessionProfile,
@@ -459,6 +463,18 @@ export const api = {
         "/api/v1/knowledge/page-voice/sync",
         { method: "POST", body: JSON.stringify({}) }
       );
+    },
+  },
+  mobileAi: {
+    getSnapshotManifest() {
+      return request<MobileAiSnapshotManifest>("/api/v1/mobile-ai/snapshot/manifest");
+    },
+    getSnapshotChunks(params?: { sinceVersion?: number; maxChunks?: number }) {
+      const search = new URLSearchParams();
+      if (params?.sinceVersion != null) search.set("sinceVersion", String(params.sinceVersion));
+      if (params?.maxChunks != null) search.set("maxChunks", String(params.maxChunks));
+      const qs = search.toString();
+      return request<MobileAiSnapshotDelta>(`/api/v1/mobile-ai/snapshot/chunks${qs ? `?${qs}` : ""}`);
     },
   },
   commerce: {

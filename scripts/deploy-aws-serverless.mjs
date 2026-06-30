@@ -86,6 +86,8 @@ const BASE_ROUTES = [
   ["POST", "/api/v1/knowledge/page-voice/upload", "knowledge-page-voice"],
   ["GET", "/api/v1/knowledge/page-voice/export", "knowledge-page-voice"],
   ["POST", "/api/v1/knowledge/detect-platform", "knowledge-detect-platform"],
+  ["GET", "/api/v1/mobile-ai/snapshot/manifest", "mobile-ai-snapshot"],
+  ["GET", "/api/v1/mobile-ai/snapshot/chunks", "mobile-ai-snapshot"],
   ["GET", "/api/v1/commerce/products", "commerce-products"],
   ["POST", "/api/v1/commerce/products/regenerate-attributes", "commerce-products"],
   ["GET", "/api/v1/commerce/wordpress/status", "commerce-wordpress", "statusHandler"],
@@ -498,7 +500,7 @@ function classifyHandler(handler) {
   if (handler.startsWith("auth") || handler.startsWith("tenant") || handler.startsWith("platform") || handler === "team" || handler === "team-member") {
     return { component: "api", costGroup: "core-api", dataClass: "customer" };
   }
-  if (handler.startsWith("knowledge") || handler.startsWith("commerce")) {
+  if (handler.startsWith("knowledge") || handler.startsWith("commerce") || handler === "mobile-ai-snapshot") {
     return { component: "ingest", costGroup: "knowledge-ingest", dataClass: "customer" };
   }
   if (handler.includes("chat") || handler === "conversations") {
@@ -854,6 +856,7 @@ function buildTemplate({
     const logId = logicalId("Log", suffix);
     const timeout =
       handlerName.includes("knowledge") ||
+      handlerName === "mobile-ai-snapshot" ||
       handlerName === "chat-api" ||
       handlerName === "widget" ||
       handlerName === "ingest-worker" ||
@@ -863,6 +866,7 @@ function buildTemplate({
         : 20;
     const memory =
       handlerName.includes("knowledge") ||
+      handlerName === "mobile-ai-snapshot" ||
       handlerName === "chat-api" ||
       handlerName === "widget" ||
       handlerName === "ingest-worker" ||

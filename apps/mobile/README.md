@@ -10,6 +10,30 @@ Expo + React Native app for merchants to manage human handoff conversations. Wha
 - Thread view: message bubbles, **Take over** (+ handoff message), **Return to bot**, manual reply (WhatsApp / Messenger / Instagram)
 - **Push notifications** when a customer messages during human handoff (physical device; requires notification permission)
 
+## Offline AI direction
+
+The mobile app now has an initial TypeScript scaffold for offline AI routing in `src/lib/offline-ai.ts` and snapshot sync orchestration in `src/lib/mobile-ai-sync.ts`. The intended rollout is:
+
+1. Sync a tenant-scoped knowledge snapshot from the cloud.
+2. Store and search it locally on device.
+3. Use local retrieval for offline FAQ/product lookup.
+4. Add on-device Gemma draft replies behind a feature flag.
+5. Verify live stock, price, checkout, account, and complaint flows in the cloud.
+
+The detailed plan lives in `docs/implementation/08-mobile-on-device-ai-plan.md`.
+
+Local model downloads are user-controlled from Settings -> Offline AI. Configure the model artifact at build time with:
+
+- `EXPO_PUBLIC_LOCAL_LLM_MODEL_URL`
+- `EXPO_PUBLIC_LOCAL_LLM_MODEL_SIZE_BYTES`
+- `EXPO_PUBLIC_LOCAL_LLM_MODEL_ID`
+- `EXPO_PUBLIC_LOCAL_LLM_MODEL_VERSION`
+- `EXPO_PUBLIC_LOCAL_LLM_MODEL_NAME`
+- `EXPO_PUBLIC_LOCAL_LLM_MODEL_FILE_NAME`
+- `EXPO_PUBLIC_LOCAL_LLM_MODEL_MD5`
+
+The app stores the model under its document directory, shows size/progress, supports pause/resume through Expo's resumable download API, and lets the user remove the local file.
+
 ## Push notifications
 
 1. On login, the app registers an Expo push token via `POST /api/v1/devices/register`.
@@ -74,6 +98,8 @@ The `preview` profile uses the dev API URL from `eas.json` (`EXPO_PUBLIC_API_URL
 | GET | `/api/v1/conversations/{id}/messages` |
 | PATCH | `/api/v1/conversations/{id}/handling` |
 | POST | `/api/v1/conversations/{id}/reply` |
+| GET | `/api/v1/mobile-ai/snapshot/manifest` |
+| GET | `/api/v1/mobile-ai/snapshot/chunks` |
 | POST | `/api/v1/devices/register` |
 | DELETE | `/api/v1/devices/register` |
 

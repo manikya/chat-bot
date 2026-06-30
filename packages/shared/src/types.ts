@@ -205,6 +205,118 @@ export interface DailySocialContent {
   };
 }
 
+export type MobileAiSnapshotStatus = "not_synced" | "syncing" | "ready" | "stale" | "error";
+
+export type MobileAiModelStatus =
+  | "not_downloaded"
+  | "download_pending"
+  | "downloading"
+  | "paused"
+  | "ready"
+  | "removing"
+  | "error";
+
+export type MobileAiReplyMode = "draft" | "auto";
+
+export type MobileAiSourceType =
+  | "catalog"
+  | "faq"
+  | "website"
+  | "page_voice"
+  | "conversation"
+  | "policy"
+  | "unknown";
+
+export interface MobileAiSnapshotManifest {
+  tenantId: string;
+  snapshotId: string;
+  version: number;
+  generatedAt: string;
+  expiresAt: string;
+  embeddingModel: string;
+  embeddingDimensions: number;
+  chunkCount: number;
+  deletedChunkIds?: string[];
+  checksum: string;
+  downloadUrl?: string;
+  deltaUrl?: string;
+  volatileFields: Array<"price" | "inStock" | "availability" | "checkoutUrl">;
+}
+
+export interface MobileAiSnapshotChunk {
+  id: string;
+  sourceId: string;
+  sourceType: MobileAiSourceType;
+  text: string;
+  embedding: number[];
+  version: number;
+  updatedAt: string;
+  deleted?: boolean;
+  metadata: {
+    title?: string;
+    section?: string;
+    url?: string;
+    sku?: string;
+    categories?: string[];
+    price?: number;
+    currency?: string;
+    inStock?: boolean;
+    tags?: string[];
+    material?: string[];
+    occasion?: string[];
+    recipient?: string[];
+    question?: string;
+  };
+}
+
+export interface MobileAiSnapshotDelta {
+  tenantId: string;
+  fromVersion?: number;
+  toVersion: number;
+  generatedAt: string;
+  chunks: MobileAiSnapshotChunk[];
+  deletedChunkIds: string[];
+}
+
+export interface MobileAiSyncState {
+  status: MobileAiSnapshotStatus;
+  tenantId?: string;
+  snapshotId?: string;
+  version?: number;
+  chunkCount?: number;
+  lastSyncedAt?: string;
+  expiresAt?: string;
+  errorMessage?: string;
+}
+
+export interface MobileAiDevicePreferences {
+  allowLlmDownload: boolean;
+  allowVectorSync: boolean;
+  replyMode: MobileAiReplyMode;
+  modelStatus: MobileAiModelStatus;
+  modelId?: string;
+  modelVersion?: string;
+  modelDisplayName?: string;
+  modelDownloadUrl?: string;
+  modelLocalUri?: string;
+  modelSizeBytes?: number;
+  modelDownloadedBytes?: number;
+  modelDownloadProgressPct?: number;
+  modelResumeData?: string;
+  modelAvailableVersion?: string;
+  modelChecksum?: string;
+  modelDownloadedAt?: string;
+  modelErrorMessage?: string;
+}
+
+export interface MobileAiLocalReply {
+  reply: string;
+  confidence: number;
+  needsCloud: boolean;
+  usedChunkIds: string[];
+  riskFlags: string[];
+}
+
 export type OnboardingStepStatus = "completed" | "in_progress" | "pending";
 
 export interface OnboardingState {

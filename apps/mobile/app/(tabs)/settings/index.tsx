@@ -9,6 +9,7 @@ import type {
   TenantConfig,
   Usage,
 } from "@commercechat/mock-api";
+import type { MobileAiDevicePreferences, MobileAiSyncState } from "@commercechat/shared/types";
 import {
   AdminScaffold,
   EmptyState,
@@ -19,6 +20,21 @@ import {
 } from "../../../src/components/admin/AdminScaffold";
 import { useAuth } from "../../../src/lib/auth";
 import { api } from "../../../src/lib/api";
+import {
+  DEFAULT_MOBILE_AI_PREFERENCES,
+  loadMobileAiPreferences,
+  loadMobileAiSyncState,
+  saveMobileAiSyncState,
+  patchMobileAiPreferences,
+} from "../../../src/lib/offline-ai-preferences";
+import {
+  formatModelBytes,
+  getConfiguredMobileAiModel,
+  pauseMobileAiModelDownload,
+  removeMobileAiModel,
+  resumeMobileAiModelDownload,
+  startMobileAiModelDownload,
+} from "../../../src/lib/mobile-ai-model-manager";
 import { colors } from "../../../src/theme/colors";
 
 export default function SettingsScreen() {
@@ -38,6 +54,12 @@ export default function SettingsScreen() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [suggestedQuestions, setSuggestedQuestions] = useState("");
   const [manualRepliesOnly, setManualRepliesOnly] = useState(false);
+  const [mobileAiPrefs, setMobileAiPrefs] = useState<MobileAiDevicePreferences>(
+    DEFAULT_MOBILE_AI_PREFERENCES
+  );
+  const [mobileAiSyncState, setMobileAiSyncState] = useState<MobileAiSyncState>({
+    status: "not_synced",
+  });
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [testMessage, setTestMessage] = useState("Do you have best sellers?");
@@ -48,6 +70,7 @@ export default function SettingsScreen() {
 
   const canManage = user?.role === "owner" || user?.role === "admin";
   const canBill = user?.role === "owner";
+  const configuredModel = getConfiguredMobileAiModel();
 
   async function load() {
     setError(null);
@@ -76,6 +99,12 @@ export default function SettingsScreen() {
       setSystemPrompt(configRes.data.prompts.systemPrompt);
       setSuggestedQuestions(configRes.data.widgetConfig.suggestedQuestions.join("\n"));
       setManualRepliesOnly(Boolean(configRes.data.featureFlags?.manualRepliesOnly));
+      const [prefs, syncState] = await Promise.all([
+        loadMobileAiPreferences(),
+        loadMobileAiSyncState(),
+      ]);
+      setMobileAiPrefs(prefs);
+      setMobileAiSyncState(syncState);
     } catch (e) {
       setError((e as { message?: string }).message ?? "Failed to load settings");
     } finally {
@@ -156,6 +185,107 @@ export default function SettingsScreen() {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function updateMobileAiPreferences(patch: Partial<MobileAiDevicePreferences>) {
+    const next = await patchMobileAiPreferences(patch);
+    setMobileAiPrefs(next);
+  }
+
+  async function syncMobileVectorsNow() {
+    if (!mobileAiPrefs.allowVectorSync) return;
+    setBusy("mobile-ai-sync");
+    try {
+      const manifest = await api.mobileAi.getSnapshotManifest();
+      const delta = await api.mobileAi.getSnapshotChunks({
+        sinceVersion: mobileAiSyncState.version,
+        maxChunks: 100,
+      });
+      const nextState: MobileAiSyncState = {
+        status: "ready",
+        tenantId: manifest.data.tenantId,
+        snapshotId: manifest.data.snapshotId,
+        version: delta.data.toVersion,
+        chunkCount: manifest.data.chunkCount,
+        lastSyncedAt: new Date().toISOString(),
+        expiresAt: manifest.data.expiresAt,
+      };
+      await saveMobileAiSyncState(nextState);
+      setMobileAiSyncState(nextState);
+    } catch (e) {
+      const nextState: MobileAiSyncState = {
+        ...mobileAiSyncState,
+        status: mobileAiSyncState.version ? "stale" : "error",
+        errorMessage: (e as { message?: string }).message ?? "Vector sync failed",
+      };
+      await saveMobileAiSyncState(nextState);
+      setMobileAiSyncState(nextState);
+      setError(nextState.errorMessage ?? "Vector sync failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadLlmModel() {
+    setBusy("mobile-ai-model");
+    try {
+      const next = await startMobileAiModelDownload(setMobileAiPrefs);
+      setMobileAiPrefs(next);
+      if (next.modelStatus === "download_pending") {
+        Alert.alert("Model download not configured", next.modelErrorMessage);
+      }
+    } catch (e) {
+      const next = await patchMobileAiPreferences({
+        modelStatus: "error",
+        modelErrorMessage: (e as { message?: string }).message ?? "Model download failed.",
+      });
+      setMobileAiPrefs(next);
+      setError(next.modelErrorMessage ?? "Model download failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function resumeLlmModelDownload() {
+    setBusy("mobile-ai-model");
+    try {
+      const next = await resumeMobileAiModelDownload(setMobileAiPrefs);
+      setMobileAiPrefs(next);
+    } catch (e) {
+      const next = await patchMobileAiPreferences({
+        modelStatus: "error",
+        modelErrorMessage: (e as { message?: string }).message ?? "Model resume failed.",
+      });
+      setMobileAiPrefs(next);
+      setError(next.modelErrorMessage ?? "Model resume failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function pauseLlmModelDownload() {
+    const next = await pauseMobileAiModelDownload();
+    setMobileAiPrefs(next);
+  }
+
+  function removeLlmModel() {
+    Alert.alert("Remove local model?", "The phone will delete the downloaded LLM file.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          setBusy("mobile-ai-model");
+          try {
+            setMobileAiPrefs(await removeMobileAiModel());
+          } catch (e) {
+            setError((e as { message?: string }).message ?? "Could not remove local model");
+          } finally {
+            setBusy(null);
+          }
+        },
+      },
+    ]);
   }
 
   function disconnectChannel(channel: string) {
@@ -326,6 +456,185 @@ export default function SettingsScreen() {
         <PrimaryButton label="Save bot/widget" onPress={saveBotWidget} disabled={!canManage || busy === "bot"} />
       </Section>
 
+      <Section title="Offline AI">
+        <Pressable
+          style={[styles.toggleRow, mobileAiPrefs.allowLlmDownload && styles.toggleRowActive]}
+          onPress={() =>
+            void updateMobileAiPreferences({ allowLlmDownload: !mobileAiPrefs.allowLlmDownload })
+          }
+          disabled={!canManage}
+        >
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleTitle}>Allow local LLM download</Text>
+            <Text style={styles.toggleDescription}>
+              {mobileAiPrefs.allowLlmDownload
+                ? "This phone may download and run a local model when supported."
+                : "The app will not download an LLM to this phone."}
+            </Text>
+          </View>
+          <Text style={[styles.toggleBadge, mobileAiPrefs.allowLlmDownload && styles.toggleBadgeActive]}>
+            {mobileAiPrefs.allowLlmDownload ? "Allowed" : "Off"}
+          </Text>
+        </Pressable>
+        <PrimaryButton
+          label={
+            mobileAiPrefs.modelStatus === "paused"
+              ? "Resume local LLM"
+              : mobileAiPrefs.modelStatus === "ready" && mobileAiPrefs.modelAvailableVersion
+                ? "Update local LLM"
+                : mobileAiPrefs.modelStatus === "ready"
+                  ? "Local LLM ready"
+                  : mobileAiPrefs.modelStatus === "downloading"
+                    ? "Downloading local LLM"
+                    : "Download local LLM"
+          }
+          onPress={
+            mobileAiPrefs.modelStatus === "paused"
+              ? resumeLlmModelDownload
+              : downloadLlmModel
+          }
+          disabled={
+            !canManage ||
+            !mobileAiPrefs.allowLlmDownload ||
+            busy === "mobile-ai-model" ||
+            mobileAiPrefs.modelStatus === "downloading" ||
+            (mobileAiPrefs.modelStatus === "ready" && !mobileAiPrefs.modelAvailableVersion)
+          }
+        />
+        <InfoRow label="Model" value={mobileAiPrefs.modelDisplayName ?? configuredModel.displayName} />
+        <InfoRow label="Version" value={mobileAiPrefs.modelVersion ?? configuredModel.version} />
+        <InfoRow
+          label="Model size"
+          value={formatModelBytes(mobileAiPrefs.modelSizeBytes ?? configuredModel.sizeBytes)}
+        />
+        <InfoRow
+          label="Downloaded"
+          value={`${formatModelBytes(mobileAiPrefs.modelDownloadedBytes)}${
+            mobileAiPrefs.modelDownloadProgressPct !== undefined
+              ? ` · ${mobileAiPrefs.modelDownloadProgressPct}%`
+              : ""
+          }`}
+        />
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${mobileAiPrefs.modelDownloadProgressPct ?? 0}%` },
+            ]}
+          />
+        </View>
+        <View style={styles.inlineActions}>
+          <Pressable
+            onPress={pauseLlmModelDownload}
+            disabled={!canManage || mobileAiPrefs.modelStatus !== "downloading"}
+          >
+            <Text
+              style={[
+                styles.link,
+                mobileAiPrefs.modelStatus !== "downloading" && styles.linkDisabled,
+              ]}
+            >
+              Pause
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={resumeLlmModelDownload}
+            disabled={!canManage || mobileAiPrefs.modelStatus !== "paused"}
+          >
+            <Text
+              style={[
+                styles.link,
+                mobileAiPrefs.modelStatus !== "paused" && styles.linkDisabled,
+              ]}
+            >
+              Resume
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={removeLlmModel}
+            disabled={
+              !canManage ||
+              busy === "mobile-ai-model" ||
+              mobileAiPrefs.modelStatus === "not_downloaded" ||
+              mobileAiPrefs.modelStatus === "downloading"
+            }
+          >
+            <Text
+              style={[
+                styles.dangerLink,
+                (mobileAiPrefs.modelStatus === "not_downloaded" ||
+                  mobileAiPrefs.modelStatus === "downloading") &&
+                  styles.linkDisabled,
+              ]}
+            >
+              Remove
+            </Text>
+          </Pressable>
+        </View>
+        {mobileAiPrefs.modelErrorMessage ? (
+          <Text style={styles.reply}>{mobileAiPrefs.modelErrorMessage}</Text>
+        ) : null}
+
+        <Pressable
+          style={[styles.toggleRow, mobileAiPrefs.allowVectorSync && styles.toggleRowActive]}
+          onPress={() =>
+            void updateMobileAiPreferences({ allowVectorSync: !mobileAiPrefs.allowVectorSync })
+          }
+          disabled={!canManage}
+        >
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleTitle}>Allow local vector sync</Text>
+            <Text style={styles.toggleDescription}>
+              {mobileAiPrefs.allowVectorSync
+                ? "This phone may keep a local copy of tenant knowledge for offline search."
+                : "Tenant vectors stay in the cloud only."}
+            </Text>
+          </View>
+          <Text style={[styles.toggleBadge, mobileAiPrefs.allowVectorSync && styles.toggleBadgeActive]}>
+            {mobileAiPrefs.allowVectorSync ? "Allowed" : "Off"}
+          </Text>
+        </Pressable>
+        <InfoRow label="Vector sync" value={mobileAiSyncState.status} />
+        <InfoRow label="Local chunks" value={mobileAiSyncState.chunkCount ?? 0} />
+        <InfoRow label="Last synced" value={mobileAiSyncState.lastSyncedAt ?? "Never"} />
+        <PrimaryButton
+          label="Sync tenant vectors now"
+          onPress={syncMobileVectorsNow}
+          disabled={!canManage || !mobileAiPrefs.allowVectorSync || busy === "mobile-ai-sync"}
+        />
+
+        <Pressable
+          style={[styles.toggleRow, mobileAiPrefs.replyMode === "draft" && styles.toggleRowActive]}
+          onPress={() => void updateMobileAiPreferences({ replyMode: "draft" })}
+          disabled={!canManage}
+        >
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleTitle}>Show AI drafts first</Text>
+            <Text style={styles.toggleDescription}>
+              Local AI prepares a reply for an agent to review before sending.
+            </Text>
+          </View>
+          <Text style={[styles.toggleBadge, mobileAiPrefs.replyMode === "draft" && styles.toggleBadgeActive]}>
+            {mobileAiPrefs.replyMode === "draft" ? "Selected" : "Choose"}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.toggleRow, mobileAiPrefs.replyMode === "auto" && styles.toggleRowActive]}
+          onPress={() => void updateMobileAiPreferences({ replyMode: "auto" })}
+          disabled={!canManage}
+        >
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleTitle}>Auto-reply when safe</Text>
+            <Text style={styles.toggleDescription}>
+              Local AI may send low-risk replies automatically; live commerce actions still verify in cloud.
+            </Text>
+          </View>
+          <Text style={[styles.toggleBadge, mobileAiPrefs.replyMode === "auto" && styles.toggleBadgeActive]}>
+            {mobileAiPrefs.replyMode === "auto" ? "Selected" : "Choose"}
+          </Text>
+        </Pressable>
+      </Section>
+
       <Section title="Onboarding checklist">
         {onboarding ? (
           onboarding.steps.map((step) => (
@@ -478,6 +787,21 @@ const styles = StyleSheet.create({
   memberActions: { flexDirection: "row", gap: 12 },
   link: { color: colors.primary, fontWeight: "800", fontSize: 12 },
   dangerLink: { color: colors.danger, fontWeight: "800", fontSize: 12 },
+  linkDisabled: { color: colors.textMuted },
+  inlineActions: { flexDirection: "row", gap: 16, alignItems: "center" },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
   toggleRow: {
     borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth,

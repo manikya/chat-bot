@@ -61,6 +61,7 @@ export {
 export { createVectorStore } from "./ingest/vectors";
 export { createEmbeddingProvider } from "./ingest/embedding";
 export { retrieveKnowledge } from "./ingest/retrieve";
+export { getMobileAiSnapshotManifest, getMobileAiSnapshotDelta } from "./mobile-ai/snapshot";
 export { dispatchIngestJob } from "./ingest/dispatch";
 export { runIngestJobByKind, type IngestJobKind } from "./ingest/run-job";
 export { processChat, type ChatRequestBody } from "./chat/service";
