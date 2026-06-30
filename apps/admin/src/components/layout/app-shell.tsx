@@ -14,6 +14,7 @@ import {
   PackageSearch,
   Radio,
   Settings,
+  Smartphone,
   Users,
   BarChart3,
   CreditCard,
@@ -42,6 +43,7 @@ const nav = [
   { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings/team", label: "Team", icon: Users },
   { href: "/settings/api-keys", label: "API keys", icon: Hash },
+  { href: "/settings/mobile-app", label: "Mobile app", icon: Smartphone },
   { href: "/settings/profile", label: "Settings", icon: Settings },
 ];
 
