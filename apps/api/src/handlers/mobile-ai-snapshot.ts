@@ -25,11 +25,13 @@ export const handler = createHandler(
       throw new Error(`Unsupported method: ${event.requestContext.http.method}`);
     }
 
-    if (path.endsWith("/manifest")) {
+    const snapshotKind = queryParam(event, "kind");
+
+    if (path.endsWith("/manifest") || snapshotKind === "manifest") {
       return getMobileAiSnapshotManifest(auth!, config);
     }
 
-    if (path.endsWith("/chunks")) {
+    if (path.endsWith("/chunks") || snapshotKind === "chunks") {
       return getMobileAiSnapshotDelta(auth!, config, {
         sinceVersion: parseOptionalNumber(queryParam(event, "sinceVersion"), "sinceVersion"),
         maxChunks: parseOptionalNumber(queryParam(event, "maxChunks"), "maxChunks"),

@@ -184,6 +184,7 @@ const REAL_ROUTES: Array<{
   { method: "POST", path: "/api/v1/knowledge/page-voice/sync", handler: knowledgePageVoiceHandler },
   { method: "POST", path: "/api/v1/knowledge/page-voice/upload", handler: knowledgePageVoiceHandler },
   { method: "POST", path: "/api/v1/knowledge/detect-platform", handler: knowledgeDetectPlatformHandler },
+  { method: "GET", path: "/api/v1/mobile-ai/snapshot", handler: mobileAiSnapshotHandler },
   { method: "GET", path: "/api/v1/mobile-ai/snapshot/manifest", handler: mobileAiSnapshotHandler },
   { method: "GET", path: "/api/v1/mobile-ai/snapshot/chunks", handler: mobileAiSnapshotHandler },
   { method: "GET", path: "/api/v1/commerce/products", handler: commerceProductsHandler },

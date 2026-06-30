@@ -467,14 +467,15 @@ export const api = {
   },
   mobileAi: {
     getSnapshotManifest() {
-      return request<MobileAiSnapshotManifest>("/api/v1/mobile-ai/snapshot/manifest");
+      return request<MobileAiSnapshotManifest>("/api/v1/mobile-ai/snapshot?kind=manifest");
     },
     getSnapshotChunks(params?: { sinceVersion?: number; maxChunks?: number }) {
       const search = new URLSearchParams();
+      search.set("kind", "chunks");
       if (params?.sinceVersion != null) search.set("sinceVersion", String(params.sinceVersion));
       if (params?.maxChunks != null) search.set("maxChunks", String(params.maxChunks));
       const qs = search.toString();
-      return request<MobileAiSnapshotDelta>(`/api/v1/mobile-ai/snapshot/chunks${qs ? `?${qs}` : ""}`);
+      return request<MobileAiSnapshotDelta>(`/api/v1/mobile-ai/snapshot?${qs}`);
     },
   },
   commerce: {
