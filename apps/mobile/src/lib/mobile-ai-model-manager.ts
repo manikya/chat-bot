@@ -79,6 +79,53 @@ export function isMobileAiModelConfigured(
   return Boolean(manifest.downloadUrl);
 }
 
+export function reconcileMobileAiModelPreferences(
+  prefs: MobileAiDevicePreferences,
+  manifest: MobileAiModelManifest
+): MobileAiDevicePreferences {
+  if (!manifest.downloadUrl) return prefs;
+  const sameModel =
+    prefs.modelId === manifest.id &&
+    prefs.modelVersion === manifest.version &&
+    prefs.modelDisplayName === manifest.displayName &&
+    prefs.modelSizeBytes === manifest.sizeBytes &&
+    prefs.modelDownloadUrl === manifest.downloadUrl;
+  const hasOldMissingUrlError = /LOCAL_LLM_MODEL_URL|model download URL|model artifact/i.test(
+    prefs.modelErrorMessage ?? ""
+  );
+  if (
+    sameModel &&
+    !hasOldMissingUrlError &&
+    prefs.modelStatus !== "download_pending"
+  ) {
+    return prefs;
+  }
+  if (prefs.modelStatus === "ready" && prefs.modelId !== manifest.id) {
+    return { ...prefs, modelAvailableVersion: manifest.version };
+  }
+  return {
+    ...prefs,
+    modelStatus:
+      prefs.modelStatus === "download_pending" || hasOldMissingUrlError
+        ? "not_downloaded"
+        : prefs.modelStatus,
+    modelId: manifest.id,
+    modelVersion: manifest.version,
+    modelDisplayName: manifest.displayName,
+    modelDownloadUrl: manifest.downloadUrl,
+    modelSizeBytes: manifest.sizeBytes,
+    modelDownloadedBytes:
+      prefs.modelStatus === "ready" || prefs.modelStatus === "downloading" || prefs.modelStatus === "paused"
+        ? prefs.modelDownloadedBytes
+        : undefined,
+    modelDownloadProgressPct:
+      prefs.modelStatus === "ready" || prefs.modelStatus === "downloading" || prefs.modelStatus === "paused"
+        ? prefs.modelDownloadProgressPct
+        : undefined,
+    modelErrorMessage: hasOldMissingUrlError ? undefined : prefs.modelErrorMessage,
+  };
+}
+
 export function formatModelBytes(bytes?: number): string {
   if (!bytes || bytes <= 0) return "Unknown";
   const units = ["B", "KB", "MB", "GB"];

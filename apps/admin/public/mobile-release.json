@@ -1,18 +1,18 @@
 {
   "platform": "android",
   "channel": "preview",
-  "latestVersion": "1.0.2",
+  "latestVersion": "1.0.3",
   "minimumSupportedVersion": "1.0.0",
-  "currentWebExpectedVersion": "1.0.1",
-  "apkUrl": "/mobile/commercechat-agent-1.0.2-preview.apk",
+  "currentWebExpectedVersion": "1.0.2",
+  "apkUrl": "/mobile/commercechat-agent-1.0.3-preview.apk",
   "buildUrl": "",
-  "fileName": "commercechat-agent-1.0.2-preview.apk",
-  "releasedAt": "2026-06-30T09:13:58Z",
-  "sizeBytes": 87947088,
+  "fileName": "commercechat-agent-1.0.3-preview.apk",
+  "releasedAt": "2026-06-30T10:08:12Z",
+  "sizeBytes": 87948660,
   "updateAvailable": true,
   "notes": [
-    "Reorganizes mobile Settings into clearer Offline AI cards.",
-    "Shows missing local LLM artifact inline instead of opening a raw configuration error.",
-    "Adds hosted model manifest support for future Gemma model downloads."
+    "Shows the configured Gemma model details before tapping download.",
+    "Makes tenant vector sync automatic by default with manual sync and opt-out controls.",
+    "Compacts Chats filters into a smaller search and filter panel."
   ]
 }

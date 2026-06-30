@@ -10,7 +10,7 @@ const SYNC_STATE_KEY = "cc_mobile_ai_sync_state";
 
 export const DEFAULT_MOBILE_AI_PREFERENCES: MobileAiDevicePreferences = {
   allowLlmDownload: false,
-  allowVectorSync: false,
+  allowVectorSync: true,
   replyMode: "draft",
   modelStatus: "not_downloaded",
 };

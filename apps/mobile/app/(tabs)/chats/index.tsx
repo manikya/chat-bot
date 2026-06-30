@@ -1,18 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import type { ChannelType, Conversation } from "@commercechat/mock-api";
 import { ConversationRow } from "../../../src/components/ConversationRow";
 import {
   AdminScaffold,
   EmptyState,
-  TextField,
 } from "../../../src/components/admin/AdminScaffold";
 import { useAuth } from "../../../src/lib/auth";
 import { api } from "../../../src/lib/api";
 import { colors } from "../../../src/theme/colors";
 
 const CHANNELS: Array<"all" | ChannelType> = ["all", "whatsapp", "messenger", "instagram", "web"];
+const MODES: Array<"human" | "bot" | "all"> = ["human", "bot", "all"];
+const STATUSES: Array<"all" | "active"> = ["all", "active"];
+
+function nextValue<T>(items: T[], current: T): T {
+  const index = items.indexOf(current);
+  return items[(index + 1) % items.length] ?? items[0];
+}
+
+function modeLabel(value: "human" | "bot" | "all"): string {
+  if (value === "human") return "Needs agent";
+  if (value === "bot") return "Bot";
+  return "All";
+}
+
+function channelLabel(value: "all" | ChannelType): string {
+  return value === "all" ? "All channels" : value;
+}
+
+function statusLabel(value: "all" | "active"): string {
+  return value === "all" ? "Any status" : "Active";
+}
 
 export default function ChatsScreen() {
   const router = useRouter();
@@ -77,57 +97,42 @@ export default function ChatsScreen() {
       actionLabel="Refresh"
       onAction={load}
     >
-      <View style={styles.filters}>
-        {[
-          ["Needs agent", "human"],
-          ["Bot", "bot"],
-          ["All", "all"],
-        ].map(([label, value]) => (
+      <View style={styles.filterPanel}>
+        <TextInput
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search customer, channel, intent, product"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+        />
+        <View style={styles.compactFilters}>
           <Pressable
-            key={value}
-            style={[styles.chip, mode === value && styles.chipActive]}
-            onPress={() => setMode(value as typeof mode)}
+            style={[styles.filterButton, mode !== "all" && styles.filterButtonActive]}
+            onPress={() => setMode(nextValue(MODES, mode))}
           >
-            <Text style={[styles.chipText, mode === value && styles.chipTextActive]}>{label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.filters}>
-        {CHANNELS.map((value) => (
-          <Pressable
-            key={value}
-            style={[styles.chip, channel === value && styles.chipActive]}
-            onPress={() => setChannel(value)}
-          >
-            <Text style={[styles.chipText, channel === value && styles.chipTextActive]}>
-              {value === "all" ? "All channels" : value}
+            <Text style={[styles.filterLabel, mode !== "all" && styles.filterLabelActive]}>
+              {modeLabel(mode)}
             </Text>
           </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.filters}>
-        {[
-          ["Any status", "all"],
-          ["Active", "active"],
-        ].map(([label, value]) => (
           <Pressable
-            key={value}
-            style={[styles.chip, status === value && styles.chipActive]}
-            onPress={() => setStatus(value as typeof status)}
+            style={[styles.filterButton, channel !== "all" && styles.filterButtonActive]}
+            onPress={() => setChannel(nextValue(CHANNELS, channel))}
           >
-            <Text style={[styles.chipText, status === value && styles.chipTextActive]}>{label}</Text>
+            <Text style={[styles.filterLabel, channel !== "all" && styles.filterLabelActive]}>
+              {channelLabel(channel)}
+            </Text>
           </Pressable>
-        ))}
+          <Pressable
+            style={[styles.filterButton, status !== "all" && styles.filterButtonActive]}
+            onPress={() => setStatus(nextValue(STATUSES, status))}
+          >
+            <Text style={[styles.filterLabel, status !== "all" && styles.filterLabelActive]}>
+              {statusLabel(status)}
+            </Text>
+          </Pressable>
+        </View>
       </View>
-
-      <TextField
-        label="Search conversations"
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Customer, channel, intent, product"
-      />
 
       <View style={styles.list}>
         {filtered.length ? (
@@ -147,16 +152,43 @@ export default function ChatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip: {
-    borderRadius: 15,
-    backgroundColor: colors.softSurface,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  filterPanel: {
+    backgroundColor: colors.listBg,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 8,
+    gap: 8,
   },
-  chipActive: { backgroundColor: colors.primary },
-  chipText: { color: colors.textMuted, fontWeight: "800", fontSize: 11 },
-  chipTextActive: { color: "#fff" },
+  searchInput: {
+    backgroundColor: colors.inputBg,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 9,
+    color: colors.text,
+    fontSize: 14,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  compactFilters: { flexDirection: "row", gap: 6 },
+  filterButton: {
+    flex: 1,
+    minHeight: 32,
+    borderRadius: 8,
+    backgroundColor: colors.softSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  filterButtonActive: { backgroundColor: colors.primary },
+  filterLabel: {
+    color: colors.textMuted,
+    fontWeight: "800",
+    fontSize: 10,
+    textAlign: "center",
+  },
+  filterLabelActive: { color: colors.headerText },
   list: {
     backgroundColor: colors.listBg,
     borderRadius: 12,

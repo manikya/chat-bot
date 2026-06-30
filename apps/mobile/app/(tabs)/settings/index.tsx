@@ -25,6 +25,7 @@ import {
   loadMobileAiPreferences,
   loadMobileAiSyncState,
   saveMobileAiSyncState,
+  saveMobileAiPreferences,
   patchMobileAiPreferences,
 } from "../../../src/lib/offline-ai-preferences";
 import {
@@ -33,6 +34,7 @@ import {
   isMobileAiModelConfigured,
   loadConfiguredMobileAiModel,
   pauseMobileAiModelDownload,
+  reconcileMobileAiModelPreferences,
   removeMobileAiModel,
   resumeMobileAiModelDownload,
   startMobileAiModelDownload,
@@ -78,9 +80,10 @@ export default function SettingsScreen() {
   const canBill = user?.role === "owner";
   const modelSourceConfigured = isMobileAiModelConfigured(configuredModel);
   const modelProgressPct = mobileAiPrefs.modelDownloadProgressPct ?? 0;
-  const modelDownloadedLabel = `${formatModelBytes(mobileAiPrefs.modelDownloadedBytes)}${
-    mobileAiPrefs.modelDownloadProgressPct !== undefined ? ` · ${modelProgressPct}%` : ""
-  }`;
+  const modelDownloadedLabel =
+    mobileAiPrefs.modelDownloadedBytes || mobileAiPrefs.modelDownloadProgressPct
+      ? `${formatModelBytes(mobileAiPrefs.modelDownloadedBytes)} · ${modelProgressPct}%`
+      : "Not downloaded";
   const modelStatusLabel = modelSourceConfigured
     ? mobileAiPrefs.modelStatus.replace(/_/g, " ")
     : "artifact needed";
@@ -103,6 +106,13 @@ export default function SettingsScreen() {
     busy !== "mobile-ai-model" &&
     mobileAiPrefs.modelStatus !== "downloading" &&
     !(mobileAiPrefs.modelStatus === "ready" && !mobileAiPrefs.modelAvailableVersion);
+  const vectorSyncLabel =
+    busy === "mobile-ai-sync" ? "syncing" : mobileAiSyncState.status.replace(/_/g, " ");
+
+  function shouldAutoSyncVectors(syncState: MobileAiSyncState): boolean {
+    if (syncState.status !== "ready") return true;
+    return Boolean(syncState.expiresAt && Date.parse(syncState.expiresAt) <= Date.now());
+  }
 
   async function load() {
     setError(null);
@@ -136,9 +146,20 @@ export default function SettingsScreen() {
         loadMobileAiSyncState(),
         loadConfiguredMobileAiModel(),
       ]);
-      setMobileAiPrefs(prefs);
+      const reconciledPrefs = reconcileMobileAiModelPreferences(prefs, modelManifest);
+      setMobileAiPrefs(reconciledPrefs);
       setMobileAiSyncState(syncState);
       setConfiguredModel(modelManifest);
+      if (reconciledPrefs !== prefs) {
+        await saveMobileAiPreferences(reconciledPrefs);
+      }
+      if (
+        reconciledPrefs.allowVectorSync &&
+        shouldAutoSyncVectors(syncState) &&
+        busy !== "mobile-ai-sync"
+      ) {
+        void syncMobileVectorsNow(reconciledPrefs, syncState, { silent: true });
+      }
     } catch (e) {
       setError((e as { message?: string }).message ?? "Failed to load settings");
     } finally {
@@ -226,13 +247,17 @@ export default function SettingsScreen() {
     setMobileAiPrefs(next);
   }
 
-  async function syncMobileVectorsNow() {
-    if (!mobileAiPrefs.allowVectorSync) return;
+  async function syncMobileVectorsNow(
+    prefs = mobileAiPrefs,
+    currentSyncState = mobileAiSyncState,
+    options: { silent?: boolean } = {}
+  ) {
+    if (!prefs.allowVectorSync) return;
     setBusy("mobile-ai-sync");
     try {
       const manifest = await api.mobileAi.getSnapshotManifest();
       const delta = await api.mobileAi.getSnapshotChunks({
-        sinceVersion: mobileAiSyncState.version,
+        sinceVersion: currentSyncState.version,
         maxChunks: 100,
       });
       const nextState: MobileAiSyncState = {
@@ -248,13 +273,15 @@ export default function SettingsScreen() {
       setMobileAiSyncState(nextState);
     } catch (e) {
       const nextState: MobileAiSyncState = {
-        ...mobileAiSyncState,
-        status: mobileAiSyncState.version ? "stale" : "error",
+        ...currentSyncState,
+        status: currentSyncState.version ? "stale" : "error",
         errorMessage: (e as { message?: string }).message ?? "Vector sync failed",
       };
       await saveMobileAiSyncState(nextState);
       setMobileAiSyncState(nextState);
-      setError(nextState.errorMessage ?? "Vector sync failed");
+      if (!options.silent) {
+        setError(nextState.errorMessage ?? "Vector sync failed");
+      }
     } finally {
       setBusy(null);
     }
@@ -620,7 +647,7 @@ export default function SettingsScreen() {
               <Text style={styles.cardMeta}>Local vector database for offline search</Text>
             </View>
             <Text style={[styles.statusPill, mobileAiSyncState.status === "ready" && styles.statusPillGood]}>
-              {mobileAiSyncState.status.replace(/_/g, " ")}
+              {vectorSyncLabel}
             </Text>
           </View>
           <Pressable
@@ -631,21 +658,21 @@ export default function SettingsScreen() {
             disabled={!canManage}
           >
             <View style={styles.toggleText}>
-              <Text style={styles.toggleTitle}>Allow vector sync</Text>
+              <Text style={styles.toggleTitle}>Automatic vector sync</Text>
               <Text style={styles.toggleDescription}>
                 {mobileAiPrefs.allowVectorSync
-                  ? "This phone can keep a local tenant knowledge copy."
+                  ? "This phone keeps tenant knowledge updated for offline search."
                   : "Tenant vectors stay in the cloud only."}
               </Text>
             </View>
             <Text style={[styles.toggleBadge, mobileAiPrefs.allowVectorSync && styles.toggleBadgeActive]}>
-              {mobileAiPrefs.allowVectorSync ? "Allowed" : "Off"}
+              {mobileAiPrefs.allowVectorSync ? "Auto" : "Off"}
             </Text>
           </Pressable>
           <InfoRow label="Local chunks" value={mobileAiSyncState.chunkCount ?? 0} />
           <InfoRow label="Last synced" value={mobileAiSyncState.lastSyncedAt ?? "Never"} />
           <PrimaryButton
-            label="Sync tenant vectors now"
+            label={busy === "mobile-ai-sync" ? "Syncing vectors" : "Sync now"}
             onPress={syncMobileVectorsNow}
             disabled={!canManage || !mobileAiPrefs.allowVectorSync || busy === "mobile-ai-sync"}
           />

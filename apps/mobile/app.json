@@ -2,7 +2,7 @@
   "expo": {
     "name": "CommerceChat Agent",
     "slug": "commercechat-agent",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "commercechat",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.commercechat.agent",
-      "versionCode": 2,
+      "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#075E54",
