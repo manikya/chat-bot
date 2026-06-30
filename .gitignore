@@ -9,6 +9,7 @@ out/
 build/
 dist/
 .aws-deploy/
+apps/admin/public/mobile/*.apk
 infra/deployments/*-partial-*
 infra/deployments/*-failed-*
 infra/deployments/*-error-*
