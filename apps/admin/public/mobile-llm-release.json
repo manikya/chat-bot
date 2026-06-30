@@ -1,0 +1,12 @@
+{
+  "id": "gemma-local",
+  "version": "pending",
+  "displayName": "Gemma local model",
+  "fileName": "gemma-local-pending.task",
+  "downloadUrl": "",
+  "sizeBytes": 0,
+  "md5": "",
+  "notes": [
+    "Upload the approved Gemma .task artifact, then update this manifest with its URL, size, version, file name, and checksum."
+  ]
+}

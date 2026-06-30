@@ -25,6 +25,7 @@ The detailed plan lives in `docs/implementation/08-mobile-on-device-ai-plan.md`.
 Local model downloads are user-controlled from Settings -> Offline AI. Configure the model artifact at build time with:
 
 - `EXPO_PUBLIC_LOCAL_LLM_MODEL_URL`
+- `EXPO_PUBLIC_LOCAL_LLM_MANIFEST_URL`
 - `EXPO_PUBLIC_LOCAL_LLM_MODEL_SIZE_BYTES`
 - `EXPO_PUBLIC_LOCAL_LLM_MODEL_ID`
 - `EXPO_PUBLIC_LOCAL_LLM_MODEL_VERSION`
@@ -33,6 +34,8 @@ Local model downloads are user-controlled from Settings -> Offline AI. Configure
 - `EXPO_PUBLIC_LOCAL_LLM_MODEL_MD5`
 
 The app stores the model under its document directory, shows size/progress, supports pause/resume through Expo's resumable download API, and lets the user remove the local file.
+
+If the model URL is not configured, Settings -> Offline AI shows the local model as needing an artifact and disables the download action. The app also checks `EXPO_PUBLIC_LOCAL_LLM_MANIFEST_URL` so the release team can publish or update a model by changing the hosted manifest. Upload the approved Gemma `.task` file first, then update the manifest with `downloadUrl`, size, version, file name, and checksum values.
 
 ## Push notifications
 

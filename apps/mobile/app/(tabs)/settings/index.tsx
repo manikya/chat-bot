@@ -30,10 +30,13 @@ import {
 import {
   formatModelBytes,
   getConfiguredMobileAiModel,
+  isMobileAiModelConfigured,
+  loadConfiguredMobileAiModel,
   pauseMobileAiModelDownload,
   removeMobileAiModel,
   resumeMobileAiModelDownload,
   startMobileAiModelDownload,
+  type MobileAiModelManifest,
 } from "../../../src/lib/mobile-ai-model-manager";
 import { colors } from "../../../src/theme/colors";
 
@@ -57,6 +60,9 @@ export default function SettingsScreen() {
   const [mobileAiPrefs, setMobileAiPrefs] = useState<MobileAiDevicePreferences>(
     DEFAULT_MOBILE_AI_PREFERENCES
   );
+  const [configuredModel, setConfiguredModel] = useState<MobileAiModelManifest>(
+    getConfiguredMobileAiModel()
+  );
   const [mobileAiSyncState, setMobileAiSyncState] = useState<MobileAiSyncState>({
     status: "not_synced",
   });
@@ -70,7 +76,33 @@ export default function SettingsScreen() {
 
   const canManage = user?.role === "owner" || user?.role === "admin";
   const canBill = user?.role === "owner";
-  const configuredModel = getConfiguredMobileAiModel();
+  const modelSourceConfigured = isMobileAiModelConfigured(configuredModel);
+  const modelProgressPct = mobileAiPrefs.modelDownloadProgressPct ?? 0;
+  const modelDownloadedLabel = `${formatModelBytes(mobileAiPrefs.modelDownloadedBytes)}${
+    mobileAiPrefs.modelDownloadProgressPct !== undefined ? ` · ${modelProgressPct}%` : ""
+  }`;
+  const modelStatusLabel = modelSourceConfigured
+    ? mobileAiPrefs.modelStatus.replace(/_/g, " ")
+    : "artifact needed";
+  const downloadModelLabel =
+    mobileAiPrefs.modelStatus === "paused"
+      ? "Resume local LLM"
+      : mobileAiPrefs.modelStatus === "ready" && mobileAiPrefs.modelAvailableVersion
+        ? "Update local LLM"
+        : mobileAiPrefs.modelStatus === "ready"
+          ? "Local LLM ready"
+          : mobileAiPrefs.modelStatus === "downloading"
+            ? "Downloading local LLM"
+            : modelSourceConfigured
+              ? "Download local LLM"
+              : "Model artifact not configured";
+  const canDownloadModel =
+    canManage &&
+    modelSourceConfigured &&
+    mobileAiPrefs.allowLlmDownload &&
+    busy !== "mobile-ai-model" &&
+    mobileAiPrefs.modelStatus !== "downloading" &&
+    !(mobileAiPrefs.modelStatus === "ready" && !mobileAiPrefs.modelAvailableVersion);
 
   async function load() {
     setError(null);
@@ -99,12 +131,14 @@ export default function SettingsScreen() {
       setSystemPrompt(configRes.data.prompts.systemPrompt);
       setSuggestedQuestions(configRes.data.widgetConfig.suggestedQuestions.join("\n"));
       setManualRepliesOnly(Boolean(configRes.data.featureFlags?.manualRepliesOnly));
-      const [prefs, syncState] = await Promise.all([
+      const [prefs, syncState, modelManifest] = await Promise.all([
         loadMobileAiPreferences(),
         loadMobileAiSyncState(),
+        loadConfiguredMobileAiModel(),
       ]);
       setMobileAiPrefs(prefs);
       setMobileAiSyncState(syncState);
+      setConfiguredModel(modelManifest);
     } catch (e) {
       setError((e as { message?: string }).message ?? "Failed to load settings");
     } finally {
@@ -227,13 +261,24 @@ export default function SettingsScreen() {
   }
 
   async function downloadLlmModel() {
+    if (!modelSourceConfigured) {
+      const next = await patchMobileAiPreferences({
+        modelStatus: "download_pending",
+        modelId: configuredModel.id,
+        modelVersion: configuredModel.version,
+        modelDisplayName: configuredModel.displayName,
+        modelSizeBytes: configuredModel.sizeBytes,
+        modelDownloadProgressPct: 0,
+        modelErrorMessage:
+          "No local model artifact is configured for this app build yet. Upload the Gemma model and rebuild with EXPO_PUBLIC_LOCAL_LLM_MODEL_URL.",
+      });
+      setMobileAiPrefs(next);
+      return;
+    }
     setBusy("mobile-ai-model");
     try {
       const next = await startMobileAiModelDownload(setMobileAiPrefs);
       setMobileAiPrefs(next);
-      if (next.modelStatus === "download_pending") {
-        Alert.alert("Model download not configured", next.modelErrorMessage);
-      }
     } catch (e) {
       const next = await patchMobileAiPreferences({
         modelStatus: "error",
@@ -457,182 +502,204 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Offline AI">
-        <Pressable
-          style={[styles.toggleRow, mobileAiPrefs.allowLlmDownload && styles.toggleRowActive]}
-          onPress={() =>
-            void updateMobileAiPreferences({ allowLlmDownload: !mobileAiPrefs.allowLlmDownload })
-          }
-          disabled={!canManage}
-        >
-          <View style={styles.toggleText}>
-            <Text style={styles.toggleTitle}>Allow local LLM download</Text>
-            <Text style={styles.toggleDescription}>
-              {mobileAiPrefs.allowLlmDownload
-                ? "This phone may download and run a local model when supported."
-                : "The app will not download an LLM to this phone."}
+        <View style={styles.settingsCard}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleGroup}>
+              <Text style={styles.cardTitle}>Local model</Text>
+              <Text style={styles.cardMeta}>
+                {mobileAiPrefs.modelDisplayName ?? configuredModel.displayName}
+              </Text>
+            </View>
+            <Text style={[styles.statusPill, modelSourceConfigured && styles.statusPillGood]}>
+              {modelStatusLabel}
             </Text>
           </View>
-          <Text style={[styles.toggleBadge, mobileAiPrefs.allowLlmDownload && styles.toggleBadgeActive]}>
-            {mobileAiPrefs.allowLlmDownload ? "Allowed" : "Off"}
-          </Text>
-        </Pressable>
-        <PrimaryButton
-          label={
-            mobileAiPrefs.modelStatus === "paused"
-              ? "Resume local LLM"
-              : mobileAiPrefs.modelStatus === "ready" && mobileAiPrefs.modelAvailableVersion
-                ? "Update local LLM"
-                : mobileAiPrefs.modelStatus === "ready"
-                  ? "Local LLM ready"
-                  : mobileAiPrefs.modelStatus === "downloading"
-                    ? "Downloading local LLM"
-                    : "Download local LLM"
-          }
-          onPress={
-            mobileAiPrefs.modelStatus === "paused"
-              ? resumeLlmModelDownload
-              : downloadLlmModel
-          }
-          disabled={
-            !canManage ||
-            !mobileAiPrefs.allowLlmDownload ||
-            busy === "mobile-ai-model" ||
-            mobileAiPrefs.modelStatus === "downloading" ||
-            (mobileAiPrefs.modelStatus === "ready" && !mobileAiPrefs.modelAvailableVersion)
-          }
-        />
-        <InfoRow label="Model" value={mobileAiPrefs.modelDisplayName ?? configuredModel.displayName} />
-        <InfoRow label="Version" value={mobileAiPrefs.modelVersion ?? configuredModel.version} />
-        <InfoRow
-          label="Model size"
-          value={formatModelBytes(mobileAiPrefs.modelSizeBytes ?? configuredModel.sizeBytes)}
-        />
-        <InfoRow
-          label="Downloaded"
-          value={`${formatModelBytes(mobileAiPrefs.modelDownloadedBytes)}${
-            mobileAiPrefs.modelDownloadProgressPct !== undefined
-              ? ` · ${mobileAiPrefs.modelDownloadProgressPct}%`
-              : ""
-          }`}
-        />
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${mobileAiPrefs.modelDownloadProgressPct ?? 0}%` },
-            ]}
+          <Pressable
+            style={[styles.toggleRow, mobileAiPrefs.allowLlmDownload && styles.toggleRowActive]}
+            onPress={() =>
+              void updateMobileAiPreferences({ allowLlmDownload: !mobileAiPrefs.allowLlmDownload })
+            }
+            disabled={!canManage}
+          >
+            <View style={styles.toggleText}>
+              <Text style={styles.toggleTitle}>Allow model download</Text>
+              <Text style={styles.toggleDescription}>
+                {mobileAiPrefs.allowLlmDownload
+                  ? "This phone can store the approved local model."
+                  : "No LLM file will be downloaded to this phone."}
+              </Text>
+            </View>
+            <Text style={[styles.toggleBadge, mobileAiPrefs.allowLlmDownload && styles.toggleBadgeActive]}>
+              {mobileAiPrefs.allowLlmDownload ? "Allowed" : "Off"}
+            </Text>
+          </Pressable>
+          <View style={styles.infoGrid}>
+            <View style={styles.infoTile}>
+              <Text style={styles.infoTileLabel}>Version</Text>
+              <Text style={styles.infoTileValue}>{mobileAiPrefs.modelVersion ?? configuredModel.version}</Text>
+            </View>
+            <View style={styles.infoTile}>
+              <Text style={styles.infoTileLabel}>Size</Text>
+              <Text style={styles.infoTileValue}>
+                {formatModelBytes(mobileAiPrefs.modelSizeBytes ?? configuredModel.sizeBytes)}
+              </Text>
+            </View>
+            <View style={styles.infoTile}>
+              <Text style={styles.infoTileLabel}>Downloaded</Text>
+              <Text style={styles.infoTileValue}>{modelDownloadedLabel}</Text>
+            </View>
+          </View>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${modelProgressPct}%` }]} />
+          </View>
+          <PrimaryButton
+            label={downloadModelLabel}
+            onPress={mobileAiPrefs.modelStatus === "paused" ? resumeLlmModelDownload : downloadLlmModel}
+            disabled={!canDownloadModel}
+          />
+          <View style={styles.inlineActions}>
+            <Pressable
+              onPress={pauseLlmModelDownload}
+              disabled={!canManage || mobileAiPrefs.modelStatus !== "downloading"}
+            >
+              <Text
+                style={[
+                  styles.link,
+                  mobileAiPrefs.modelStatus !== "downloading" && styles.linkDisabled,
+                ]}
+              >
+                Pause
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={resumeLlmModelDownload}
+              disabled={!canManage || mobileAiPrefs.modelStatus !== "paused"}
+            >
+              <Text
+                style={[
+                  styles.link,
+                  mobileAiPrefs.modelStatus !== "paused" && styles.linkDisabled,
+                ]}
+              >
+                Resume
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={removeLlmModel}
+              disabled={
+                !canManage ||
+                busy === "mobile-ai-model" ||
+                mobileAiPrefs.modelStatus === "not_downloaded" ||
+                mobileAiPrefs.modelStatus === "downloading"
+              }
+            >
+              <Text
+                style={[
+                  styles.dangerLink,
+                  (mobileAiPrefs.modelStatus === "not_downloaded" ||
+                    mobileAiPrefs.modelStatus === "downloading") &&
+                    styles.linkDisabled,
+                ]}
+              >
+                Remove
+              </Text>
+            </Pressable>
+          </View>
+          {!modelSourceConfigured || mobileAiPrefs.modelErrorMessage ? (
+            <Text style={styles.inlineNotice}>
+              {mobileAiPrefs.modelErrorMessage ??
+                "A Gemma model file has not been attached to this mobile release yet."}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.settingsCard}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleGroup}>
+              <Text style={styles.cardTitle}>Tenant knowledge</Text>
+              <Text style={styles.cardMeta}>Local vector database for offline search</Text>
+            </View>
+            <Text style={[styles.statusPill, mobileAiSyncState.status === "ready" && styles.statusPillGood]}>
+              {mobileAiSyncState.status.replace(/_/g, " ")}
+            </Text>
+          </View>
+          <Pressable
+            style={[styles.toggleRow, mobileAiPrefs.allowVectorSync && styles.toggleRowActive]}
+            onPress={() =>
+              void updateMobileAiPreferences({ allowVectorSync: !mobileAiPrefs.allowVectorSync })
+            }
+            disabled={!canManage}
+          >
+            <View style={styles.toggleText}>
+              <Text style={styles.toggleTitle}>Allow vector sync</Text>
+              <Text style={styles.toggleDescription}>
+                {mobileAiPrefs.allowVectorSync
+                  ? "This phone can keep a local tenant knowledge copy."
+                  : "Tenant vectors stay in the cloud only."}
+              </Text>
+            </View>
+            <Text style={[styles.toggleBadge, mobileAiPrefs.allowVectorSync && styles.toggleBadgeActive]}>
+              {mobileAiPrefs.allowVectorSync ? "Allowed" : "Off"}
+            </Text>
+          </Pressable>
+          <InfoRow label="Local chunks" value={mobileAiSyncState.chunkCount ?? 0} />
+          <InfoRow label="Last synced" value={mobileAiSyncState.lastSyncedAt ?? "Never"} />
+          <PrimaryButton
+            label="Sync tenant vectors now"
+            onPress={syncMobileVectorsNow}
+            disabled={!canManage || !mobileAiPrefs.allowVectorSync || busy === "mobile-ai-sync"}
           />
         </View>
-        <View style={styles.inlineActions}>
-          <Pressable
-            onPress={pauseLlmModelDownload}
-            disabled={!canManage || mobileAiPrefs.modelStatus !== "downloading"}
-          >
-            <Text
+
+        <View style={styles.settingsCard}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleGroup}>
+              <Text style={styles.cardTitle}>Reply behavior</Text>
+              <Text style={styles.cardMeta}>Choose agent review or automatic sends</Text>
+            </View>
+          </View>
+          <View style={styles.segmentedControl}>
+            <Pressable
               style={[
-                styles.link,
-                mobileAiPrefs.modelStatus !== "downloading" && styles.linkDisabled,
+                styles.segmentButton,
+                mobileAiPrefs.replyMode === "draft" && styles.segmentButtonActive,
               ]}
+              onPress={() => void updateMobileAiPreferences({ replyMode: "draft" })}
+              disabled={!canManage}
             >
-              Pause
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={resumeLlmModelDownload}
-            disabled={!canManage || mobileAiPrefs.modelStatus !== "paused"}
-          >
-            <Text
+              <Text
+                style={[
+                  styles.segmentText,
+                  mobileAiPrefs.replyMode === "draft" && styles.segmentTextActive,
+                ]}
+              >
+                Drafts
+              </Text>
+            </Pressable>
+            <Pressable
               style={[
-                styles.link,
-                mobileAiPrefs.modelStatus !== "paused" && styles.linkDisabled,
+                styles.segmentButton,
+                mobileAiPrefs.replyMode === "auto" && styles.segmentButtonActive,
               ]}
+              onPress={() => void updateMobileAiPreferences({ replyMode: "auto" })}
+              disabled={!canManage}
             >
-              Resume
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={removeLlmModel}
-            disabled={
-              !canManage ||
-              busy === "mobile-ai-model" ||
-              mobileAiPrefs.modelStatus === "not_downloaded" ||
-              mobileAiPrefs.modelStatus === "downloading"
-            }
-          >
-            <Text
-              style={[
-                styles.dangerLink,
-                (mobileAiPrefs.modelStatus === "not_downloaded" ||
-                  mobileAiPrefs.modelStatus === "downloading") &&
-                  styles.linkDisabled,
-              ]}
-            >
-              Remove
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.segmentText,
+                  mobileAiPrefs.replyMode === "auto" && styles.segmentTextActive,
+                ]}
+              >
+                Auto
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={styles.toggleDescription}>
+            {mobileAiPrefs.replyMode === "draft"
+              ? "Local AI prepares a reply for an agent to review before sending."
+              : "Local AI may send low-risk replies automatically; live commerce actions still verify in cloud."}
+          </Text>
         </View>
-        {mobileAiPrefs.modelErrorMessage ? (
-          <Text style={styles.reply}>{mobileAiPrefs.modelErrorMessage}</Text>
-        ) : null}
-
-        <Pressable
-          style={[styles.toggleRow, mobileAiPrefs.allowVectorSync && styles.toggleRowActive]}
-          onPress={() =>
-            void updateMobileAiPreferences({ allowVectorSync: !mobileAiPrefs.allowVectorSync })
-          }
-          disabled={!canManage}
-        >
-          <View style={styles.toggleText}>
-            <Text style={styles.toggleTitle}>Allow local vector sync</Text>
-            <Text style={styles.toggleDescription}>
-              {mobileAiPrefs.allowVectorSync
-                ? "This phone may keep a local copy of tenant knowledge for offline search."
-                : "Tenant vectors stay in the cloud only."}
-            </Text>
-          </View>
-          <Text style={[styles.toggleBadge, mobileAiPrefs.allowVectorSync && styles.toggleBadgeActive]}>
-            {mobileAiPrefs.allowVectorSync ? "Allowed" : "Off"}
-          </Text>
-        </Pressable>
-        <InfoRow label="Vector sync" value={mobileAiSyncState.status} />
-        <InfoRow label="Local chunks" value={mobileAiSyncState.chunkCount ?? 0} />
-        <InfoRow label="Last synced" value={mobileAiSyncState.lastSyncedAt ?? "Never"} />
-        <PrimaryButton
-          label="Sync tenant vectors now"
-          onPress={syncMobileVectorsNow}
-          disabled={!canManage || !mobileAiPrefs.allowVectorSync || busy === "mobile-ai-sync"}
-        />
-
-        <Pressable
-          style={[styles.toggleRow, mobileAiPrefs.replyMode === "draft" && styles.toggleRowActive]}
-          onPress={() => void updateMobileAiPreferences({ replyMode: "draft" })}
-          disabled={!canManage}
-        >
-          <View style={styles.toggleText}>
-            <Text style={styles.toggleTitle}>Show AI drafts first</Text>
-            <Text style={styles.toggleDescription}>
-              Local AI prepares a reply for an agent to review before sending.
-            </Text>
-          </View>
-          <Text style={[styles.toggleBadge, mobileAiPrefs.replyMode === "draft" && styles.toggleBadgeActive]}>
-            {mobileAiPrefs.replyMode === "draft" ? "Selected" : "Choose"}
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.toggleRow, mobileAiPrefs.replyMode === "auto" && styles.toggleRowActive]}
-          onPress={() => void updateMobileAiPreferences({ replyMode: "auto" })}
-          disabled={!canManage}
-        >
-          <View style={styles.toggleText}>
-            <Text style={styles.toggleTitle}>Auto-reply when safe</Text>
-            <Text style={styles.toggleDescription}>
-              Local AI may send low-risk replies automatically; live commerce actions still verify in cloud.
-            </Text>
-          </View>
-          <Text style={[styles.toggleBadge, mobileAiPrefs.replyMode === "auto" && styles.toggleBadgeActive]}>
-            {mobileAiPrefs.replyMode === "auto" ? "Selected" : "Choose"}
-          </Text>
-        </Pressable>
       </Section>
 
       <Section title="Onboarding checklist">
@@ -789,6 +856,84 @@ const styles = StyleSheet.create({
   dangerLink: { color: colors.danger, fontWeight: "800", fontSize: 12 },
   linkDisabled: { color: colors.textMuted },
   inlineActions: { flexDirection: "row", gap: 16, alignItems: "center" },
+  settingsCard: {
+    backgroundColor: colors.softSurface,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 10,
+    gap: 9,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  cardTitleGroup: { flex: 1, gap: 2 },
+  cardTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  cardMeta: { color: colors.textMuted, fontSize: 11, lineHeight: 15 },
+  statusPill: {
+    color: colors.textMuted,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "capitalize",
+  },
+  statusPillGood: {
+    color: colors.headerText,
+    backgroundColor: colors.primary,
+  },
+  infoGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  infoTile: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: 92,
+    backgroundColor: colors.listBg,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    padding: 8,
+    gap: 2,
+  },
+  infoTileLabel: { color: colors.textMuted, fontSize: 10, fontWeight: "800" },
+  infoTileValue: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  inlineNotice: {
+    backgroundColor: colors.listBg,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    color: colors.text,
+    borderRadius: 8,
+    padding: 9,
+    lineHeight: 17,
+    fontSize: 12,
+  },
+  segmentedControl: {
+    flexDirection: "row",
+    backgroundColor: colors.listBg,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 9,
+    padding: 3,
+    gap: 3,
+  },
+  segmentButton: {
+    flex: 1,
+    borderRadius: 7,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  segmentButtonActive: { backgroundColor: colors.primary },
+  segmentText: { color: colors.textMuted, fontSize: 12, fontWeight: "800" },
+  segmentTextActive: { color: colors.headerText },
   progressTrack: {
     height: 8,
     borderRadius: 999,

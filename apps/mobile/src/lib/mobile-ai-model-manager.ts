@@ -8,7 +8,7 @@ import {
 
 const MODEL_DIR = `${FileSystem.documentDirectory ?? ""}mobile-ai-models/`;
 const DEFAULT_MODEL_ID = process.env.EXPO_PUBLIC_LOCAL_LLM_MODEL_ID ?? "gemma-local";
-const DEFAULT_MODEL_VERSION = process.env.EXPO_PUBLIC_LOCAL_LLM_MODEL_VERSION ?? "not_configured";
+const DEFAULT_MODEL_VERSION = process.env.EXPO_PUBLIC_LOCAL_LLM_MODEL_VERSION ?? "pending";
 const DEFAULT_MODEL_DISPLAY_NAME =
   process.env.EXPO_PUBLIC_LOCAL_LLM_MODEL_NAME ?? "Gemma local model";
 const DEFAULT_MODEL_FILE_NAME =
@@ -16,6 +16,9 @@ const DEFAULT_MODEL_FILE_NAME =
 const DEFAULT_MODEL_DOWNLOAD_URL = process.env.EXPO_PUBLIC_LOCAL_LLM_MODEL_URL;
 const DEFAULT_MODEL_SIZE_BYTES = Number(process.env.EXPO_PUBLIC_LOCAL_LLM_MODEL_SIZE_BYTES ?? 0) || undefined;
 const DEFAULT_MODEL_MD5 = process.env.EXPO_PUBLIC_LOCAL_LLM_MODEL_MD5;
+const DEFAULT_MODEL_MANIFEST_URL =
+  process.env.EXPO_PUBLIC_LOCAL_LLM_MANIFEST_URL ??
+  "https://d3g8dfkodwqrza.cloudfront.net/mobile-llm-release.json";
 
 let activeDownload: FileSystem.DownloadResumable | null = null;
 
@@ -29,6 +32,22 @@ export interface MobileAiModelManifest {
   md5?: string;
 }
 
+function normalizeRemoteManifest(value: Partial<MobileAiModelManifest>): MobileAiModelManifest {
+  const fallback = getConfiguredMobileAiModel();
+  return {
+    id: value.id || fallback.id,
+    version: value.version || fallback.version,
+    displayName: value.displayName || fallback.displayName,
+    fileName: value.fileName || fallback.fileName,
+    downloadUrl: value.downloadUrl || fallback.downloadUrl,
+    sizeBytes:
+      typeof value.sizeBytes === "number" && value.sizeBytes > 0
+        ? value.sizeBytes
+        : fallback.sizeBytes,
+    md5: value.md5 || fallback.md5,
+  };
+}
+
 export function getConfiguredMobileAiModel(): MobileAiModelManifest {
   return {
     id: DEFAULT_MODEL_ID,
@@ -39,6 +58,25 @@ export function getConfiguredMobileAiModel(): MobileAiModelManifest {
     sizeBytes: DEFAULT_MODEL_SIZE_BYTES,
     md5: DEFAULT_MODEL_MD5,
   };
+}
+
+export async function loadConfiguredMobileAiModel(): Promise<MobileAiModelManifest> {
+  if (!DEFAULT_MODEL_MANIFEST_URL) return getConfiguredMobileAiModel();
+  try {
+    const response = await fetch(DEFAULT_MODEL_MANIFEST_URL, {
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return getConfiguredMobileAiModel();
+    return normalizeRemoteManifest((await response.json()) as Partial<MobileAiModelManifest>);
+  } catch {
+    return getConfiguredMobileAiModel();
+  }
+}
+
+export function isMobileAiModelConfigured(
+  manifest = getConfiguredMobileAiModel()
+): boolean {
+  return Boolean(manifest.downloadUrl);
 }
 
 export function formatModelBytes(bytes?: number): string {
@@ -134,7 +172,7 @@ async function runDownload(
       modelSizeBytes: manifest.sizeBytes,
       modelDownloadProgressPct: 0,
       modelErrorMessage:
-        "No local model download URL is configured for this build. Set EXPO_PUBLIC_LOCAL_LLM_MODEL_URL.",
+        "No local model artifact is configured for this app build yet. Upload the Gemma model and rebuild with EXPO_PUBLIC_LOCAL_LLM_MODEL_URL.",
     });
   }
 
@@ -184,14 +222,14 @@ async function runDownload(
 export async function startMobileAiModelDownload(
   onProgress?: (preferences: MobileAiDevicePreferences) => void
 ): Promise<MobileAiDevicePreferences> {
-  return runDownload(getConfiguredMobileAiModel(), undefined, onProgress);
+  return runDownload(await loadConfiguredMobileAiModel(), undefined, onProgress);
 }
 
 export async function resumeMobileAiModelDownload(
   onProgress?: (preferences: MobileAiDevicePreferences) => void
 ): Promise<MobileAiDevicePreferences> {
   const prefs = await loadMobileAiPreferences();
-  return runDownload(getConfiguredMobileAiModel(), prefs.modelResumeData, onProgress);
+  return runDownload(await loadConfiguredMobileAiModel(), prefs.modelResumeData, onProgress);
 }
 
 export async function pauseMobileAiModelDownload(): Promise<MobileAiDevicePreferences> {
