@@ -1,18 +1,18 @@
 {
   "platform": "android",
   "channel": "preview",
-  "latestVersion": "1.0.3",
+  "latestVersion": "1.0.4",
   "minimumSupportedVersion": "1.0.0",
-  "currentWebExpectedVersion": "1.0.2",
-  "apkUrl": "/mobile/commercechat-agent-1.0.3-preview.apk",
+  "currentWebExpectedVersion": "1.0.3",
+  "apkUrl": "/mobile/commercechat-agent-1.0.4-preview.apk",
   "buildUrl": "",
-  "fileName": "commercechat-agent-1.0.3-preview.apk",
-  "releasedAt": "2026-06-30T10:08:12Z",
-  "sizeBytes": 87948660,
+  "fileName": "commercechat-agent-1.0.4-preview.apk",
+  "releasedAt": "2026-06-30T12:39:01Z",
+  "sizeBytes": 87949448,
   "updateAvailable": true,
   "notes": [
-    "Shows the configured Gemma model details before tapping download.",
-    "Makes tenant vector sync automatic by default with manual sync and opt-out controls.",
-    "Compacts Chats filters into a smaller search and filter panel."
+    "Adds suggested quick replies to mobile thread composer.",
+    "Tapping a suggestion fills the reply box so an agent can send or edit it.",
+    "Keeps the Offline AI and compact Chats improvements from 1.0.3."
   ]
 }

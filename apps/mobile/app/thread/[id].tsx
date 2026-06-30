@@ -30,6 +30,7 @@ export default function ThreadScreen() {
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [reply, setReply] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<FlatList<Message>>(null);
@@ -42,12 +43,14 @@ export default function ThreadScreen() {
 
   const reload = useCallback(async () => {
     if (!id) return;
-    const [d, m] = await Promise.all([
+    const [d, m, cfg] = await Promise.all([
       api.conversations.get(id),
       api.conversations.getMessages(id),
+      api.tenant.getConfig().catch(() => null),
     ]);
     setDetail(d.data);
     setMessages(m.data.items);
+    setSuggestions(cfg?.data.widgetConfig.suggestedQuestions.filter(Boolean).slice(0, 4) ?? []);
   }, [id]);
 
   useEffect(() => {
@@ -195,6 +198,22 @@ export default function ThreadScreen() {
         )}
 
         {canReply && (
+          <View style={styles.suggestionWrap}>
+            {suggestions.map((item) => (
+              <Pressable
+                key={item}
+                style={styles.suggestionChip}
+                onPress={() => setReply(item)}
+              >
+                <Text style={styles.suggestionText} numberOfLines={1}>
+                  {item}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
+        {canReply && (
           <View style={styles.composer}>
             <TextInput
               style={styles.input}
@@ -257,6 +276,30 @@ const styles = StyleSheet.create({
   bannerText: { color: "#fff", fontSize: 14, fontWeight: "500" },
   infoBar: { backgroundColor: "#E8F5E9", paddingHorizontal: 12, paddingVertical: 10 },
   infoText: { color: colors.primaryDark, fontSize: 13, textAlign: "center" },
+  suggestionWrap: {
+    backgroundColor: colors.listBg,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+  },
+  suggestionChip: {
+    flex: 1,
+    minHeight: 32,
+    borderRadius: 16,
+    backgroundColor: colors.softSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  suggestionText: {
+    color: colors.primaryDark,
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center",
+  },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",
